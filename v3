@@ -1,0 +1,505 @@
+import React, { useState, useEffect } from "react";
+import { makeStyles } from "@mui/styles";
+import Dialog from "@mui/material/Dialog";
+import { Input } from "../../../../components/genericComponents/Input";
+import ParseFile from "../../../../util/FileParser";
+import GenerateURL from "../../../../util/APIUrlProvider";
+import properties from "../../../../properties/properties";
+import { PostData } from "../../../../util/apiInvoker";
+import { useCustomSnackbar } from "../../../../contexts/SnackbarContext";
+import Button from "../../../../components/genericComponents/Button";
+import { useRef } from "react";
+import { color } from "highcharts";
+
+//const fileInputRef = useRef(null);
+
+const AddVirtualMachineCSV = ({
+  open,
+  handleClose,
+  vmGroupId,
+  handleCloseDialogAndFetchVMs,
+}) => {
+  const classes = useStyles();
+  const { showSnackbar } = useCustomSnackbar();
+  const fileInputRef = useRef(null);
+  const showInfoSection = JSON.parse(
+  localStorage.getItem("vm_csv_upload_dialog_display_flag")
+);
+
+
+  const [state, setState] = useState({
+    data: {},
+    error: {},
+    showLeftPanel: true,
+    uploadInProgress: false,
+  });
+
+  const [data, setData] = useState({ data: {}, error: {} });
+
+  // Reset state when dialog opens
+  useEffect(() => {
+  if (open) {
+    setState({
+      data: {},
+      error: {},
+      showLeftPanel: !showInfoSection, // init only
+      uploadInProgress: false,
+    });
+  }
+}, [open]);
+
+  const onFileUpload = (e) => {
+    ParseFile(e, handleSuccessFileParse, handleFailedFileParse);
+  };
+
+  const handleSuccessFileParse = (file_data) => {
+  updateData("vm_config", {
+    name: file_data.name,
+    content: file_data.content,
+  });
+};
+
+
+  const updateData = (key, value) => {
+    setState((prevState) => ({
+      ...prevState,
+      data: {
+        ...prevState.data,
+        [key]: value,
+      },
+      error: {
+        ...prevState.error,
+        [key]: "",
+      },
+    }));
+  };
+
+  const handleFailedFileParse = (error) => {
+    showSnackbar("error", "Invalid File Format");
+    setState((prevState) => ({
+      ...prevState,
+      error: {
+        vm_config: "Invalid File Format",
+      },
+    }));
+  };
+
+  const handleDragOver = (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+};
+
+const handleDrop = (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+
+  const files = e.dataTransfer.files;
+  if (!files || !files.length) return;
+
+  // Create a fake event so ParseFile works unchanged
+  const fakeEvent = {
+    target: {
+      files,
+    },
+  };
+
+  onFileUpload(fakeEvent);
+};
+
+  const removeFile = (e) => {
+    setState((prevState) => ({
+      ...prevState,
+      data: {
+        ...prevState.data,
+        vm_config: null,
+      },
+    }));
+  };
+
+  const validateAndSaveFileData = () => {
+    
+    if (!state.data.vm_config) {
+      showSnackbar("error", "Please upload a CSV file");
+      return;
+    }
+
+    if (!vmGroupId) {
+      showSnackbar("error", "VM Group ID is missing");
+      return;
+    }
+
+    const post_data = {
+      vm_set: vmGroupId,
+      content: state.data.vm_config.content,
+      name: state.data.vm_config.name,
+    };
+
+    const temp_url = GenerateURL({}, properties.api.vm_group_csv_upload);
+    setState((prevState) => ({
+      ...prevState,
+      uploadInProgress: true,
+    }));
+    showSnackbar("info", "Uploading CSV file...");
+    PostData(temp_url, post_data, saveSuccessFileUpload, saveFailFileUpload);
+  };
+
+  const saveSuccessFileUpload = (response) => {
+    showSnackbar("success", "CSV file uploaded successfully");
+    setState((prevState) => ({
+      ...prevState,
+      uploadInProgress: false,
+      data: {},
+    }));
+
+    // Close dialog and refresh VM list
+    handleCloseDialogAndFetchVMs();
+    handleClose();
+  };
+
+  const saveFailFileUpload = (response) => {
+    const errorMsg =
+      typeof response === "string" ? response : JSON.stringify(response);
+    showSnackbar("error", "Unable to upload CSV file: " + errorMsg);
+    setState((prevState) => ({
+      ...prevState,
+      uploadInProgress: false,
+      error: {
+        ...prevState.error,
+        vm_config: errorMsg,
+      },
+    }));
+  };
+
+  const handleCloseLeftStrip = () => {
+  if (data?.data?.dont_show_again) {
+    setDataToLocalStorage();
+  }
+  setState((prev) => ({
+    ...prev,
+    showLeftPanel: false,
+  }));
+};
+
+  function setDataToLocalStorage() {
+    localStorage.setItem(
+      "vm_csv_upload_dialog_display_flag",
+      data.data.dont_show_again
+    );
+  }
+
+  function onChangeDoNotShow(e) {
+    const key = e.target.name;
+    let value = e.target.value;
+    if (key === "dont_show_again") {
+      value = !data.data.dont_show_again;
+    }
+    setData((prevState) => ({
+      ...prevState,
+      data: {
+        ...prevState.data,
+        [key]: value,
+      },
+      error: {
+        ...prevState.error,
+        [key]: "",
+      },
+    }));
+  }
+
+  const handleDownloadSample = () => {
+    const sampleCSVContent =
+      "user_name,vm_name,add_primary_tag,add_secondary_tag,ip_address,collection_method,secret_name,port\nhiteshjaiswal,Qa-hercules-app-bp-ramsujsvjfvjufd,sdkjhsdkjhsd,jskdjshjkds,192.168.10.141,USERNAME_PASSWORD,hiteshserversec,9001";
+    const blob = new Blob([sampleCSVContent], { type: "text/csv" });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "sample_vm_upload.csv";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+  };
+
+  return (
+    <Dialog
+      fullWidth={true}
+      maxWidth={"md"}
+      open={open}
+      onClose={handleClose}
+      className={`${classes.root} dialog-align-corner`}
+      aria-labelledby="max-width-dialog-title"
+    >
+      <div
+        className="d-grid ml-auto dialog-sub-component"
+        style={{
+          gridTemplateColumns: state.showLeftPanel
+            ? "396px 650px"
+            : "0px 650px",
+        }}
+      >
+        
+          <div
+            className={
+              state.showLeftPanel
+                ? "left-panel-dialog bg-white position-relative"
+                : "left-panel-dialog-down"
+            }
+          >
+            <div
+              className={
+                "d-flex align-center space-between left-panel-header pd-10"
+              }
+              style={{ padding: "10px 20px" }}
+            >
+              <p>INFORMATION</p>
+              <button
+                className="btn btn-icon-only"
+                onClick={handleCloseLeftStrip}
+              >
+                <span className="ri-close-line color-icon-secondary"></span>
+              </button>
+            </div>
+            <div className="pd-10" style={{ padding: "10px 20px" }}>
+              <p className="font-16 font-weight-600 color-primary mb-10">
+                What is Virtual Machine?
+              </p>
+              <p
+                className="font-12 color-icon-secondary"
+                style={{ color: "#404040" }}
+              >
+                In Buildpiper, for a monolithic application, we need to onboard
+                the infrastructure required for deployment for the monolithic
+                applications. This infrastructure is nothing but of VMs (virtual
+                machines). Thus a virtual machine (VM) is a software-based unit
+                of a LDC - Local data centre which runs an operating system and
+                applications just like a physical computer but relies on
+                virtualization technology to operate.
+              </p>
+            </div>
+            <div
+              className="checkbox-only-divi"
+              style={{ padding: "10px 20px" }}
+            >
+              <Input
+                type="simple-checkbox"
+                name="dont_show_again"
+                label="Don't show this again"
+                data={data.data}
+                error={data.error}
+                onChangeHandler={onChangeDoNotShow}
+              />
+            </div>
+          </div>
+        
+
+        <div className="right-panel-dialog bg-white">
+          <div className='font-18 font-weight-600 color-white d-flex align-center space-between' style={{ backgroundColor: '#0086ff', padding: '13.5px 20px' }}>
+                            <p>Upload CSV</p>
+                            <button
+                                className='btn float-cancel-button'
+                                style={showInfoSection || !state.showLeftPanel ? {
+        position: "absolute",
+        top: "0px",
+        left: "-56px",
+        //width: "56px",
+        //height: "56px",
+        //backgroundColor: "#D32F2F",
+        zIndex: 1000,
+      }
+    : {
+        position: "absolute",
+        top: "0px",
+        left: "-450px",
+        zIndex:1000,
+    }}
+                                onClick={handleClose}
+                            >
+                                <span className='ri-close-line'></span>
+                            </button>
+                        </div>
+
+
+          <div
+            className={classes.uploadContent}
+            style={{
+              padding: "0 20px 120px 20px",
+              //height: "calc(100vh - 200px)",
+              overflowY: "auto",
+            }}
+          >
+            <div className={classes.uploadArea}>
+              <div
+  className={classes.dashedBox}
+  onDragOver={handleDragOver}
+  onDrop={handleDrop}
+>
+
+              <div className="text-center">
+                <div className="mb-20">
+                  <span
+                    className="ri-file-excel-2-line"
+                    style={{ fontSize: "48px", color: "#0086FF" }}
+                  ></span>
+                </div>
+                <p className="font-14 color-icon-secondary mb-5">
+                  Drag and Drop file here or{" "}
+                  <span
+                    className="text-anchor-blue cursor-pointer"
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    click here
+                  </span>{" "}
+                  to choose file
+                </p>
+                <p className="font-12 color-icon-secondary mb-20">
+                  CSV, XSL Up to 2mb
+                </p>
+                {/* <div className="wrapper-new-file mb-15">
+                  <Input
+                    type="new-file-upload"
+                    name="vm_config"
+                    placeholder={""}
+                    data={state.data}
+                    error={state.error}
+                    label=""
+                    onChangeHandler={onFileUpload}
+                    onFileRemove={removeFile}
+                    inputProps={{ style: { display: "none" } }}
+                  />
+                </div> */}
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  accept=".csv,.xls,.xlsx"
+                  style={{ display: "none" }}
+                  onChange={onFileUpload}
+                />
+                <button type="button" onClick={() => fileInputRef.current?.click()} className="btn btn-outline-primary" value="">Browse File</button>
+
+                {/* <button
+                  className="btn btn-outline-primary mb-20"
+                  style={{ padding: "8px 16px" }}
+                  
+                >
+                  BROWSE FILE
+                </button> */}
+                <div className="mt-15">
+                  <button
+                    onClick={handleDownloadSample}
+                    className="btn btn-transparent text-anchor-blue font-12"
+                    style={{
+                      textDecoration: "none",
+                      padding: "4px 8px",
+                      display: "flex",
+                      alignItems: "center",
+                      margin: "0 auto",
+                    }}
+                  >
+                    <span className="ri-download-line mr-5"></span>
+                    DOWNLOAD SAMPLE CSV
+                  </button>
+                </div>
+              </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="footer-right-panel d-flex align-center justify-end">
+            {/* <button 
+              className='btn btn-outline-grey font-12 font-weight-500 d-flex align-center justify-center mr-5' 
+              onClick={handleClose}
+              disabled={state.uploadInProgress}
+            >
+              Cancel
+            </button> */}
+            {/* font-12 font-weight-500 d-flex align-center justify-center */}
+            <button
+              className="btn btn-primary ml-5"
+              style={{ marginRight: "16px",}}
+              isLoading={state.uploadInProgress}
+              onClick={validateAndSaveFileData}
+              disabled={!state.data.vm_config}
+            >
+              TEST &amp; SAVE{" "}
+            </button>
+          </div>
+        </div>
+      </div>
+    </Dialog>
+  );
+};
+
+const useStyles = makeStyles((theme) => ({
+  root: {
+    "& .right-panel-dialog": { position: "relative", width: "650px", height: "100%", display: "flex", flexDirection: "column", },
+    '& .MuiPaper-root': {
+        position: 'absolute',
+        right: 0,
+        width: '1100px',
+        maxWidth: '1100px',
+        fontFamily: "Montserrat",
+
+        "& .style-1": {
+            display: "flex",
+            alignItems: "center"
+        }
+    },
+    '& .left-panel-dialog': {
+        width: '396px',
+        transition: 'width 0.3s',
+
+        '& .left-panel-header': {
+            borderBottom: '1px solid #f1f1f1'
+        },
+        '& .checkbox-only-divi': {
+            position: 'absolute',
+            bottom: '10px'
+        },
+    },
+    '& .left-panel-dialog-down': {
+        width: '0px',
+        overflow: 'hidden',
+        transition: `'width 5s', 'overflow 1s'`,
+
+    },
+    '& .right-panel-form': {
+        padding: '20px 16px',
+        maxHeight: 'calc(100% - 127px)', // Assuming the footer is 80px tall, adjust accordingly
+        overflowY: 'auto',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '24px',
+        "& .slider": {
+            width: 600
+        }
+    },
+    "& .wrapper-new-file": {
+      "& .input-file-wraper": {
+        border: "none",
+        padding: "4px",
+        gap: "0px",
+        justifyContent: "center",
+      },
+    },
+  },
+  uploadContent: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  uploadArea: {
+  width: "100%",
+  maxWidth: "600px",
+},
+dashedBox: {
+  border: "2px dashed #D9D9D9",
+  borderRadius: "8px",
+  padding: "48px 32px",
+  textAlign: "center",
+  marginTop:"20px",
+  backgroundColor: "#FFFFFF",
+},
+
+}));
+
+export default AddVirtualMachineCSV;
