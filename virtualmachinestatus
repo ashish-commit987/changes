@@ -1,0 +1,320 @@
+import React from "react";
+import { makeStyles } from "@mui/styles";
+import PageHeader from "../../../components/PageHeader";
+import Chip from "../../../components/chip/Chip";
+import { dividerClasses } from "@mui/material";
+import NewChip from "../../../components/newChip/NewChip";
+import PaginationTwo from "../../../components/PaginationTwo";
+import { useState } from "react";
+import { ExandableComponentList } from "../../../components/hoc/expandableList";
+import InvokeApi from "../../../util/apiInvoker";
+import properties from "../../../properties/properties";
+import GenerateURL, { GenerateSearchURL } from "../../../util/APIUrlProvider";
+import { Link } from "react-router-dom";
+import BlankPage from "../../../components/BlankPage";
+
+
+const useStyles = makeStyles(() => ({
+  root: {
+    backgroundColor: "#fff",
+    padding: "20px",
+    minHeight: "calc(100vh - 70px)",
+
+    "& .table-view": {
+      marginTop: "20px",
+      border: "1px solid #E6E6E6",
+      borderRadius: "6px",
+      display: "grid",
+      gridTemplateColumns: "1fr 1fr 1fr 1fr 1fr 60px",
+      color: "#787878",
+      fontSize: "12px",
+
+      "& .table-view-row": {
+        borderBottom: "1px solid #E6E6E6",
+        padding: "9.5px 12px",
+        display: "flex",
+        alignItems: "center",
+        color: "#2F2F2F",
+
+        "&:nth-last-child(-n+5)": {
+          borderTop: "1px solid #E6E6E6",
+        },
+      },
+
+      "& .table-view-row-header": {
+        borderBottom: "1px solid #E6E6E6",
+        padding: "9.5px 12px",
+        display: "flex",
+        alignItems: "center",
+        fontSize: "12px",
+        justifyContent: "flex-start",
+        fontWeight: 600,
+        color: "#2F2F2F",
+      },
+    },
+  },
+  header: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: "32px",
+    backgroundColor: "#FFFFFF",
+  },
+
+  titleWrapper: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: "8px",
+  },
+
+  title: {
+    fontSize: "16px",
+    fontWeight: 600,
+    color: "#1F2937",
+  },
+
+  actions: {
+    display: "flex",
+    gap: "12px",
+  },
+
+  vmHeader: {
+    display: "flex",
+    alignItems: "center",
+  },
+  vmHeaderEnvTitle: {
+    display: "flex",
+    alignItems: "center",
+    gap: "6px",
+  }  
+}));
+
+export default function VirtualMachineStatus() {
+  const classes = useStyles();
+
+  const [state, setState] = useState({
+    curr_page: "",
+    total_page: "",
+    count: 0,
+  });
+
+  function fetchPageInfo(enteredPageNumber) {
+    var requestInfo = {
+      endPoint: GenerateURL({}, properties.api.create_vm_group),
+      httpMethod: "GET",
+      httpHeaders: { "Content-Type": "application/json" },
+    };
+
+    if (enteredPageNumber > 1) {
+      requestInfo.endPoint =
+        requestInfo.endPoint +
+        "?limit=10&offset=" +
+        (enteredPageNumber - 1) * 10;
+    }
+
+    var current_page = enteredPageNumber;
+    setState((prevState) => ({
+      ...prevState,
+      loading: true,
+    }));
+    InvokeApi(
+      requestInfo,
+      (response) => {
+        handleWorkflowPageDataSuccessApiHit(response, current_page);
+      },
+      fetchAllVMGroupsDataFailed
+    );
+    function onFileUpload(e) {
+        ParseFile(e, handleSuccessFileParse, handleFailedFileParse);
+      }
+      function handleSuccessFileParse(file_data) {
+        const key = file_data.event_name;
+        const value = {
+          name: file_data.name,
+          content: file_data.content,
+        };
+        updateData(key, value);
+      }
+      function updateData(key, value) {
+        setState((new_state) => ({
+          ...new_state,
+          show_save_button: true,
+          data: {
+            ...new_state.data,
+            [key]: value,
+          },
+          error: {
+            ...new_state.error,
+            [key]: "",
+          },
+        }));
+      }
+      function handleFailedFileParse(error) {
+        setState((new_state) => ({
+          ...new_state,
+          error: {
+            vm_config: "Invalid File Format",
+          },
+        }));
+      }
+  }
+
+  return (
+    <div className={classes.root}>
+      {/* Wrap all content in a single parent div */}
+      <>
+        <div className={classes.vmHeader}>
+          <div style={{ flex: 1 }}>
+            <PageHeader
+              heading="Virtual Machine Group: Example_Demo"
+              subHeading={
+                <div className={classes.vmHeaderEnvTitle}>
+                  Environment Restriction:
+                  <NewChip variant={"success"} label={"DEV"} shape="standard" style></NewChip>
+                  <NewChip variant={"info"} label={"Prod"} shape="standard"></NewChip>
+                  <NewChip variant={"highlight"} label={"UAT"} shape="standard"></NewChip>
+                  <NewChip variant={"warning"} label={"OA"} shape="standard"></NewChip>
+                  
+                </div>
+              }
+              primaryButton={{
+                actionType: "link",
+                icon: <span className="ri-add-line">&nbsp;</span>,
+                text: "FETCH PUBLIC KEY",
+                buttonClass: "btn btn-pagintaion ",
+              }}
+              // <div className='root-dialog-header d-flex align-center space-between'>
+              //             <p>Fetch Public Key</p>
+              //             <button className="btn btn-transparent" onClick={handleClose}>
+              //                 <span className='ri-close-fill font-24'></span>
+              //             </button>
+              //         </div>
+              icon="ri-cpu-line font-24"
+            />
+          </div>
+          <span className="ri-more-2-fill font-24" />
+        </div>
+
+        <div className={classes.header}>
+          <div className={classes.titleWrapper}>
+            <span className={classes.title}>Virtual Machines</span>
+            <span className="ri-information-line font-16" />
+          </div>
+
+          <div className={classes.actions}>
+            <button className="btn btn-pagintaion">
+              <span className="ri-add-line"></span>&nbsp;<span>Add More</span>
+            </button>
+            <button className="btn btn-pagintaion">
+              <span className="ri-upload-2-line"></span>&nbsp;
+              <span>Upload CSV File</span>
+            </button>
+          </div>
+        </div>
+
+        
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+        <div className="table-view mb-24">
+          <div className="table-view-row-header">VM Name</div>
+          <div className="table-view-row-header">Primary Tags</div>
+          <div className="table-view-row-header">Secondary Tags</div>
+          <div className="table-view-row-header">IP Address</div>
+          <div className="table-view-row-header">Status</div>
+          <div className="table-view-row-header"></div>
+
+         
+            <BlankPage
+            additionalClass={'mb-16'}
+              text={'No Virtual Machine added' }
+              subHeading={"Add VM through “add more” or “Upload CSV Above”"}
+              pageIcon={
+                <span className="ri-cpu-line font-28 color-key-gray"></span>
+              }
+              variant="inside-table"
+              additionalStyles={{padding: '55px 0', 
+                textAlign: "center", 
+                height:'auto',
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              justifyContent: "center",
+                gridColumn: "1 / -1"
+            }}
+              backgroundColor="#F4F4F4"
+            />
+          {/* <div
+            style={{
+              gridColumn: "1 / -1",
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              justifyContent: "center",
+              padding: "55px 0",
+          textAlign: "center",
+          // lastChild: { marginBottom: "1px solid #E6E6E6" },
+        }}
+          >
+            <div
+              style={{
+                width: "52px",
+                height: "52px",
+                borderRadius: "6.82px",
+                backgroundColor: "#F4F4F4",
+                marginBottom: "16px",
+                padding: "12.67px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <span className="ri-cpu-line font-28 color-key-gray" />
+            </div>
+            <span style={{ fontSize: "14px", fontWeight: 600, color: "#000000" , marginBottom: "12px" }}>
+              No Virtual Machine added
+            </span>
+            <span style={{ fontSize: "13px", fontWeight:400, color: "#000000" }}>
+              Add VM through “add more” or “Upload CSV Above”
+            </span>
+          </div> */}
+        </div>
+        <PaginationTwo
+          current_page_count={state.curr_page}
+          total_count={state.total_page}
+          next={state.next}
+          count={state.count}
+          previous={state.previous}
+          on_previous_click={() => {
+            fetchPrevInfo(null, state.previous);
+          }}
+          on_next_click={() => {
+            fetchNextInfo(null, state.next);
+          }}
+          on_pageNumber_click={(pageNumber) => {
+            fetchPageInfo(pageNumber);
+          }}
+        />
+      </>
+    </div>
+  );
+}
