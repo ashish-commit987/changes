@@ -1,0 +1,567 @@
+// Key changes to add error handling throughout the component:
+
+// 1. Add safe data access utilities at the top of the file
+const safeAccess = (obj, path, defaultValue = null) => {
+  return path.split('.').reduce((acc, part) => acc?.[part], obj) ?? defaultValue;
+};
+
+const safeArray = (value) => Array.isArray(value) ? value : [];
+
+// 2. Update fetchVMGroupDataAndSuccess with null checks
+const fetchVMGroupDataAndSuccess = (data, currentPage) => {
+  try {
+    // Safely access nested data
+    const vmArray = data?.results || data || [];
+    const totalCount = data?.count ?? (Array.isArray(vmArray) ? vmArray.length : 0);
+    
+    // Ensure vmArray is always an array
+    const validVmArray = Array.isArray(vmArray) ? vmArray : [];
+
+    setState((new_state) => ({
+      ...new_state,
+      vm_arr: validVmArray,
+      loading_vms: false,
+      curr_page: currentPage || 1,
+      total_page: Math.ceil(totalCount / 6) || 0,
+      count: totalCount,
+      next: data?.next || null,
+      previous: data?.previous || null,
+    }));
+  } catch (error) {
+    console.error("Error processing VM data:", error);
+    showSnackbar("Error processing VM data", "error");
+    setState((new_state) => ({
+      ...new_state,
+      vm_arr: [],
+      loading_vms: false,
+    }));
+  }
+};
+
+// 3. Update fetchVMGroupDataAndSetStateSuccess with safe access
+const fetchVMGroupDataAndSetStateSuccess = (data) => {
+  try {
+    setState((new_state) => ({
+      ...new_state,
+      edit_state_loading: false,
+      parent_state: data || {},
+      data: {
+        ...new_state.data,
+        ...(data || {}),
+      },
+    }));
+  } catch (error) {
+    console.error("Error setting VM group data:", error);
+    showSnackbar("Error processing VM group data", "error");
+    setState((new_state) => ({
+      ...new_state,
+      edit_state_loading: false,
+    }));
+  }
+};
+
+// 4. Update fetchMasterEnvListDataSuccess with safe mapping
+function fetchMasterEnvListDataSuccess(data) {
+  try {
+    const envList = safeArray(data).map((item) => ({
+      tabName: item?.name || 'Unknown',
+      order: item?.id || 0,
+    }));
+
+    setState((new_state) => ({
+      ...new_state,
+      master_envs_list: envList,
+      env_data_loading: false,
+    }));
+  } catch (error) {
+    console.error("Error processing master env list:", error);
+    showSnackbar("Error processing environment data", "error");
+    setState((new_state) => ({
+      ...new_state,
+      master_envs_list: [],
+      env_data_loading: false,
+    }));
+  }
+}
+
+// 5. Update useEffect for filtering with null checks
+useEffect(() => {
+  if (state?.data?.environment_master_type && state?.master_envs_list) {
+    try {
+      const envTypes = safeArray(state.data.environment_master_type);
+      const envList = safeArray(state.master_envs_list);
+      
+      const filteredEnvs = envList.filter((item) =>
+        envTypes.includes(item?.order)
+      );
+
+      setState((new_state) => ({
+        ...new_state,
+        selectedMasterEnv: filteredEnvs,
+      }));
+    } catch (error) {
+      console.error("Error filtering environments:", error);
+    }
+  }
+}, [state.master_envs_list, state.data.environment_master_type]);
+
+// 6. Update URL parsing useEffect with error handling
+useEffect(() => {
+  try {
+    const urlSearchParams = new URLSearchParams(location.search);
+
+    if (urlSearchParams.size !== 0) {
+      let moreAdvFilter = [...defaultFilters];
+      let advFilters = {};
+
+      urlSearchParams.forEach((value, key) => {
+        if (!value) return;
+
+        try {
+          if (key === "adv_search") {
+            const updatedList = value.split(",").filter(Boolean);
+            moreAdvFilter = [...new Set([...moreAdvFilter, ...updatedList])];
+          } else if (!["limit", "offset"].includes(key)) {
+            advFilters[key] = value.split(",").filter(Boolean);
+          }
+        } catch (err) {
+          console.error(`Error parsing URL param ${key}:`, err);
+        }
+      });
+
+      setState((prevState) => ({
+        ...prevState,
+        moreAdvFilterList: moreAdvFilter,
+        advFilters: {
+          ...prevState.advFilters,
+          ...advFilters,
+        },
+      }));
+
+      if (id) {
+        fetchVMsWithFilters(id, 1, advFilters, moreAdvFilter);
+      }
+    } else if (id) {
+      fetchVmOfVMGroups(id, 1);
+    }
+  } catch (error) {
+    console.error("Error parsing URL parameters:", error);
+    if (id) {
+      fetchVmOfVMGroups(id, 1);
+    }
+  }
+}, [id, location.search]);
+
+// 7. Update generateFilterURL with safe operations
+const generateFilterURL = (baseURL, listDict, activeFilters) => {
+  try {
+    if (!baseURL) return '';
+    
+    let searchParams = new URLSearchParams();
+
+    // Extract existing params from baseURL if it has query string
+    if (baseURL.includes("?")) {
+      const [url, queryString] = baseURL.split("?");
+      const existingParams = new URLSearchParams(queryString);
+      existingParams.forEach((value, key) => {
+        searchParams.append(key, value);
+      });
+      baseURL = url;
+    }
+
+    // Add filter params with null checks
+    const filtersKeyArray = Object.keys(listDict || {});
+    filtersKeyArray.forEach((key) => {
+      try {
+        const arrayFilterValues = safeArray(listDict[key]);
+        if (arrayFilterValues.length > 0 && isFilterActive(key, activeFilters)) {
+          const arrayString = arrayFilterValues.join(",");
+          searchParams.set(key, arrayString);
+        }
+      } catch (err) {
+        console.error(`Error processing filter ${key}:`, err);
+      }
+    });
+
+    const queryString = searchParams.toString();
+    return queryString ? `${baseURL}?${queryString}` : baseURL;
+  } catch (error) {
+    console.error("Error generating filter URL:", error);
+    return baseURL || '';
+  }
+};
+
+// 8. Update isFilterActive with safe checks
+const isFilterActive = (filterKey, list) => {
+  return safeArray(list).find((name) => filterKey === name);
+};
+
+// 9. Update isFiltersApplied with safe iteration
+function isFiltersApplied() {
+  try {
+    let count = 0;
+    const filters = state?.advFilters || {};
+    
+    Object.keys(filters).forEach((item) => {
+      if (safeArray(filters[item]).length > 0) {
+        count = count + 1;
+      }
+    });
+
+    setState((new_state) => ({
+      ...new_state,
+      is_filters_applied: count > 0,
+    }));
+  } catch (error) {
+    console.error("Error checking filters:", error);
+  }
+}
+
+// 10. Update testConnectionApiHit with bounds checking
+const testConnectionApiHit = (data, index) => {
+  try {
+    if (!data?.id || index < 0 || index >= state.vm_arr.length) {
+      console.error("Invalid data or index for test connection");
+      return;
+    }
+
+    const updatedVmArr = [...state.vm_arr];
+    updatedVmArr[index] = { ...updatedVmArr[index], loading: true };
+    setState({ ...state, vm_arr: updatedVmArr });
+    
+    const post_url = GenerateURL(
+      { edit_id: data.id },
+      properties.api.edit_single_vm,
+    );
+    
+    PostData(
+      post_url,
+      data,
+      (res) => onSaveSuccess(res, index),
+      onSaveFail,
+    );
+  } catch (error) {
+    console.error("Error in test connection:", error);
+    showSnackbar("Failed to test connection", "error");
+  }
+};
+
+// 11. Update onSaveSuccess with safe access
+const onSaveSuccess = (response, index) => {
+  try {
+    if (index >= 0 && index < state.vm_arr.length) {
+      const updatedVmArr = [...state.vm_arr];
+      updatedVmArr[index] = { ...updatedVmArr[index], loading: false };
+      setState({ ...state, vm_arr: updatedVmArr });
+    }
+    
+    if (response?.task) {
+      setTaskId(response.task);
+    }
+  } catch (error) {
+    console.error("Error in save success:", error);
+  }
+};
+
+// 12. Update filter data parsing functions with safe operations
+function filterDataParseForVMName(data) {
+  try {
+    return safeArray(data).map((item) => ({
+      label: item?.vm_name || 'Unknown',
+      value: item?.vm_name || '',
+      ...item,
+    })).filter(item => item.value);
+  } catch (error) {
+    console.error("Error parsing VM names:", error);
+    return [];
+  }
+}
+
+function filterDataParseForTags(data, tagType) {
+  try {
+    const tags_list = [];
+    safeArray(data).forEach((item) => {
+      const tagsArray = tagType === "primary" 
+        ? safeArray(item?.add_primary_tag)
+        : safeArray(item?.add_secondary_tag);
+      
+      tagsArray.forEach((tag) => {
+        if (tag && !tags_list.includes(tag)) {
+          tags_list.push(tag);
+        }
+      });
+    });
+    
+    return tags_list.map((item) => ({
+      label: item,
+      value: item,
+    }));
+  } catch (error) {
+    console.error("Error parsing tags:", error);
+    return [];
+  }
+}
+
+function filterDataParseForIPAddress(data) {
+  try {
+    return safeArray(data).map((item) => ({
+      label: item?.ip_address || 'Unknown',
+      value: item?.ip_address || '',
+      ...item,
+    })).filter(item => item.value);
+  } catch (error) {
+    console.error("Error parsing IP addresses:", error);
+    return [];
+  }
+}
+
+// 13. Update onUpdateHandle with comprehensive error handling
+const onUpdateHandle = (uniqueId, updatedList) => {
+  try {
+    const safeUpdatedList = safeArray(updatedList);
+    let updatedKey = "";
+
+    if (uniqueId === "more-button-adv-0") {
+      addFiltersToUrl("adv_search", safeUpdatedList);
+      if (safeUpdatedList.length === 0) {
+        resetAdvFilter();
+      } else {
+        setState((prevState) => ({
+          ...prevState,
+          moreAdvFilterList: safeUpdatedList,
+        }));
+      }
+    } else {
+      // Map unique IDs to filter keys
+      const idToKeyMap = {
+        "vm_name_adv_1": "vm_name",
+        "primary_tag_adv_2": "primary_tag",
+        "secondary_tag_adv_3": "secondary_tag",
+        "ip_address_adv_4": "ip_address",
+        "status_adv_5": "status",
+      };
+
+      updatedKey = idToKeyMap[uniqueId];
+      
+      if (!updatedKey) {
+        console.warn(`Unknown filter ID: ${uniqueId}`);
+        return;
+      }
+
+      setState((prevState) => ({
+        ...prevState,
+        advFilters: {
+          ...prevState.advFilters,
+          [updatedKey]: safeUpdatedList,
+        },
+      }));
+
+      addFiltersToUrl(updatedKey, safeUpdatedList);
+      const advFilters = { 
+        ...state.advFilters, 
+        [updatedKey]: safeUpdatedList 
+      };
+      
+      if (id) {
+        fetchVMsWithFilters(id, 1, advFilters);
+      }
+    }
+  } catch (error) {
+    console.error("Error updating filters:", error);
+    showSnackbar("Error updating filters", "error");
+  }
+};
+
+// 14. Update addFiltersToUrl with safe operations
+const addFiltersToUrl = (filterName, filterValue) => {
+  try {
+    let urlSearchParams = new URLSearchParams(location.search);
+    const allFilters = [
+      "vm_name",
+      "primary_tag",
+      "secondary_tag",
+      "ip_address",
+      "status",
+    ];
+
+    if (filterName === "all_delete") {
+      urlSearchParams = new URLSearchParams();
+    } else {
+      const safeFilterValue = safeArray(filterValue);
+      
+      if (filterName === "adv_search") {
+        allFilters.forEach((value) => {
+          if (!safeFilterValue.includes(value)) {
+            urlSearchParams.delete(value);
+          }
+        });
+      }
+
+      if (safeFilterValue.length === 0) {
+        urlSearchParams.delete(filterName);
+      } else {
+        const valueString = safeFilterValue.join(",");
+        if (urlSearchParams.has(filterName)) {
+          urlSearchParams.set(filterName, valueString);
+        } else {
+          urlSearchParams.append(filterName, valueString);
+        }
+      }
+    }
+
+    history({
+      pathname: location.pathname,
+      search: urlSearchParams.toString(),
+    });
+  } catch (error) {
+    console.error("Error updating URL filters:", error);
+  }
+};
+
+// 15. Update render section for VM rows with comprehensive null checks
+// In the JSX where you map vm_arr:
+{safeArray(state.vm_arr).map((item, index) => {
+  if (!item) return null;
+  
+  return (
+    <React.Fragment key={item?.id || index}>
+      <div className="table-view-row" style={{ gap: "12px" }}>
+        <div
+          style={{
+            width: "30px",
+            height: "30px",
+            borderRadius: "5.63px",
+            backgroundColor: "#EAF4FF",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <span
+            className="ri-computer-line font-18"
+            style={{ color: "#0086ff" }}
+          />
+        </div>
+
+        {item?.vm_name && item.vm_name.length > 15
+          ? `${item.vm_name.slice(0, 10)}...`
+          : (item?.vm_name || 'N/A')}
+      </div>
+      
+      <div className="table-view-row">
+        {safeArray(item?.add_primary_tag).length > 0 ? (
+          <div className="add_primary_tag" style={{ display: "flex", gap: "4px" }}>
+            {safeArray(item.add_primary_tag)
+              .slice(0, 3)
+              .map((tag, tagIndex) => (
+                <NewChip
+                  key={tagIndex}
+                  label={tag || ''}
+                  shape="pill"
+                  variant="info"
+                  size="md"
+                />
+              ))}
+
+            {safeArray(item.add_primary_tag).length > 2 && (
+              <NewChip
+                label={`+${safeArray(item.add_primary_tag).length - 2}`}
+                shape="pill"
+                size="md"
+              />
+            )}
+          </div>
+        ) : (
+          <span
+            style={{
+              backgroundColor: "#f4f4f4",
+              border: "1px solid #E6E6E6",
+              fontSize: "10px",
+              color: "#797979",
+              padding: "3px 5px",
+              borderRadius: "4px",
+              fontWeight: 600,
+            }}
+          >
+            N/A
+          </span>
+        )}
+      </div>
+
+      {/* Similar safe access patterns for secondary tags, IP, status, etc. */}
+      
+      <div className="table-view-row">
+        <span className="" style={{ color: "#787878" }}>
+          {item?.ip_address || "N/A"}
+        </span>
+      </div>
+      
+      <div className="table-view-row">
+        <span>
+          {item?.status === "ONLINE" ? (
+            <NewChip
+              label={item.status}
+              shape="standard"
+              variant="success"
+            />
+          ) : (
+            <NewChip
+              label={item?.status || "OFFLINE"}
+              shape="standard"
+              variant="warning"
+            />
+          )}
+        </span>
+      </div>
+      
+      {/* Action buttons with safe access */}
+    </React.Fragment>
+  );
+})}
+
+// 16. Add global error boundary wrapper (optional but recommended)
+// Wrap the entire component return in an error boundary or add this pattern:
+const renderContent = () => {
+  try {
+    // Your existing JSX
+    return (
+      <div className={classes.root}>
+        {/* ... existing content ... */}
+      </div>
+    );
+  } catch (error) {
+    console.error("Render error:", error);
+    return (
+      <div className={classes.root}>
+        <BlankPage
+          text="Something went wrong"
+          subHeading="Please refresh the page or contact support"
+          pageIcon={<span className="ri-error-warning-line font-28" />}
+        />
+      </div>
+    );
+  }
+};
+
+// 17. Update PageHeader props with safe access
+<PageHeader
+  heading={`Virtual Machine Group: ${
+    state?.data?.virtual_group_name || "NA"
+  }`}
+  subHeading={
+    <div className={classes.vmHeaderEnvTitle}>
+      Environment Restriction:
+      {safeArray(state?.selectedMasterEnv).length > 0 ? (
+        safeArray(state.selectedMasterEnv).map((env, index) => {
+          const variant = VARIANTS[index % VARIANTS.length];
+          return <EnvChip key={index} er={env?.tabName || 'Unknown'} />;
+        })
+      ) : (
+        <span style={{ marginLeft: "8px", color: "#787878" }}>
+          None
+        </span>
+      )}
+    </div>
+  }
+  // ... rest of props
+/>
