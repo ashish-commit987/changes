@@ -1,0 +1,626 @@
+import React, { useState, useEffect } from "react";
+import { makeStyles } from "@mui/styles";
+import Dialog from "@mui/material/Dialog";
+import { Input } from "../../../../components/genericComponents/Input";
+import ParseFile from "../../../../util/FileParser";
+import GenerateURL from "../../../../util/APIUrlProvider";
+import properties from "../../../../properties/properties";
+import { PostData } from "../../../../util/apiInvoker";
+import { useCustomSnackbar } from "../../../../contexts/SnackbarContext";
+import Button from "../../../../components/genericComponents/Button";
+import { useRef } from "react";
+import csvIcon from "../../../../assets/images/vector.png";
+
+const AddVirtualMachineCSV = ({
+  open,
+  handleClose,
+   vmGroupId,
+  handleCloseDialogAndFetchVMs,
+}) => {
+  const classes = useStyles();
+  const { showSnackbar } = useCustomSnackbar();
+  const fileInputRef = useRef(null);
+  const showInfoSection = JSON.parse(
+    localStorage.getItem("vm_csv_upload_dialog_display_flag")
+  );
+
+  const [state, setState] = useState({
+    data: {},
+    error: {},
+    showLeftPanel: true,
+    uploadInProgress: false,
+  });
+
+  const [data, setData] = useState({ data: {}, error: {} });
+
+  const [isDragging, setIsDragging] = useState(false);
+
+  const [uploadedFileName, setUploadedFileName] = useState("");
+
+  const MAX_FILE_SIZE = 2 * 1024 * 1024; 
+
+  useEffect(() => {
+    if (open) {
+      setState({
+        data: {},
+        error: {},
+        showLeftPanel: !showInfoSection,
+        uploadInProgress: false,
+      });
+      setUploadedFileName("");
+    }
+  }, [open]);
+
+  const onFileUpload = (e) => {
+  const file = e.target.files?.[0];
+  if (!file) return;
+
+  
+  if (file.size > MAX_FILE_SIZE) {
+    showSnackbar("error", "File size must be less than or equal to 2 MB");
+    e.target.value = "";
+    return;
+  }
+
+  
+
+  ParseFile(e, handleSuccessFileParse, handleFailedFileParse);
+};
+
+  const handleSuccessFileParse = (file_data) => {
+    updateData("vm_config", {
+      name: file_data.name,
+      content: file_data.content,
+    });
+    setUploadedFileName(file_data.name);
+  };
+
+  const updateData = (key, value) => {
+    setState((prevState) => ({
+      ...prevState,
+      data: {
+        ...prevState.data,
+        [key]: value,
+      },
+      error: {
+        ...prevState.error,
+        [key]: "",
+      },
+    }));
+  };
+
+  const handleFailedFileParse = (error) => {
+    showSnackbar("error", "Invalid File Format");
+    setState((prevState) => ({
+      ...prevState,
+      error: {
+        vm_config: "Invalid File Format",
+      },
+    }));
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+
+    const file = e.dataTransfer.files?.[0];
+    if (!file ) return;
+     
+    if (file.size > MAX_FILE_SIZE) {
+    showSnackbar("error", "File size must be less than or equal to 2 MB");
+
+    return;
+  }
+    const fakeEvent = {
+      target: {
+        files: [file],
+      },
+    };
+
+    //onFileUpload(fakeEvent);
+     ParseFile(fakeEvent, handleSuccessFileParse, handleFailedFileParse);
+  };
+
+  const removeFile = (e) => {
+    setState((prevState) => ({
+      ...prevState,
+      data: {
+        ...prevState.data,
+        vm_config: null,
+      },
+    }));
+    setUploadedFileName("");
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
+
+  const validateAndSaveFileData = () => {
+    console.log("Validating and saving file data...", state.data);
+    if (!state.data.vm_config) {
+      showSnackbar("error", "Please upload a CSV file");
+      return;
+    }
+
+    console.log("Vm group id ", vmGroupId);
+
+    if (!vmGroupId) {
+      showSnackbar("error", "VM Group ID is missing");
+      return;
+    }
+
+
+    const post_data = {
+      vm_set: parseInt(vmGroupId),
+      content: state.data.vm_config.content,
+      name: state.data.vm_config.name,
+    };
+
+    const temp_url = GenerateURL({}, properties.api.vm_group_csv_upload);
+    setState((prevState) => ({
+      ...prevState,
+      uploadInProgress: true,
+    }));
+    showSnackbar("info", "Uploading CSV file...");
+    PostData(temp_url, post_data, saveSuccessFileUpload, saveFailFileUpload);
+  };
+
+ 
+  const saveSuccessFileUpload = (response) => {
+    showSnackbar("success", "CSV file uploaded successfully");
+
+    setState((prevState) => ({
+      ...prevState,
+      uploadInProgress: false,
+      data: {},
+      showLeftPanel: false,
+    }));
+
+    
+    handleCloseDialogAndFetchVMs();
+    handleClose();
+  };
+
+  const saveFailFileUpload = (response) => {
+    const errorMsg =
+      typeof response === "string" ? response : JSON.stringify(response);
+    showSnackbar("error", "Unable to upload CSV file: " + errorMsg);
+    setState((prevState) => ({
+      ...prevState,
+      uploadInProgress: false,
+      error: {
+        ...prevState.error,
+        vm_config: errorMsg,
+      },
+    }));
+  };
+
+  const handleCloseLeftStrip = () => {
+    if (data?.data?.dont_show_again) {
+      setDataToLocalStorage();
+    }
+    setState((prev) => ({
+      ...prev,
+      showLeftPanel: false,
+    }));
+  };
+
+  function setDataToLocalStorage() {
+    localStorage.setItem(
+      "vm_csv_upload_dialog_display_flag",
+      data.data.dont_show_again
+    );
+  }
+
+  function onChangeDoNotShow(e) {
+    const key = e.target.name;
+    let value = e.target.value;
+    if (key === "dont_show_again") {
+      value = !data.data.dont_show_again;
+    }
+    setData((prevState) => ({
+      ...prevState,
+      data: {
+        ...prevState.data,
+        [key]: value,
+      },
+      error: {
+        ...prevState.error,
+        [key]: "",
+      },
+    }));
+  }
+
+  const handleDownloadSample = () => {
+    const sampleCSVContent =
+      "user_name,vm_name,add_primary_tag,add_secondary_tag,ip_address,collection_method,secret_name,port\nhiteshjaiswal,Qa-hercules-app-bp-ramsujsvjfvjufd,sdkjhsdkjhsd,jskdjshjkds,192.168.10.141,USERNAME_PASSWORD,hiteshserversec,9001";
+    const blob = new Blob([sampleCSVContent], { type: "text/csv" });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "sample_vm_upload.csv";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+  };
+
+  const getFileSize = () => {
+  if (!state.data.vm_config?.content) return "";
+
+  const bytes = new Blob([state.data.vm_config.content]).size;
+
+  if (bytes < 1024) {
+    return "1 kb";
+  }
+
+  const kb = bytes / 1024;
+
+  if (kb < 1024) {
+    return `${Math.ceil(kb)} kb`; 
+  }
+
+  const mb = kb / 1024;
+  return `${mb.toFixed(1)} mb`;
+};
+
+
+  return (
+    <Dialog
+      fullWidth={true}
+      maxWidth={"md"}
+      open={open}
+      onClose={handleClose}
+      className={`${classes.root} dialog-align-corner`}
+      aria-labelledby="max-width-dialog-title"
+    >
+      <div
+        className="d-grid ml-auto dialog-sub-component"
+        style={{
+          gridTemplateColumns: state.showLeftPanel
+            ? "396px 650px"
+            : "0px 650px",
+        }}
+      >
+        <div
+          className={
+            state.showLeftPanel
+              ? "left-panel-dialog bg-white position-relative"
+              : "left-panel-dialog-down"
+          }
+        >
+          <div
+            className={
+              "d-flex align-center space-between left-panel-header pd-10"
+            }
+            style={{ padding: "11px 20px" }}
+          >
+            <p style={{ color: "#0086FF" }}>INFORMATION</p>
+            <button
+              className="btn btn-icon-only"
+              onClick={handleCloseLeftStrip}
+            >
+              <span className="ri-close-line color-icon-secondary"></span>
+            </button>
+          </div>
+          <div className="pd-10" style={{ padding: "16px 20px" }}>
+            <p className="font-16 font-weight-600 color-primary mb-10">
+              What is Virtual Machine?
+            </p>
+            <p
+              className="font-12 color-icon-secondary"
+              style={{ color: "#404040" }}
+            >
+              In Buildpiper, for a monolithic application, we need to onboard
+              the infrastructure required for deployment for the monolithic
+              applications. This infrastructure is nothing but of VMs (virtual
+              machines). Thus a virtual machine (VM) is a software-based unit of
+              a LDC - Local data centre which runs an operating system and
+              applications just like a physical computer but relies on
+              virtualization technology to operate.
+            </p>
+          </div>
+          <div className="checkbox-only-divi" style={{ padding: "10px 20px" }}>
+            <Input
+              type="simple-checkbox"
+              name="dont_show_again"
+              label="Don't show this again"
+              data={data.data}
+              error={data.error}
+              onChangeHandler={onChangeDoNotShow}
+            />
+          </div>
+        </div>
+
+        <div className="right-panel-dialog bg-white">
+         
+          <>
+            <div
+              className="font-18 font-weight-600 color-white d-flex align-center space-between"
+              style={{ backgroundColor: "#0086ff", padding: "16px 16px" }}
+            >
+              <p>Upload CSV</p>
+              <button
+                className="btn float-cancel-button"
+                style={
+                  showInfoSection || !state.showLeftPanel
+                    ? {
+                        position: "absolute",
+                        top: "0px",
+                        height:"58px",
+                        width:"54px",
+                        left: "-56px",
+                        zIndex: 1000,
+                      }
+                    : {
+                        position: "absolute",
+                        top: "0px",
+                        height:"58px",
+                        width:"54px",
+                        left: "-450px",
+                        zIndex: 1000,
+                      }
+                }
+                onClick={handleClose}
+              >
+                <span className="ri-close-line"></span>
+              </button>
+            </div>
+
+            <div
+              className={classes.uploadContent}
+              style={{
+                padding: "0 20px 120px 20px",
+                overflowY: "auto",
+              }}
+            >
+              <div className={classes.uploadArea}>
+                <div
+                  className={`${classes.dashedBox} ${
+                    isDragging ? classes.dragActive : ""
+                  }`}
+                  onDragOver={handleDragOver}
+                  onDragLeave={handleDragLeave}
+                  onDrop={handleDrop}
+                >
+                  {!state.data.vm_config ? (
+                    <div className="text-center">
+                      <div className="mb-20">
+                        <span
+                          className="ri-file-excel-2-line"
+                          style={{ fontSize: "48px", color: "#0086FF" }}
+                        ></span>
+                      </div>
+                      <p className="font-14 color-icon-secondary mb-5">
+                        Drag and Drop file here or{" "}
+                        <span
+                          className="text-anchor-blue cursor-pointer"
+                          onClick={() => fileInputRef.current?.click()}
+                        >
+                          click here
+                        </span>{" "}
+                        to choose file
+                      </p>
+                      <p className="font-12 color-icon-secondary mb-20">
+                        CSV Up to 2mb
+                      </p>
+                      <input
+                        type="file"
+                        ref={fileInputRef}
+                        accept=".csv"
+                        style={{ display: "none" }}
+                        onChange={onFileUpload}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        className="btn btn-outline-primary"
+                        value=""
+                      >
+                        Browse File
+                      </button>
+
+                      <div className="mt-15">
+                        <button
+                          onClick={handleDownloadSample}
+                          className="btn btn-transparent text-anchor-blue font-12"
+                          style={{
+                            textDecoration: "none",
+                            padding: "4px 8px",
+                            display: "flex",
+                            alignItems: "center",
+                            margin: "0 auto",
+                          }}
+                        >
+                          <span className="ri-download-line mr-5"></span>
+                          DOWNLOAD SAMPLE CSV
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-center">
+                      <div
+                        style={{
+                          width: 56,
+                          height: 56,
+                          borderRadius: "50%",
+                          backgroundColor: "#2E7D32",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          margin: "0 auto 16px",
+                        }}
+                      >
+                        <span
+                          className="ri-check-line color-white"
+                          style={{ fontSize: 28 }}
+                        />
+                      </div>
+
+                      <p className="font-16 font-weight-600 mb-10">
+                        File Uploaded Successfully
+                      </p>
+
+                      <div
+                        className="d-flex align-center justify-center"
+                        style={{
+                          backgroundColor: "#F5F5F5",
+                          padding: "12px 16px",
+                          borderRadius: "4px",
+                          margin: "20px auto",
+                          maxWidth: "400px",
+                        }}
+                      >
+                        <img
+                          src={csvIcon}
+                          alt="CSV file"
+                          style={{
+                            marginRight: 12,
+                          }}
+                        />
+
+                        <div style={{ flex: 1, textAlign: "left" }}>
+                          <p className="font-14 font-weight-500">
+                            {uploadedFileName}
+                          </p>
+                          <p className="font-12 color-icon-secondary">
+                            {getFileSize()}
+                          </p>
+                        </div>
+                        <button
+                          className="btn btn-icon-only"
+                          onClick={removeFile}
+                          style={{ marginLeft: 8 }}
+                        >
+                          <span className="ri-close-line color-icon-secondary"></span>
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="footer-right-panel d-flex align-center justify-end">
+              <Button
+                className="font-weight-600 font-12" variant="ghost" 
+                style={{ marginRight: "20px", marginBottom: "16px" }}
+                isLoading={state.uploadInProgress}
+                onClick={handleClose}
+                //disabled={!state.data.vm_config || state.uploadInProgress}
+              >
+                Cancel
+              </Button>
+              <button
+                className="btn btn-primary ml-5"
+                style={{ marginRight: "20px", marginBottom: "16px" }}
+                isLoading={state.uploadInProgress}
+                onClick={validateAndSaveFileData}
+                disabled={!state.data.vm_config || state.uploadInProgress}
+              >
+                TEST &amp; SAVE{" "}
+              </button>
+              
+            </div>
+          </>
+        </div>
+      </div>
+    </Dialog>
+  );
+};
+
+const useStyles = makeStyles((theme) => ({
+  root: {
+    "& .right-panel-dialog": {
+      position: "relative",
+      width: "650px",
+      height: "100%",
+      display: "flex",
+      flexDirection: "column",
+    },
+    "& .MuiPaper-root": {
+      position: "absolute",
+      right: 0,
+      width: "1100px",
+      maxWidth: "1100px",
+      fontFamily: "Montserrat",
+
+      "& .style-1": {
+        display: "flex",
+        alignItems: "center",
+      },
+    },
+    "& .left-panel-dialog": {
+      width: "396px",
+      transition: "width 0.3s",
+
+      "& .left-panel-header": {
+        borderBottom: "1px solid #f1f1f1",
+      },
+      "& .checkbox-only-divi": {
+        position: "absolute",
+        bottom: "10px",
+      },
+    },
+    "& .left-panel-dialog-down": {
+      width: "0px",
+      overflow: "hidden",
+      transition: `'width 5s', 'overflow 1s'`,
+    },
+    "& .right-panel-form": {
+      padding: "20px 16px",
+      maxHeight: "calc(100% - 127px)",
+      overflowY: "auto",
+      display: "flex",
+      flexDirection: "column",
+      gap: "24px",
+      "& .slider": {
+        width: 600,
+      },
+    },
+    "& .wrapper-new-file": {
+      "& .input-file-wraper": {
+        border: "none",
+        padding: "4px",
+        gap: "0px",
+        justifyContent: "center",
+      },
+    },
+  },
+  uploadContent: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  uploadArea: {
+    width: "100%",
+    maxWidth: "600px",
+  },
+  dashedBox: {
+    border: "2px dashed #D9D9D9",
+    borderRadius: "8px",
+    padding: "48px 32px",
+    textAlign: "center",
+    marginTop: "20px",
+    backgroundColor: "#FFFFFF",
+  },
+  dragActive: {
+    border: "2px dashed #2E7D32",
+    backgroundColor: "#F1F8F4",
+  },
+}));
+
+export default AddVirtualMachineCSV;
