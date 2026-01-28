@@ -1,0 +1,452 @@
+import Popover from '@mui/material/Popover';
+import Tooltip from '@mui/material/Tooltip';
+import { makeStyles } from '@mui/styles';
+import React, { useEffect, useRef, useState } from 'react'
+import Zoom from "@mui/material/Zoom";
+import Typography from "@mui/material/Typography";
+import NewChip from '../newChip/NewChip';
+
+const MasterEnvDropdown = (props) => {
+    const classes = useStyles();
+    const rootRef = useRef(null);
+    const { masterEnvList, selectedMasterEnv, masterEnvChangeHandler, removeFromList, error } = props;
+    const [anchorEl, setAnchorEl] = useState(null);
+    const [state, setState] = useState({
+        masterEnvList: masterEnvList && masterEnvList.length > 0 ? masterEnvList : [],
+    })
+
+    useEffect(() => {
+
+        setState(prevState => ({
+            ...prevState,
+            masterEnvList: masterEnvList
+        }));
+
+    }, [masterEnvList]);
+    console.log(masterEnvList, "masterEnvListmasterEnvList", state.masterEnvList)
+
+    const handleClick = (event) => {
+        setAnchorEl(event.currentTarget);
+    };
+
+    const handleClose = () => {
+        setAnchorEl(null);
+    };
+
+    const open = Boolean(anchorEl);
+
+
+    function onMasterEnvClick(order) {
+        console.log(order, "onMasterEnvClick")
+        masterEnvChangeHandler(order);
+        setState((prevState) => ({
+            ...prevState,
+            search: "",
+        }))
+        handleClose();
+    }
+
+    console.log(error, "masterEnvList")
+
+    return (
+      <>
+        <p className="font-14 color-primary">
+          Select Environment Restriction
+          <span className="" style={{ color: "red" }}>
+            *
+          </span>
+          <Tooltip
+            TransitionComponent={Zoom}
+            title={
+              <Typography
+                variant="body2"
+                style={{ whiteSpace: "pre-line", color: "white" }}
+              >
+                {
+                  "In Buildpiper, we have different environments categorized into lower and higher environments. Lower environments are designated for developers, QA, and UAT colleagues, while the higher environment is specifically reserved for production. Therefore, Environment Restriction refers to the environment to which the user wants to associate the VM groups."
+                }
+              </Typography>
+            }
+            style={{ marginLeft: "4px" }}
+            placement="right"
+          >
+            <i className="ri-information-line"></i>
+          </Tooltip>
+        </p>
+        <div
+          ref={rootRef}
+          className={error ? `${classes.root} error` : classes.root}
+          onClick={handleClick}
+          style={open ? { borderColor: "#0086FF" } : {}}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              handleClick();
+            }
+          }}
+        >
+          <div className="selected-label">
+            <div className="selected-env font-14 d-flex align-center avtar">
+              {selectedMasterEnv && selectedMasterEnv.length > 0
+                ? selectedMasterEnv.map((item) => (
+                    <NewChip
+                      variant="info"
+                      size="md"
+                      shape="pill"
+                      className="chip-default"
+                      ariaLabel={`Remove ${item.tabName}`}
+                      label={
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "space-between",
+                            gap: "8px",
+                            width: "100%",
+                          }}
+                        >
+                          <span className="font-12 font-weight-600">
+                            {item.tabName}
+                          </span>
+
+                          <div
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              removeFromList(item.order);
+                            }}
+                            role="button"
+                            tabIndex={0}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter" || e.key === " ") {
+                                e.preventDefault();
+                                removeFromList(item.order);
+                              }
+                            }}
+                          >
+                            <span
+                              className="font-14 font-weight-600 cursor-pointer ri-close-fill"
+                              style={{ color: "#0086ff" }}
+                            />
+                          </div>
+                        </div>
+                      }
+                    />
+                  ))
+                : "Please Select"}
+            </div>
+          </div>
+        </div>
+
+        <Popover
+          open={open}
+          anchorEl={anchorEl}
+          onClose={handleClose}
+          anchorOrigin={{
+            vertical: "bottom",
+            horizontal: "center",
+          }}
+          transformOrigin={{
+            vertical: "top",
+            horizontal: "center",
+          }}
+          PaperProps={{
+            style: {
+              overflow: "visible",
+              marginTop: "10px",
+              borderRadius: "6px",
+            },
+          }}
+        >
+          <div
+            className={classes.popover}
+            style={{
+              width: rootRef.current ? rootRef.current.clientWidth : "auto",
+            }}
+          >
+            <div className="env-list">
+              {state?.masterEnvList.length > 0 ? (
+                state.masterEnvList.map((ele, i) => {
+                  const isSelected =
+                    selectedMasterEnv && selectedMasterEnv.length > 0
+                      ? selectedMasterEnv.some((env) => env.order === ele.order)
+                      : null;
+
+                  if (ele.tabName.length > 32) {
+                    return (
+                      <Tooltip key={ele.order} title={ele.tabName}>
+                        <div
+                          className={
+                            isSelected
+                              ? "env-item font-14 selected-item"
+                              : "env-item font-14"
+                          }
+                          onClick={() => onMasterEnvClick(ele.order)}
+                          role="button"
+                          tabIndex={0}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              onMasterEnvClick(ele.order);
+                            }
+                          }}
+                        >
+                          <span className="component-env-name">
+                            {ele.tabName}
+                          </span>
+                          {isSelected && (
+                            <span
+                              className="ri-checkbox-circle-fill font-17"
+                              style={{ color: "#0086FF" }}
+                            ></span>
+                          )}
+                        </div>
+                      </Tooltip>
+                    );
+                  } else {
+                    return (
+                      <div
+                        key={ele.order}
+                        className={
+                          isSelected
+                            ? "env-item font-14 selected-item"
+                            : "env-item font-14"
+                        }
+                        onClick={() => onMasterEnvClick(ele.order)}
+                        role="button"
+                        tabIndex={0}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            onMasterEnvClick(ele.order);
+                          }
+                        }}
+                      >
+                        <span className="component-env-name">
+                          {ele.tabName}
+                        </span>
+                        {isSelected && (
+                          <span
+                            className="ri-checkbox-circle-fill font-17"
+                            style={{ color: "#0086FF" }}
+                          ></span>
+                        )}
+                      </div>
+                    );
+                  }
+                })
+              ) : (
+                <div className="d-flex align-center justify-center width-full">
+                  No Result Found
+                </div>
+              )}
+            </div>
+          </div>
+        </Popover>
+      </>
+    );
+}
+
+const useStyles = makeStyles((theme) => ({
+
+    root: {
+        backgroundColor: "#fff",
+        border: "1px solid #b7b7b7",
+        display: "flex",
+        padding: "8px 10px 8px 10px",
+        alignItems: "center",
+        gap: "12px",
+        alignSelf: "stretch",
+        borderRadius: "4px",
+        cursor: "pointer",
+        '& .selected-label': {
+            display: "flex",
+            alignItems: "center",
+            gap: "3px",
+            width: "100%"
+        },
+        '& .selected-env': {
+            display: "inline-block",
+            fontWeight: "500",
+            color: "#2F2F2F",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+            lineHeight: 2
+        },
+        '& .env-type': {
+            display: "inline-flex",
+            padding: "4px 8px",
+            alignItems: "flex-start",
+            borderRadius: "4px",
+            gap: "10px",
+            //fontSize: "10px",
+            fontWeight: "700",
+            color: "#FFF",
+            width: "fit-content",
+        },
+
+        '&:hover': {
+            borderColor: "#b7b7b7",
+        },
+        '& .default-template-chip': {
+            backgroundColor: '#EBF5FF',
+            border: '1px solid #dfedff',
+            color: '#0086ff',
+            fontSize: '11px',
+            fontWeight: '600',
+            padding: '3px 6px',
+            textTransform: 'uppercase',
+            borderRadius: '4px',
+            marginLeft: '5px'
+        },
+        '& .default-template-chip-green': {
+            backgroundColor: '#E6FBEA',
+            border: '1px solid #C6E9D9',
+            color: '#129E5B',
+            fontSize: '11px',
+            fontWeight: '600',
+            padding: '3px 6px',
+            textTransform: 'uppercase',
+            borderRadius: '4px',
+            marginLeft: '5px'
+        }
+    },
+    popover: {
+        //width: "100%",
+        display: "flex",
+        width: "540px",
+        flexDirection: "column",
+        alignItems: "flex-start",
+        gap: "5px",
+        borderRadius: "6px",
+        border: "1px solid #F4F4F4",
+        background: "#FFF",
+        boxShadow: "0px 4px 12px 0px rgba(0, 0, 0, 0.08)",
+        '& .search-container': {
+            display: "flex",
+            padding: "10px 12px",
+            justifyContent: "space-between",
+            alignItems: "center",
+            alignSelf: "stretch",
+            width: "100%",
+            height: "40px",
+            borderBottom: "1px solid #E6E6E6",
+            '& .search-input': {
+                border: "none",
+                padding: "0",
+
+                '&:focus': {
+                    border: "none !important",
+                    outline: "none !important",
+                }
+            },
+        },
+        '& .list-heading': {
+            display: "flex",
+            padding: "6px 12px 0px 12px",
+            alignItems: "flex-start",
+            gap: "10px",
+            alignSelf: "stretch",
+            textTransform: "uppercase",
+            fontSize: "12px",
+            fontWeight: "600",
+            color: "#949494",
+        },
+        '& .env-type-list': {
+            display: "flex",
+            padding: "6px 12px 0px 12px",
+            //flexDirection: "column",
+            alignItems: "flex-start",
+            gap: "10px",
+            alignSelf: "stretch",
+            '& .env-tab': {
+                display: "flex",
+                padding: "6px 10px",
+                justifyContent: "center",
+                alignItems: "center",
+                gap: "10px",
+                borderRadius: "6px",
+                border: "1px solid #E6E6E6",
+                background: "#FFF",
+                //fontSize: "12px",
+                fontWeight: "500",
+                cursor: "pointer",
+                '&:hover': {
+                    background: "#f4f4f4",
+                }
+            },
+            '& .selected-env-tab': {
+                background: "#0086FF",
+                color: "#FFF",
+                border: "none",
+                '&:hover': {
+                    background: "#0086FF !important",
+                }
+            }
+        },
+        '& .env-list': {
+            display: "flex",
+            paddingBottom: "8px",
+            flexDirection: "column",
+            alignItems: "flex-start",
+            alignSelf: "stretch",
+            height: "180px",
+            overflowY: "scroll",
+            '& .env-item': {
+                display: "flex",
+                padding: "8px 12px",
+                justifyContent: "space-between",
+                alignItems: "center",
+                alignSelf: "stretch",
+                cursor: "pointer",
+                '&:hover': {
+                    background: "#f4f4f4",
+                },
+                '& .component-env-name': {
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                }
+            },
+            '& .selected-item': {
+                background: "#F5FAFF",
+            },
+            '& .default-template-chip': {
+                backgroundColor: '#EBF5FF',
+                border: '1px solid #dfedff',
+                color: '#0086ff',
+                fontSize: '11px',
+                fontWeight: '600',
+                padding: '3px 6px',
+                textTransform: 'uppercase',
+                borderRadius: '4px',
+                marginLeft: '5px',
+
+            },
+            '& .default-template-chip-green': {
+                backgroundColor: '#E6FBEA',
+                border: '1px solid #C6E9D9',
+                color: '#129E5B',
+                fontSize: '11px',
+                fontWeight: '600',
+                padding: '3px 6px',
+                textTransform: 'uppercase',
+                borderRadius: '4px',
+                marginLeft: '5px'
+            }
+        }
+    },
+    root_error_class: {
+        backgroundColor: "#fce4e4 !important",
+        border: "1px solid #cc0033",
+    },
+}))
+
+MasterEnvDropdown.defaultProps = {
+    selectedEnvTab: null,
+    envChangeHandler: () => { },
+    selectedMasterEnv: null,
+    masterEnvChangeHandler: () => { },
+    removeFromList: () => { }
+}
+
+export default MasterEnvDropdown
