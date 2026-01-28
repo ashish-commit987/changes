@@ -1,0 +1,1803 @@
+import React, { lazy } from "react";
+import { Routes, Navigate, Route, useLocation } from "react-router-dom";
+import RouteWithLayout from "./components/RouteWithLayout/RouteWithLayout";
+import RouteWithMinimalLayout from "./components/RouteWithMinimalLayout/RouteWithMinimalLayout";
+import ProfileLayout from "./components/ProfileLayout/ProfileLayout";
+import ServiceDetailsView from "./views/service/detail";
+import MainLayout from "./layouts/Main";
+import useVersionPoll from "./useVersionPoll"
+import ProflieLayout from "./layouts/profile/ProflieLayout";
+import Minimal from "./layouts/Minimal/Minimal";
+import ServiceListing from "./views/service/listing";
+import ServiceAdd from "./views/service/add";
+import { LogOutView } from "./views/LogOutView";
+import { IsAuthenticated, IsRefreshTokenValid, IsSuperUser, IsUserActualSuperUser } from "./util/security";
+import ApplicationListing from "./views/application/listing";
+import JobTemplatesListing from "./views/jobTemplates/JobTemplatesListing";
+import CanaryTemplatesListing from "./views/canaryTemplates/canaryTemplatesListing";
+import BuildDeploy from "./views/build_deploy/BuildDeploy";
+import ManifestPlaceholder from "./views/manifest/ManifestPlaceholder";
+import EnvList from "./views/Environment/list/EnvList";
+import ServiceAddRevamp from "./views/serviceRevamp/Index";
+import NodeDetails from "./views/superAdmin/nodes/NodeDetails";
+import NodesListing from "./views/superAdmin/nodes";
+import PodsDetails from "./views/superAdmin/pods/PodsDetails"
+import ClusterDetail from "./views/superAdmin/Cluster/Detail";
+import IngressList from "./views/superAdmin/Ingress/list/IngressList";
+import ProjectListing from "./views/superAdmin/project/listing/index";
+import AddClusterFirstScreen from "./views/superAdmin/Cluster/Add/AddClusterFirstScreen";
+import AddNewCluster from "./views/superAdmin/Cluster/Add/New";
+import properties from "./properties/properties";
+import AddPipeline from "./views/pipeline/add";
+import PipelineCard from "./views/pipeline/listing/pipelineCard";
+import PipelineExecution from "./views/pipeline/execution/PipelineExecution";
+import ClusterList from "./views/superAdmin/Cluster/Listing";
+import AddClusterFlow from "./views/superAdmin/Cluster/Add";
+import AddNamespaces from "./views/superAdmin/Namespace/Add/AddNamespace";
+import PodsListing from "./views/superAdmin/pods";
+import NamespaceDetails from "./views/superAdmin/Namespace/Detils/NamespaceDetails"
+import NamespaceList from "./views/superAdmin/Namespace/list/NamespaceList";
+// import Maintenance from './views/Maintenance';
+import { Loading } from "./views/utils/Loading";
+
+import SideCarsInfo from './views/serviceRevamp/add/cd_flow/SideCarsInfo';
+import ErrorPageNotFound from "./views/ErrorPageNotFound";
+import { RedirectToProdEnv } from "./views/RedirectToProdEnv";
+import PipelineRuntimeParamsUpdate from "./views/pipeline/pipelineRuntimeParamsV3/PipelineRuntimeParamsUpdate";
+import HelmIntegrationList from "./views/integrations/HelmIntegrations/HelmIntegrationList";
+import PremiumFeaturesInfo from "./components/genericComponents/FeaturesValidation/PremiumFeatureComponents/PremiumFeaturesStoped";
+
+import MonitoringSourceList from "./views/monitoringSource/MonitoringSourceList";
+import StabilityMatrixList from "./views/stabilityMatrix/StabilityMatrixList";
+import StabilityMatrixListNew from "./views/stabilityMatrix/StabilityMatrixListNew";
+import AddStabilityMatrix from "./views/stabilityMatrix/AddStabilityMatrix";
+import AddCanary from "./views/canaryTemplates/addCanaryTemplates/AddCanary";
+import CanaryAnalysisReport from "./views/pipeline/execution/components/CanaryAnalysisReport";
+import WhiteTopMinimal from "./layouts/WhiteTopMinimal/WhiteTopMinimal";
+
+
+import CustomDialogLayout from "./layouts/CustomLayout/CustomDialogLayout";
+import ReactGA from "react-ga4";
+
+
+
+const LoginView = lazy(() => import("./views/LoginView"));
+const RefreshSessionView = lazy(() => import("./views/RefreshSessionView"))
+const Welcome = lazy(() => import("./views/Welcome"))
+const TestView = lazy(() => import("./views/TestView"))
+const LandingPage = lazy(() => import("./views/LandingPage"))
+const SignUp = lazy(() => import("./views/saas/signUp/SignUp"))
+const AuthComplete = lazy(() => import("./views/AuthComplete"))
+const ViewCredentials = lazy(() => import("./views/settings/credentials/ViewCredentials"))
+const AddProject = lazy(() => import("./views/saas/signUp/AddProject"))
+const NewSignup = lazy(() => import("./views/saas/signUp/SignupThree"))
+const AddMonitoring = lazy(() => import("./views/superAdmin/monitoring/AddMonitoring"))
+const ManageUsers = lazy(() => import("./views/superAdmin/UserAndExternalRoles/ManageUsers"))
+const ExternalGroupingMapping = lazy(() => import("./views/superAdmin/UserAndExternalRoles/ExternalGroupMapping"))
+const UploadUsers = lazy(() => import("./views/superAdmin/UserAndExternalRoles/UploadUsers"))
+
+const UploadUsersNew = lazy(() => import("./views/superAdmin/UserAndExternalRoles/UploadUsersNew"))
+const ResetPassword = lazy(() => import("./views/ResetPassword"))
+const ContainerRegistries = lazy(() => import("./views/integrations/containerRegisteries/ContainerRegistries"))
+const ArtifactoryList = lazy(() => import("./views/integrations/artifactory/ArtifactoryList"))
+const AddRegistry = lazy(() => import("./views/integrations/containerRegisteries/AddRegistry"))
+const Secrets = lazy(() => import("./views/integrations/secrets/Secrets"))
+const AddSecret = lazy(() => import("./views/integrations/secrets/AddSecret"))
+const Tickets = lazy(() => import("./views/integrations/tickets/Tickets"))
+const AddTicket = lazy(() => import("./views/integrations/tickets/AddTicket"))
+const ReposListing = lazy(() => import("./views/integrations/repos/ReposListing"))
+const SystemSetting = lazy(() => import("./layouts/components/systemSettings/SystemSetting"))
+const AddBitBucket = lazy(() => import("./views/integrations/repo/bitbucket/addBitbucket/AddBitBucket"))
+const GitLabLayout = lazy(() => import("./views/integrations/repo/gitlab/mapGitlabAccount/GitLabLayout"))
+const UploadUserGroup = lazy(() => import("./views/superAdmin/UserAndExternalRoles/uploadUserGroup/UploadUserGroup"))
+const AddGitHub = lazy(() => import("./views/integrations/repo/gitHub/addBitbucket/AddGitHub"))
+const PermissionsListing = lazy(() => import("./views/superAdmin/permissions/listing/PermissionsListing"))
+const SSOAuthComplete = lazy(() => import("./views/SSOAuthComplete"))
+const PermissionsPoliciesListing = lazy(() => import("./views/superAdmin/permissions-policies/listing/PermissionsPoliciesListing"))
+const EventListener = lazy(() => import("./views/gitops/EventListener"))
+const AddEventListenerFrom = lazy(() => import("./views/gitops/add/AddEventListenerFrom"))
+const CreateEvent = lazy(() => import("./views/gitops/revamp/add/CreateEvent"))
+const SseTesting = lazy(() => import("./views/SseTesting"))
+const EnvScheduleDialogNew = lazy(() => import("./views/Environment/EnvironmentDashboard/components/EnvScheduleDialogNew"))
+const EnvScheduleDialog = lazy(() => import("./views/Environment/EnvironmentDashboard/components/EnvScheduleDialog"))
+const IndexNew = lazy(() => import("./views/application/listing/IndexNew"))
+const DashboardHome = lazy(() => import("./views/application/listing/DashboardHome"))
+const WorkspaceAccess = lazy(() => import("./views/service/listing/components/workspace/WorkspaceAccess"))
+const WorkspaceAccessV3 = lazy(() => import("./views/service/listing/components/workspaceV3/WorkspaceAccessV3"))
+
+const SystemSettings = lazy(() => import("./layouts/components/SystemSettings"))
+const EventListenerStatus = lazy(() => import("./views/event-listener/EventListenerStatus"))
+const EventListenerDetails = lazy(() => import("./views/event-listener/EventListenerDetails"))
+const UserGroupList = lazy(() => import("./views/superAdmin/UserGroup/UserGroupList"))
+const PolicyTemplateListing = lazy(() => import("./views/superAdmin/policyTemplate/PolicyTemplateListing"))
+const BetaEnvStatusComponent = lazy(() => import("./components/genericComponents/BetaEnvStatusComponent"))
+const Thankyou = lazy(() => import("./views/Thankyou"))
+const BuildInsights = lazy(() => import("./views/buildInsight/BuildInsights"))
+const AddJobTemplate = lazy(() => import("./views/jobTemplates/AddJobTemplate"))
+const JobTemplateListing = lazy(() => import("./views/catalog/JobTemplateListing"))
+const CreateNewStepCatalog = lazy(() => import("./views/catalog/components/CreateNewStepCatalog"))
+const CreateEventListener = lazy(() => import("./views/gitopsRevamp/list/CreateEventListener"))
+
+
+const AddCanaryTemplates = lazy(() => import("./views/canaryTemplates/AddCanaryTemplates"))
+const CompareEnv = lazy(() => import("./views/Environment/CompareEnv"))
+const UserAndExternalRoles = lazy(() => import("./views/superAdmin/UserAndExternalRoles/UserAndExternalRoles"));
+const ClusterPermissions = lazy(() => import("./views/superAdmin/Cluster/Add/clusterPermissions"));
+const LogsViewer = lazy(() => import("./views/service/listing/components/LogsViewer"));
+const MonitoringDialogue = lazy(() => import("./views/service/detail/components/MonitoringDialogue"))
+const CustomLayoutLogs = lazy(() => import("./layouts/CustomLayout/CustomLayout"))
+const AddRegistries = lazy(() => import("./views/superAdmin/ManageRegistries/addRegistries/AddRegistries"))
+const UnderMaintenance = lazy(() => import("./views/UnderMaintenance"))
+const AddStepToJob = lazy(() => import("./views/jobTemplates/components/AddStepsToJob"))
+const AddVault = lazy(() => import("./views/superAdmin/Cluster/Resources/Components/Vault"))
+const AddSonar = lazy(() => import("./views/superAdmin/Cluster/Resources/Components/Sonar"))
+const Setup = lazy(() => import("./views/superAdmin/Setup"))
+const ClusterBackupListing = lazy(() => import("./views/superAdmin/clusterBackup/listing/ClusterBackupListing"))
+const UserInfo = lazy(() => import("./views/superAdmin/userSettings/UserInfo"))
+const BillingModule = lazy(() => import("./views/superAdmin/billing/Index"))
+const BillingRegistry = lazy(() => import("./views/superAdmin/billing/BillingRegistry"))
+const AddEnv = lazy(() => import("./views/Environment/AddEnv"))
+const ConfigMap = lazy(() => import("./views/Environment/AddConfig"))
+const AddSecrets = lazy(() => import("./views/Environment/AddSecrets"))
+const CiInfo = lazy(() => import("./views/serviceRevamp/add/ci_flow/CiInfo"))
+const CdInfo = lazy(() => import("./views/serviceRevamp/add/cd_flow/CdInfo"))
+const AddEnvRevamp = lazy(() => import("./views/serviceRevamp/add/add_env/Index"))
+const EditEnv = lazy(() => import("./views/Environment/EditEnv"))
+const EnvAndUserGroup = lazy(() => import("./views/serviceRevamp/components/EnvAndUserGroup"))
+const Manifest = lazy(() => import("./views/service/add/panels/CDDetails/Manifest"))
+const LDCForm = lazy(() => import("./views/superAdmin/Cluster/Add/LDC_flow/LDCForm"))
+const Celery = lazy(() => import("./views/superAdmin/celery/Celery"))
+const OnGoingActivity = lazy(() => import("./views/superAdmin/activityFramework/OnGoingActivity"))
+const OnGoingActivityNew = lazy(() => import("./views/superAdmin/activityFramework/OnGoingActivityNew"))
+const AddIstio = lazy(() => import("./views/superAdmin/istio/AddIstio"))
+const AddKeda = lazy(() => import("./views/superAdmin/keda/AddKeda"))
+const AddIstioGateway = lazy(() => import("./views/superAdmin/istio/AddIstioGateway"))
+const GatewayList = lazy(() => import("./views/superAdmin/istio/GatewaysList"))
+const IstioAddOns = lazy(() => import("./views/superAdmin/istio/IstioAddOns"))
+const ViewYaml = lazy(() => import("./components/genericComponents/ViewYaml"))
+const EnvironmentDashboard = lazy(() => import("./views/Environment/EnvironmentDashboard/EnvironmentDashboard"))
+const SchedulerListing = lazy(() => import("./views/Environment/EnvironmentDashboard/components/SchedulerListing"))
+const ViewLog = lazy(() => import("./components/genericComponents/ViewLog"))
+const ViewLogsInfiniteScroll = lazy(() => import("./views/service/listing/components/ViewLogsInfiniteScroll"))
+const AddProjectWithCluster = lazy(() => import("./views/superAdmin/project/AddProject"))
+const AddLogMonitioring = lazy(() => import("./views/superAdmin/monitoring/Log/Add"))
+const ClusterDetails = lazy(() => import("./views/superAdmin/ClusterDetails/ClusterDetails"))
+const AddClusterSecondFlow = lazy(() => import("./views/superAdmin/AddCluster/components/AddClusterSecondFlow"))
+const ClusterBackup = lazy(() => import("./views/superAdmin/clusterBackup/ClusterBackup"))
+const ErrorPage = lazy(() => import("./views/ErrorPage"))
+const AddIngress = lazy(() => import("./views/superAdmin/Ingress/Add"))
+const ForgotPassword = lazy(() => import("./views/ForgotPassword"))
+const Exception = lazy(() => import("./views/Exception"))
+const DeployInsights = lazy(() => import("./views/deployInsight/DeployInsights"))
+const AdminDashboard = lazy(() => import("./views/superAdmin/AdminDashboard"))
+const VelocityInsight = lazy(() => import("./views/velocityInsights/VelocityInsights"))
+const EventListenerList = lazy(() => import("./views/gitopsRevamp/list/EventListnerList"))
+const PipelineHistoryListing = lazy(() => import("./views/pipeline/listing/component/PipelineHistoryListing"))
+const AuditTrails = lazy(() => import("./views/integrations/AuditTrails/AuditTrails"));
+
+
+const VirtualMachineSetListing = lazy(() => import("./views/superAdmin/VirtualMachineSetListing/VirtualMachineSetListing"))
+const AddVirtualMachineSet = lazy(() => import("./views/superAdmin/VirtualMachineSetListing/AddVirtualMachineSet/AddVirtualMachineSet"))
+const LoadbalancerList = lazy(() => import("./views/superAdmin/loadBalancer/LoadbalancerList"))
+const AddLoadBalancer = lazy(() => import("./views/superAdmin/loadBalancer/addLoadBalancer/AddLoadBalancer"))
+import AddGlobalPipeline from './views/GlobalPipelines/add';
+import GlobalJobTemplates from "./views/globalJobTemplate/GlobalJobTemplates";
+import AddGlobalJobTemplate from "./views/globalJobTemplate/AddGlobalJobTemplate";
+import EditGlobalJobTemplate from "./views/globalJobTemplate/EditGlobalJobTemplate";
+import EditJobTemplates from './views/jobTemplates/EditJobTemplate';
+import SprintApprove from "./views/sprintView/SprintApprove";
+import MoveSprintTask from "./views/sprintView/components/MoveSprintTask";
+import BulkMoveSprintTask from "./views/sprintView/components/BulkMoveSprintTask";
+import SelectApplicationForSpirntApprove from "./views/sprintView/components/SelectApplicationForSpirntApprove";
+const ReleasePackageAddForm = lazy(() => import("./views/releasePackage/add/manualAdd/components/ReleasePackageAddForm"))
+const ReleasePackageIndex = lazy(() => import("./views/releasePackage/listing/ReleasePackageIndex"))
+const SingleReleasePackage = lazy(() => import("./views/releasePackage/listing/SingleReleasePackage"))
+import AddTicketingSystemDialog from "./views/integrations/tickets/AddTicketingSystemDialog";
+import AddArtifactory from "./views/integrations/artifactory/AddArtifactory";
+import DatabaseTemplateListing from "./views/databaseMetricTemplates/DatabaseTemplateListing";
+import AddDatabaseMetricTemplate from "./views/databaseMetricTemplates/AddDatabaseMetricTemplate";
+import DatabaseMetricTemplateDetails from "./views/databaseMetricTemplates/DatabaseMetricTemplateDetails";
+const DatabaseListing = lazy(() => import("./views/integrations/DatabaseManagement/DatabaseListing"))
+const AddDatabaseFlow = lazy(() => import("./views/integrations/DatabaseManagement/add/AddDatabaseFlow"))
+const ViewDatabaseDetails = lazy(() => import("./views/integrations/DatabaseManagement/add/ViewDatabaseDetails"))
+
+import PipelineCardRevamp from "./views/pipeline/listing/PipelineCardRevamp/PipelineCardRevamp";
+import ReleasePackageConfigurationListing from "./views/integrations/releasePackageConfiguration/listing/ReleasePackageConfigurationListing";
+import ConfigurationSetup from "./views/integrations/releasePackageConfiguration/configurationSetup/ConfigurationSetup";
+import AddLoadBalancerAws from "./views/superAdmin/loadBalancer/AWS/loadBalancerOnBoard/AddLoadBalancerAws";
+import AddGoldenAmi from "./views/superAdmin/GoldenAmi/Components/goldenAmiOnBoard/AddGoldenAmi";
+import GoldenAmiList from "./views/superAdmin/GoldenAmi/GoldenAmiList";
+const ReleaseTicketRPAddFrom = lazy(() => import("./views/releasePackage/add/releaseTicketAdd/components/ReleaseTicketRPAddFrom"));
+
+import ServiceRequestCategoryListing from "./views/serviceRequest/serviceRequestCategories/ServiceRequestCategoryListing";
+import ServiceRequestWorkflowListing from "./views/serviceRequest/serviceRequestWorkflows/ServiceRequestWorkflowListing";
+
+const DeploymentsFreezeListing = lazy(() => import("./views/superAdmin/ChangeFreeze/components/DeploymentsFreezeListing"));
+const AddChangeFreeze = lazy(() => import("./views/superAdmin/ChangeFreeze/Add/AddChangeFreeze"));
+import NonMsMonitoring from "./views/NonMsMonitoring/NonMsMonitoring";
+import AwsAdd from "./views/superAdmin/Ingress/Add/AwsAdd";
+import GcpAdd from "./views/superAdmin/Ingress/Add/GcpAdd";
+import BuildpiperLicense from "./views/integrations/BuildpiperLicense/BuildpiperLicense";
+import ValidateOTP from "./views/ValidateOTP";
+import DiffCheckerView from "./views/integrations/AuditTrails/components/DiffCheckerView";
+import MonitoringSourceListing from "./views/integrations/MonitoringSource/MonitoringSourceListing";
+import AddStabilityMatrixGroup from "./views/stabilityMatrix/components/AddStabilityMatrixGroup";
+import FullScreenModeOllyCopilot from "./views/copilotOlly/FullScreenModeOllyCopilot";
+const CloneActivityPage = lazy(() => import("./views/Environment/clone/activityFramework"));
+const EnvCloneForm = lazy(() => import("./views/Environment/clone"));
+const EntityConfigurationForm = lazy(() => import("./views/envConfiguration/entityConfigurationForm"));
+const EnvCloneConfigurationView = lazy(() => import("./views/envConfiguration/listing/components/EnvCloneConfigurationView"));
+const EntityConfigurationListing = lazy(() => import("./views/envConfiguration/entityListing"));
+const EnvConfigurationIndex = lazy(() => import("./views/envConfiguration/listing"));
+import DeploymentAnalytics from "./views/service/detail/components/dialogComponents/DeploymentAnalytics";
+import DeploymentMonitoring from "./views/service/detail/components/DeploymentMonitoring";
+const CdCronjobInfo = lazy(() => import("./views/serviceRevamp/add/cd_flow/CdCronjobInfo"));
+import ConfigureAndroidCi from "./views/service/android/add/ConfigureAndroidCi";
+import CustomGradleFile from "./views/service/android/add/components/CustomGradleFile";
+import RecentFileUploadedSingleCard from "./views/superAdmin/UserAndExternalRoles/components/RecentFileUploadedSingleCard";
+import Delete from "./components/genericComponents/Delete";
+const CloneExecutionHistory = lazy(() => import("./views/envConfiguration/history"));
+import IconPlayground from "./views/playground/IconPlayground.jsx";
+import { input } from "@testing-library/user-event/dist/cjs/event/input.js";
+import StepProgressDetailed from "./components/genericComponents/StepProgressDetailed.js";
+import EditableTable from "./components/genericComponents/EditableTable.js";
+import MultipleEnteriesInput from "./components/genericComponents/MultipleEnteries/MultipleEnteriesInput.js";
+// import ChipCheckboxList from "./components/genericComponents/inputs/ChipCheckboxList.js";
+import TestChipCheckboxListWrapper from "./views/TestChipCheckboxListWrapper.js";
+//import Navigation from "./layouts/components/Navigation.js";
+
+
+export const routes = {
+    application: {
+        key: "application",
+        label: "Your Apps",
+        //path: "/application/:application_id/service/listing",
+        path: "/ApplicationDashboard",
+        //component: ServiceListing,
+        component: ApplicationListing,
+        type: "element-static-heading",
+        icon: "flaticon-show-apps-button",
+        routes: {
+            service: {
+                key: "service",
+                label: "Service Overview",
+                path: "/application/:application_id/service/:service_id/detail",
+                parent_path: "/application/:application_id/service/listing",
+                component: ServiceDetailsView,
+                parent_component: ServiceListing,
+                type: "element-only-heading",
+                icon: "flaticon-settings-cogwheel-button",
+                imgPath: "/images/service-overview.svg",
+                imgPathSelected: "/images/service-overview-selected.svg",
+                routes: {
+                }
+            },
+            service_add: {
+                label: "Add Service",
+                path: "/application/:application_id/service/add",
+                component: ServiceAddRevamp,
+                type: "none",
+            },
+            pipeline: {
+                key: "pipeline",
+                label: "Pipeline Overview",
+                path: "/application/:application_id/pipeline/:pipeline_id/edit",
+                parent_path: "/application/:application_id/pipeline/listing",
+                parent_component: PipelineCardRevamp,
+                component: AddPipeline,
+                type: "element-only-heading",
+                icon: "flaticon-magic-wand-auto-fix-button",
+                imgPath: "/images/pipeline-overview.svg",
+                imgPathSelected: "/images/pipeline-selected.svg",
+                routes: {
+                    pipeline_edit: {
+                        label: "Edit Pipeline",
+                        path: "/application/:application_id/pipeline/:pipeline_id/edit",
+                        component: AddPipeline,
+                        type: "none",
+                    },
+                    pipeline_execution: {
+                        key: "pipeline_execution",
+                        label: "Pipeline Execution Details",
+                        path: "/application/:application_id/pipeline/:pipeline_id/execution/:pipeline_instance_id",
+                        component: PipelineExecution,
+                        type: "none",
+                        ignore_sub_path: [":pipeline_instance_id"]
+                    },
+                    canary_analysis_report: {
+                        key: "canary_analysis_report",
+                        label: "Canary Analysis Report",
+                        path: "/application/:application_id/pipeline/:pipeline_id/execution/:pipeline_instance_id/analysis/report",
+                        component: CanaryAnalysisReport,
+                        type: "none",
+                        ignore_sub_path: [":pipeline_instance_id"]
+                    }
+                },
+                pipeline_add: {
+                    key: "pipeline_add",
+                    label: "Add Pipeline",
+                    path: "/application/:application_id/pipeline/add",
+                    parent_path: "/application/:application_id/pipeline/add",
+                    component: AddPipeline,
+                    type: "none",
+                    icon: "flaticon-settings-cogwheel-button",
+                }
+            },
+            pipeline_add: {
+                key: "pipeline_add",
+                label: "Add Pipeline",
+                path: "/application/:application_id/pipeline/add",
+                parent_path: "/application/:application_id/pipeline/add",
+                component: AddPipeline,
+                type: "none",
+                icon: "flaticon-settings-cogwheel-button",
+            },
+            enivronment: {
+                key: "env",
+                label: "Environment Overview",
+                path: "/application/:application_id/env/list",
+                component: EnvList,
+                type: "element-only-heading",
+                icon: "flaticon-settings-cogwheel-button",
+                imgPath: "/images/env-overview.svg",
+                imgPathSelected: "/images/env-selected.svg",
+            },
+            job_templates: {
+                key: "jobtemplates",
+                label: "Job Templates",
+                path: "/application/:application_id/job-templates",
+                parent_path: "",
+                component: JobTemplatesListing,
+                type: "element-only-heading",
+                icon: "flaticon-google-drive-document",
+                imgPath: "/images/job-templates.svg",
+                imgPathSelected: "/images/job-templated-selected.svg",
+            },
+            build_deploy: {
+                key: "build_deploy",
+                label: "Build / Deploy",
+                path: "/application/:application_id/build_deploy",
+                parent_path: "",
+                component: BuildDeploy,
+                type: "element-only-heading",
+                icon: "flaticon-settings-cogwheel-button",
+                imgPath: "/images/build-deploy.svg",
+                imgPathSelected: "/images/build-deploy-selected.svg",
+            },
+            // canary_templates: {
+            //     key: "canarytemplates",
+            //     label: "Canary Templates",
+            //     path: "/application/:application_id/canary-templates",
+            //     parent_path: "",
+            //     component: CanaryTemplatesListing,
+            //     type: "element-only-heading",
+            //     icon: "flaticon-google-drive-document",
+            //     imgPath: "/images/canary-templates.svg",
+            //     imgPathSelected: "/images/canary-selected.svg",
+            // },
+            manifest_placeholders: {
+                key: "manifest_placeholders",
+                label: "Manifest Placeholder",
+                path: "/application/:application_id/manifest-placeholder",
+                parent_path: "",
+                component: ManifestPlaceholder,
+                type: "element-only-heading",
+                icon: "flaticon-google-drive-document",
+                imgPath: "/images/manifest-placeholder.svg",
+                imgPathSelected: "/images/manifest-selected.svg",
+            }
+        }
+    },
+
+}
+
+export const super_admin_routes = {
+    cluster: {
+        key: "cluster",
+        label: "Your Clusters",
+        path: "/cluster/:cluster_id/detail",
+        parent_path: "/ClusterDashboard",
+        component: ClusterDetail,
+        parent_component: ClusterList,
+        type: "element-static-heading",
+        icon: "flaticon-show-apps-button",
+        routes: {
+            cluster: {
+                key: "cluster",
+                label: "Cluster Overview",
+                path: "/cluster/:cluster_id/detail",
+                imgPath: "/images/cluster-overview.svg",
+                imgPathSelected: "/images/cluster-overview-selected.svg",
+                parent_path: "/cluster/:cluster_id/detail",
+                component: ClusterDetail,
+                type: "element-only-heading",
+                icon: "",
+            },
+            node: {
+                key: "node",
+                label: "Nodes Availaible",
+                path: "/cluster/:cluster_id/node/list",
+                imgPath: "/images/node.svg",
+                imgPathSelected: "/images/node-selected.svg",
+                parent_path: "/cluster/:cluster_id/node/list",
+                component: NodesListing,
+                type: "element-only-heading",
+                icon: "",
+                routes: {
+                    node_detail: {
+                        key: "node_detail",
+                        label: "Nodes Detail",
+                        path: "/cluster/:cluster_id/node/:node_name/detail",
+                        parent_path: "/cluster/:cluster_id/node/list",
+                        component: NodeDetails,
+                        type: "none",
+                    }
+                }
+            },
+            pods: {
+                key: "pods",
+                label: "Pods Availaible",
+                path: "/cluster/:cluster_id/pod/list",
+                imgPath: "/images/pod.svg",
+                imgPathSelected: "/images/pod-selected.svg",
+                parent_path: "/cluster/:cluster_id/pod/list",
+                component: PodsListing,
+                type: "element-only-heading",
+                icon: "",
+                routes: {
+                    pod_detail: {
+                        key: "pod_detail",
+                        label: "Pod Detail",
+                        path: "/cluster/:cluster_id/pod/:pod_name/detail",
+                        parent_path: "/cluster/:cluster_id/pod/:pod_name/detail",
+                        component: PodsDetails,
+                        type: "none",
+                        icon: "",
+                    },
+                },
+            },
+            namespace: {
+                key: "namespace",
+                label: "Manage Namespaces",
+                path: "/cluster/:cluster_id/namespace/list",
+                imgPath: "/images/namespace.svg",
+                imgPathSelected: "/images/namespace-selected.svg",
+                parent_path: "/cluster/:cluster_id/namespace/list",
+                component: NamespaceList,
+                type: "element-only-heading",
+                icon: "",
+                routes: {
+                    namespace_detail: {
+                        key: "namespace_detail",
+                        label: "Namespace Detail",
+                        path: "/cluster/:cluster_id/namespace/:namespace_name/detail",
+                        parent_path: "/cluster/:cluster_id/namespace/:namespace_name/detail",
+                        component: NamespaceDetails,
+                        type: "none",
+                        icon: "",
+                    },
+                }
+            },
+            istio_gateway: {
+                key: "istio_gateway",
+                label: "Manage Gateways",
+                path: "/cluster/:cluster_id/gateway/list",
+                imgPath: "/images/gateway.svg",
+                imgPathSelected: "/images/gateway-selected.svg",
+                parent_path: "/cluster/:cluster_id/gateway/list",
+                component: GatewayList,
+                type: "element-only-heading",
+                icon: "",
+
+            },
+            ingress: {
+                key: "ingress",
+                label: "Manage Ingress",
+                path: "/cluster/:cluster_id/ingress/list",
+                imgPath: "/images/ingress.svg",
+                imgPathSelected: "/images/ingress-selected.svg",
+                parent_path: "/cluster/:cluster_id/ingress/list",
+                component: IngressList,
+                type: "element-only-heading",
+                icon: "",
+            },
+            // namespace_add: {
+            //   key: "namespace_add",
+            //   label: "Add Namespace",
+            //   path: "/cluster/:cluster_id/namespace/add",
+            //   parent_path: "/cluster/:cluster_id/namespace/add",
+            //   component: AddNamespaces,
+            //   type: "none",
+            //   icon: "",
+            // },
+        },
+    },
+    new_cluster: {
+        label: "New Cluster",
+        path: "/cluster/new",
+        component: AddClusterFirstScreen,
+        type: "none",
+    },
+    onboard_cluster: {
+        label: "Onboard Cluster",
+        path: "/cluster/new/onboard",
+        component: AddClusterFlow,
+        type: "none",
+    },
+    add_cluster: {
+        label: "Add Cluster",
+        path: "/cluster/new/add",
+        component: AddNewCluster,
+        type: "none",
+    },
+
+    application: {
+        key: "application",
+        label: "",
+        path: "/project/list",
+        parent_path: "/project/list",
+        component: ProjectListing,
+        parent_component: ProjectListing,
+        type: "element-static-heading",
+        icon: "flaticon-show-apps-button",
+    }
+}
+
+export const super_admin_portal = {
+    cluster: {
+        key: "cluster",
+        label: "Infra Inventory",
+        icon: "ri-cloud-line",
+        isImg: false,
+        path: null,
+        subOptionArray: [],
+        parent_path: "/ClusterDashboard",
+        subOptions: {
+            cluster: {
+                key: "cluster",
+                label: "Cluster Overview",
+                path: "/cluster/:cluster_id/detail",
+                entity_path: null,
+                entity_label: null,
+                icon: null,
+            },
+            node: {
+                key: "node",
+                label: "Nodes Availaible",
+                path: "/cluster/:cluster_id/node/list",
+                entity_path: "/cluster/:cluster_id/node/:node_name/detail",
+                entity_label: "Node",
+                icon: null,
+            },
+            pods: {
+                key: "pods",
+                label: "Pods Availaible",
+                path: "/cluster/:cluster_id/pod/list",
+                entity_path: null,
+                entity_label: null,
+                icon: null,
+            },
+            namespace: {
+                key: "namespace",
+                label: "Manage Namespaces",
+                path: "/cluster/:cluster_id/namespace/list",
+                entity_path: "/cluster/:cluster_id/namespace/:namespace_name/detail",
+                entity_label: "Namespace",
+                icon: null,
+            },
+            istio_gateway: {
+                key: "istio_gateway",
+                label: "Manage Gateways",
+                path: "/cluster/:cluster_id/gateway/list",
+                entity_path: null,
+                entity_label: null,
+                icon: null,
+
+            },
+            ingress: {
+                key: "ingress",
+                label: "Manage Ingress",
+                path: "/cluster/:cluster_id/ingress/list",
+                entity_path: null,
+                entity_label: null,
+                icon: null,
+            },
+            // namespace_add: {
+            //   key: "namespace_add",
+            //   label: "Add Namespace",
+            //   path: "/cluster/:cluster_id/namespace/add",
+            //   entity_path: null,
+            //   entity_label: null,
+            //   icon: null,
+            // },
+        },//super_admin_routes.cluster.routes,
+        staticRoutesList: ["/vm-groups/list", "/load-balancer/list", "/golden-ami/list"],
+        staticRoutes: {
+            vmList: {
+                key: "vmList",
+                label: "Virtual Machines",
+                icon: null,
+                path: "/vm-groups/list",
+            },
+            lbList: {
+                key: "lbList",
+                label: "Load Balancer",
+                icon: null,
+                path: "/load-balancer/list",
+            },
+            ami: {
+                key: "ami",
+                label: "AMI",
+                icon: null,
+                path: "/golden-ami/list",
+            }
+        },
+        moreOptions: true,
+        ignore_sub_path: ["/cluster/"],
+        type: "dynamic-route",
+    },
+    stepCatalog: {
+        key: "stepCatalog",
+        label: "Step Catalog",
+        icon: "ri-file-copy-2-line",
+        isImg: false,
+        path: "/step/list",
+        subOptions: null,
+        moreOptions: false,
+        type: "direct-route",
+    },
+    manageApplication: {
+        key: "manageApplication",
+        label: "Manage Application",
+        icon: "ri-airplay-line",
+        isImg: false,
+        // path: "/project/list",
+        path: null,
+        // type: "direct-route",
+        type: "static-route",
+        // subOptions: null,
+        subOptionArray: ["/project/list", "/projects/freeze-deployments"],
+        subOptions: {
+            appsSummary: {
+                key: "appsSummary",
+                label: "Apps Summary",
+                icon: null,
+                path: "/project/list",
+            },
+            freezeDeployments: {
+                key: "freezeDeployments",
+                label: "Freeze Window",
+                icon: null,
+                path: "/projects/freeze-deployments"
+            }
+        },
+        moreOptions: false,
+    },
+    audit_records: {
+        key: "audit_records",
+        label: "Audit Records",
+        icon: "ri-bar-chart-fill",
+        isImg: false,
+        path: '/audit-trails',
+        subOptions: null,
+        moreOptions: false,
+        type: "direct-route",
+    },
+    userManagement: {
+        key: "userManagement",
+        label: "Manage User",
+        icon: "ri-user-settings-line",
+        isImg: false,
+        path: null,
+        type: "static-route",
+        subOptionArray: ["/manage-users", "/user/group/list", "/role-groups", "/external-group-mapping"],
+        subOptions: {
+            manageUsers: {
+                key: "manageUsers",
+                label: "Manage Users",
+                icon: null,
+                path: "/manage-users",
+            },
+            manageUserGrp: {
+                key: "manageUserGrp",
+                label: "Manage User Groups",
+                icon: null,
+                path: "/user/group/list",
+            },
+            manageExtGrp: {
+                key: "manageExtGrp",
+                label: "Manage External Groups",
+                icon: null,
+                path: "/role-groups",
+            },
+
+            // extGrpMapping: {
+            //   key: "extGrpMapping",
+            //   label: "External Group Mappping",
+            //   icon: null,
+            //   path: "/external-group-mapping",
+            // },
+        },
+        moreOptions: false,
+    },
+    userPolicies: {
+        key: "userPolicies",
+        label: "User Policies",
+        icon: "ri-user-star-line",
+        isImg: false,
+        path: null,
+        type: "static-route",
+        subOptionArray: ["/permissions/listing", "/policy/listing", "/policy/template/listing"],
+        subOptions: {
+            permissionGrp: {
+                key: "permissionGrp",
+                label: "Permission Groups",
+                icon: null,
+                path: "/permissions/listing",
+            },
+            policies: {
+                key: "policies",
+                label: "Policies",
+                icon: null,
+                path: "/policy/listing",
+            },
+            policyTemplate: {
+                key: "policyTemplate",
+                label: "Policy Templates",
+                icon: null,
+                path: "/policy/template/listing",
+            },
+        }
+    },
+    integration: {
+        key: "integration",
+        label: "Integration",
+        icon: "ri-settings-3-line",
+        isImg: false,
+        path: null,
+        type: "static-route",
+        subOptionArray: ["/repo/list", "/secrets/list", "/eventlistener/list", "/integration/containerRegistries", "/tickets/list", "/helm/integration/list", "/release-package/configuration", "/integration/artifactory"],
+        subOptions: {
+            containerRegistries: {
+                key: "containerRegistries",
+                label: "Container Registries",
+                icon: null,
+                path: "/integration/containerRegistries",
+            },
+            artifactory: {
+                key: "artifactory",
+                label: "Artifactory",
+                icon: null,
+                path: "/integration/artifactory",
+            },
+            RepoIntegration: {
+                key: "RepoIntegration",
+                label: "Repo Integration",
+                icon: null,
+                path: "/repo/list",
+            },
+            secrets: {
+                key: "secrets",
+                label: "Secrets",
+                icon: null,
+                path: "/secrets/list",
+            },
+            helmIntegration: {
+                key: "helmIntegration",
+                label: "Helm Repo Integration",
+                icon: null,
+                path: "/helm/integration/list",
+            },
+            ticketing: {
+                key: "ticketing",
+                label: "Ticketing System",
+                icon: null,
+                path: "/tickets/list",
+            },
+            release_package_configuration: {
+                key: "release_package_configuration",
+                label: "Release Package Config",
+                icon: null,
+                path: "/release-package/configuration",
+            }
+        }
+    },
+    // service_request: {
+    //     key: "service_request",
+    //     label: "Service Request",
+    //     icon: "ri-ticket-2-line",
+    //     isImg: false,
+    //     path: null,
+    //     type: "static-route",
+    //     subOptionArray: ["/service-request/category/list", "/service-request/workflow/list"],
+    //     subOptions: {
+    //         service_request_category: {
+    //             key: "service_request_category",
+    //             label: "SR Category",
+    //             icon: null,
+    //             path: "/service-request/category/list",
+    //         },
+    //         service_request_workflow: {
+    //             key: "service_request_workflow",
+    //             label: "SR Workflow",
+    //             icon: null,
+    //             path: "/service-request/workflow/list",
+    //         },
+    //     }
+    // }
+
+}
+
+export const user_portal = {
+    application: {
+        key: "application",
+        label: "Application",
+        icon: "ri-apps-line",
+        isImg: false,
+        path: null,
+        subOptionArray: [],
+        parent_path: "/ApplicationDashboard",
+        subOptions: {
+            service: {
+                key: "service",
+                label: "Service Overview",
+                path: "/application/:application_id/service/listing",
+                entity_path: "/application/:application_id/service/:service_id/detail",
+                entity_label: "Service",
+                icon: null,
+            },
+            pipeline: {
+                key: "pipeline",
+                label: "Pipeline Overview",
+                path: "/application/:application_id/pipeline/listing",
+                entity_path: "/application/:application_id/pipeline/:pipeline_id/execution/:pipeline_instance_id",
+                entity_label: "Pipeline",
+                icon: null,
+            },
+            enivronment: {
+                key: "env",
+                label: "Environment Overview",
+                path: "/application/:application_id/env/list",
+                entity_path: "/application/:application_id/environment/:env_id/dashboard",
+                entity_label: "Environment",
+                icon: null,
+            },
+            job_templates: {
+                key: "jobtemplates",
+                label: "Job Templates",
+                path: "/application/:application_id/job-templates",
+                entity_path: "/application/:application_id/job-template/:template_id/edit",
+                entity_label: "Template",
+                icon: null,
+            },
+            build_deploy: {
+                key: "build_deploy",
+                label: "Build / Deploy",
+                path: "/application/:application_id/build_deploy",
+                entity_path: null,
+                entity_label: null,
+                icon: null,
+            },
+            // canary_templates: {
+            //     key: "canarytemplates",
+            //     label: "Canary Templates",
+            //     path: "/application/:application_id/canary-templates",
+            //     entity_path: "/application/:application_id/canary-template/:template_id/edit",
+            //     entity_label: "Edit Canary Templates",
+            //     icon: null,
+            // },
+            manifest_placeholders: {
+                key: "manifest_placeholders",
+                label: "Manifest Placeholder",
+                path: "/application/:application_id/manifest-placeholder",
+                entity_path: null,
+                entity_label: null,
+                icon: null,
+            },
+            database_templates: {
+                key: "database_templates",
+                label: "DB Metric Template",
+                path: "/application/:application_id/database-templates",
+                entity_path: null,
+                entity_label: null,
+                icon: null,
+            },
+            env_configuration: {
+                key: "env_configuration",
+                label: "Env. Clone Configuration",
+                path: "/application/:application_id/env-configuration/",
+                entity_path: null,
+                entity_label: null,
+                icon: null,
+            },
+            // cron_job: {
+            //     key: "cron_job",
+            //     label: "Cronjob Overview",
+            //     path: "/application/:application_id/cronjob",
+            //     entity_path: "/application/:application_id/cronjob/:cronjob_id/detail",
+            //     entity_label: "Cronjob",
+            //     icon: null,
+            // }
+        },
+        moreOptions: true,
+        ignore_sub_path: ["/application/"],
+        type: "dynamic-route",
+    },
+    stepCatalog: {
+        key: "stepCatalog",
+        label: "Step Catalog",
+        icon: "ri-file-copy-2-line",
+        isImg: false,
+        path: "/step/list",
+        subOptions: null,
+        moreOptions: false,
+        type: "direct-route",
+    },
+    webhookEvent: {
+        key: "webhookEvent",
+        label: "Webhook Event",
+        icon: "/images/Webhook.svg",
+        isImg: true,
+        path: "/event-listener/status",
+        subOptions: null,
+        moreOptions: false,
+        type: "direct-route",
+    },
+    velocityInsight: {
+        key: "velocityInsight",
+        label: "Velocity Insight",
+        icon: "ri-pie-chart-2-line",
+        isImg: false,
+        path: "/velocity-insights",
+        subOptions: null,
+        moreOptions: false,
+        type: "direct-route",
+    },
+    insights: {
+        key: "insights",
+        condition: properties.insight_url ? true : false,
+        label: "Maturity Insight",
+        icon: "ri-bar-chart-fill",
+        isImg: false,
+        path: properties.insight_url,
+        newTab: true,
+        subOptions: null,
+        moreOptions: false,
+        type: "direct-route",
+    },
+
+    integration: {
+        key: "integration",
+        label: "Integration",
+        icon: "ri-settings-3-line",
+        isImg: false,
+        path: null,
+        type: "static-route",
+        subOptionArray: ["/repo/list", "/secrets/list", "/eventlistener/list", "/integration/containerRegistries", "/tickets/list", "/helm/integration/list", "/database/list", "/monitoring_source/configuration", "/stability/matrix"],
+        subOptions: {
+            RepoIntegration: {
+                key: "RepoIntegration",
+                label: "Repo Integration",
+                icon: null,
+                path: "/repo/list",
+            },
+            secrets: {
+                key: "secrets",
+                label: "Secrets",
+                icon: null,
+                path: "/secrets/list",
+            },
+            helmIntegration: {
+                key: "helmIntegration",
+                label: "Helm Repo Integration",
+                icon: null,
+                path: "/helm/integration/list",
+            },
+            gitEvents: {
+                key: "gitEvents",
+                label: "Git Events",
+                icon: null,
+                path: "/eventlistener/list",
+            },
+            ticketing: {
+                key: "ticketing",
+                label: "Ticketing System",
+                icon: null,
+                path: "/tickets/list",
+            },
+            database: {
+                key: "database",
+                label: "Database Overview",
+                icon: null,
+                path: "/database/list",
+            },
+            monitoring_source: {
+                key: "monitoring_source",
+                label: "Monitoring Source",
+                icon: null,
+                path: "/monitoring_source/configuration",
+            },
+            stability_matrix_group: {
+                key: "stability_matrix_group",
+                label: "Stability Matrix",
+                icon: null,
+                path: "/stability/matrix",
+            },
+        }
+    },
+    release_package: {
+        key: "release_package",
+        label: "Release Package",
+        //path: "/release-package/listing",
+        isImg: false,
+        icon: 'ri-inbox-line',
+        moreOptions: false,
+        type: "static-route",
+        subOptionArray: ['/release-package/listing', '/select-application', '/sprint/scope', "/finalize/sprint-scope", "/sprint/move-bulk-item", "/release-package/configuration"],
+        subOptions: {
+            releasePackageListing: {
+                key: "releasePackageListing",
+                label: "Release Packages",
+                icon: null,
+                path: "/release-package/listing",
+            },
+            release_package_configuration: {
+                key: "release_package_configuration",
+                label: "Release Package Config",
+                icon: null,
+                path: "/release-package/configuration",
+            },
+            approveSprint: {
+                key: "approveSprint",
+                label: "Approve Sprint",
+                icon: null,
+                path: "/sprint/scope",
+            }
+        }
+    },
+    templates: {
+        key: "templates",
+        label: "Templates",
+        icon: "ri-suitcase-line",
+        isImg: false,
+        type: "static-route",
+        moreOptions: false,
+        subOptionArray: ["/global/job/templates", "/canary_templates/list"],
+        subOptions: {
+            jobTemplates: {
+                key: "job_templates",
+                label: "Globale Job Templates",
+                icon: null,
+                path: "/global/job/templates",
+            },
+            canaryTemplate: {
+                key: "canary_templates",
+                label: "Canary Analysis Templates",
+                icon: null,
+                path: "/canary_templates/list",
+            }
+        },
+    },
+    global_pipelines: {
+        key: "global_pipelines",
+        label: "Pipeline",
+        icon: "/images/pipeline-overview.svg",
+        isImg: true,
+        path: "/global/pipeline/listing",
+        type: "direct-route",
+        subOptions: null,
+        moreOptions: false,
+    },
+}
+
+const routes_with_layout = [];
+
+function fillRoutesWithLayout(routes, stateKey) {
+    var all_routes_keys = Object.keys(routes);
+    console.log("sd;l;lds;lds", all_routes_keys);
+    all_routes_keys.forEach((key) => {
+        const route = routes[key];
+        console.log("skjdkjkdsjkjds", route);
+        routes_with_layout.push(
+            <Route
+                key={route.path}
+                path={route.path}
+                element={
+                    <RouteWithLayout
+                        label={route.label}
+                        path={route.path}
+                        locationKey={stateKey}
+                        authorization={route.autherization}
+                        component={route.component}
+                        layout={MainLayout}
+                    />
+
+                }
+            />
+        );
+        if (route.parent_path) {
+            routes_with_layout.push(
+                <Route
+                    key={route.parent_path}
+                    path={route.parent_path}
+                    element={
+                        <RouteWithLayout
+                            label={route.label}
+                            authorization={route.autherization}
+                            locationKey={stateKey}
+                            component={route.parent_component || route.component}
+                            layout={MainLayout}
+                        />
+                    }
+                />
+            );
+        }
+        if (route.routes) {
+            fillRoutesWithLayout(route.routes);
+        }
+    });
+}
+
+
+
+function getRoutesWithLayout(stateKey) {
+    fillRoutesWithLayout(IsUserActualSuperUser() ? { ...super_admin_routes, ...routes } : routes, stateKey);
+    return routes_with_layout;
+}
+
+const AppRoutes = () => {
+    const authenticated = IsAuthenticated();
+    const location = useLocation();
+    const versionPopup = properties?.dualFrontEndSupport ? useVersionPoll() : null;
+    const stateKey = location.state?.key || Date.now();
+    var redirectTo = "/login";
+    if (!authenticated) {
+        var isRefreshTokenValid = IsRefreshTokenValid();
+        redirectTo = isRefreshTokenValid ? "/refreshSession" : "/login";
+    }
+    // if (process.env.GA_ID) {
+    //     ReactGA.initialize(process.env.GA_ID);
+    // } else {
+    //     console.warn("GA_ID is missing. Google Analytics is not initialized.");
+    // }
+    return (
+        <>
+            {versionPopup}
+            {authenticated &&
+                <>
+                    <BetaEnvStatusComponent />
+                    <PremiumFeaturesInfo />
+                </>
+            }
+            <Routes>
+                <Route path="/login" element={
+
+                    <LoginView key="login" />
+                } />
+                <Route path="/refreshSession" element={<RefreshSessionView />} />
+                <Route path="/forgot-password" element={<ForgotPassword />} />
+                <Route path="/validate-otp" element={<ValidateOTP />} />
+                <Route path="/enter-new-password" element={<ResetPassword />} />
+                <Route path="/exception" element={<Exception />} />
+                <Route path="/build-insights-og" element={<BuildInsights />} />
+                <Route path="*" element={<Navigate
+                    to={redirectTo}
+                    replace
+                    state={{ prevLocation: location }}
+                />
+                } />
+
+                {/* <Route path="/maintenance"  component={Maintenance} /> */}
+                {/* <RouteWithLayout path="/usersetting" layout={MainLayout} component={UserInfo} /> */}
+                <Route
+                    path="/signup"
+                    element={
+                        !authenticated ? (
+                            <SignUp location={location} />
+                        ) : (
+                            <Navigate to={IsSuperUser() ? "/ClusterDashboard" : "/ApplicationDashboard"} replace />
+                        )
+                    }
+                />
+
+                <Route path="/auth/complete/:client" element={<AuthComplete />} />
+                <Route path="/add/project" element={
+                    <RouteWithMinimalLayout component={AddProject} layout={Minimal} />
+                } />
+                <Route path="/signupthree" element={
+                    <RouteWithMinimalLayout component={NewSignup} layout={Minimal} />
+                } />
+                <Route path="/new_acs/" element={<SSOAuthComplete />} />
+
+                <Route path="/test" element={<TestView />} />
+                <Route path="/thankyou" element={<Thankyou />} />
+                <Route path="/sse-testing" element={<SseTesting />} />
+
+                {authenticated ?
+                    <>
+
+
+                        {/* <NewReleaseNotification /> */}
+
+
+                        <Route path="/" element={<Navigate to={IsSuperUser() ? "/ClusterDashboard" : "/ApplicationDashboard"} replace />} />
+                        <Route path="/Welcome" element={<Welcome />} />
+                        {/* <Route path="/testing-sse" component={TestingSSeConnection} /> */}
+                        <Route path="/maintenance" element={<LandingPage />} />
+                        <Route path="/undermaintenance" element={<UnderMaintenance />} />
+                        <Route path="/initiateLogOut" element={<LogOutView />} />
+                        <Route path="/redirect-to-prod" element={<RedirectToProdEnv />} />
+
+                        <Route
+                            path="/applicationDashboard/new"
+                            element={<RouteWithLayout layout={MainLayout} component={IndexNew} />}
+                        />
+
+
+
+
+                        <Route
+                            path="/testicons"
+                            element={<RouteWithLayout layout={MainLayout} component={MultipleEnteriesInput} />}
+                        />
+
+
+
+
+                        <Route
+                            path="/dashboardHome"
+                            element={<RouteWithLayout layout={MainLayout} component={DashboardHome} />}
+                        />
+                        <Route
+                            path="/application/:application_id/service/add"
+                            element={<RouteWithLayout layout={Minimal} component={ServiceAddRevamp} />}
+                        />
+                        <Route
+                            path="/application/:application_id/service/:component_id/edit"
+                            element={<RouteWithLayout layout={Minimal} component={ServiceAddRevamp} />}
+                        />
+                        <Route
+                            path="/application/:application_id/service/:component_id/env/add"
+                            element={<RouteWithLayout layout={Minimal} component={EnvAndUserGroup} />}
+                        />
+                        <Route
+                            path="/application/:application_id/service/:component_id/env/edit"
+                            element={<RouteWithLayout layout={Minimal} component={EnvAndUserGroup} />}
+                        />
+                        <Route
+                            path="/application/:application_id/service/:component_id/env/:component_env_id/ci/add"
+                            element={<RouteWithLayout layout={MainLayout} component={CiInfo} />}
+                        />
+                        <Route
+                            path="/application/:application_id/service/:component_id/env/:component_env_id/cd/add"
+                            element={<RouteWithLayout layout={MainLayout} component={CdInfo} />}
+                        />
+                        <Route
+                            path="/application/:application_id/service/:component_id/env/:component_env_id/mobile-ci/add"
+                            element={<RouteWithLayout layout={MainLayout} component={ConfigureAndroidCi} />}
+                        />
+                        <Route
+                            path="/application/:application_id/service/:component_id/env/:component_env_id/mobile-ci/custom-gradle"
+                            element={<RouteWithLayout layout={MainLayout} component={CustomGradleFile} />}
+                        />
+                        <Route
+                            path="/application/:application_id/service/:component_id/env/:component_env_id/mobile-ci/custom-gradle/:mobile_ci_id/edit"
+                            element={<RouteWithLayout layout={MainLayout} component={CustomGradleFile} />}
+                        />
+                        <Route
+                            path="/addenv"
+                            element={<RouteWithLayout layout={MainLayout} component={AddEnvRevamp} />}
+                        />
+                        <Route
+                            path="/application/:application_id/job-template/add"
+                            element={<RouteWithMinimalLayout layout={Minimal} component={AddJobTemplate} />}
+                        />
+                        <Route
+                            path="/application/:application_id/job-template/:template_id/edit"
+                            element={<RouteWithLayout layout={MainLayout} component={EditJobTemplates} />}
+                        />
+                        <Route
+                            path="/application/:application_id/job-edit/:template_id/job/:job_code/steps"
+                            element={<RouteWithLayout layout={MainLayout} component={AddStepToJob} />}
+                        />
+                        <Route
+                            path="/application/:application_id/service/:component_id/env/:component_env_id/ci/:ci_id/edit"
+                            element={<RouteWithLayout layout={MainLayout} component={CiInfo} />}
+                        />
+                        <Route
+                            path="/application/:application_id/service/:component_id/env/:component_env_id/cd/:cd_id/edit"
+                            element={<RouteWithLayout layout={MainLayout} component={CdInfo} />}
+                        />
+                        <Route
+                            path="/application/:application_id/service/:component_id/env/:component_env_id/mobile-ci/:mobile_ci_id/edit"
+                            element={<RouteWithLayout layout={MainLayout} component={ConfigureAndroidCi} />}
+                        />
+                        <Route
+                            path="/application/:application_id/service/:component_id/env/:component_env_id/cd/manifest/add"
+                            element={<RouteWithLayout layout={MainLayout} component={Manifest} />}
+                        />
+                        <Route
+                            path="/application/:application_id/environment/:env_id/scheduler/add"
+                            element={<RouteWithLayout layout={MainLayout} component={EnvScheduleDialog} />}
+                        />
+                        <Route path="/bp-olly" element={<RouteWithLayout layout={CustomDialogLayout} component={FullScreenModeOllyCopilot} />} />
+                        <Route path="/bp-olly/:converstation_id" element={<RouteWithLayout layout={CustomDialogLayout} component={FullScreenModeOllyCopilot} />} />
+                        <Route
+                            path="/application/:application_id/environment/:env_id/scheduler/add/new"
+                            element={<RouteWithLayout layout={MainLayout} component={EnvScheduleDialogNew} />}
+                        />
+                        <Route
+                            path="/application/:application_id/environment/:env_id/scheduler/list"
+                            element={<RouteWithLayout layout={MainLayout} component={SchedulerListing} />}
+                        />
+                        <Route
+                            path="/application/:application_id/environment/:env_id/scheduler/:scheduler_id/edit"
+                            element={<RouteWithLayout layout={MainLayout} component={EnvScheduleDialogNew} />}
+                        />
+                        <Route
+                            path="/application/:application_id/service/:component_id/env/:component_env_id/cd/:cd_id/manifest/edit"
+                            element={<RouteWithLayout layout={MainLayout} component={Manifest} />}
+                        />
+                        <Route
+                            path="/application/:application_id/environment/:env_id/dashboard"
+                            element={<RouteWithLayout layout={MainLayout} component={EnvironmentDashboard} />}
+                        />
+                        <Route
+                            path="/yamlviewer"
+                            element={<RouteWithMinimalLayout layout={Minimal} component={ViewYaml} />}
+                        />
+                        <Route
+                            path="/logviewer"
+                            element={<RouteWithMinimalLayout layout={Minimal} component={ViewLog} />}
+                        />
+                        <Route
+                            path="/application/:application_id/service/:service_id/env/:component_env_id/cd_id/:cd_id/container/add"
+                            element={<RouteWithLayout layout={MainLayout} component={SideCarsInfo} />}
+                        />
+                        <Route
+                            path="/application/:application_id/service/:service_id/env/:component_env_id/cd_id/:cd_id/:container/:edit_id/edit"
+                            element={<RouteWithLayout layout={MainLayout} component={SideCarsInfo} />}
+                        />
+                        <Route
+                            path="/setup"
+                            element={<RouteWithMinimalLayout layout={Minimal} component={Setup} />}
+                        />
+                        <Route
+                            path="/billinginfo"
+                            element={<RouteWithMinimalLayout layout={Minimal} component={BillingRegistry} />}
+                        />
+                        <Route
+                            path="/logs"
+                            element={<RouteWithMinimalLayout path="/logs" layout={CustomLayoutLogs} component={LogsViewer} />
+                            }
+                        />
+                        <Route
+                            path="/application/:application_id/service/:service_id/:action/:action_id/non-ms-monitoring/"
+                            element={<RouteWithMinimalLayout layout={CustomLayoutLogs} component={NonMsMonitoring} />
+                            }
+                        />
+
+                        <Route
+                            path="/deployment-analytics"
+                            element={<RouteWithMinimalLayout layout={CustomLayoutLogs} component={DeploymentMonitoring} />}  //MonitoringDialogue
+                        />
+
+                        <Route
+                            path="/step/list"
+                            element={<RouteWithMinimalLayout layout={MainLayout} component={JobTemplateListing} />}
+                        />
+
+                        <Route
+                            path="/step/add"
+                            element={<RouteWithMinimalLayout layout={MainLayout} component={CreateNewStepCatalog} />}
+                        />
+                        <Route
+                            path="/step/:step_id/edit"
+                            element={<RouteWithMinimalLayout layout={MainLayout} component={CreateNewStepCatalog} />}
+                        />
+                        <Route
+                            path="/canary_templates/list"
+                            element={<RouteWithMinimalLayout layout={MainLayout} component={CanaryTemplatesListing} />}
+                        />
+                        <Route
+                            path="/canary_templates/add"
+                            element={<RouteWithMinimalLayout layout={WhiteTopMinimal} component={AddCanary} />}
+                        />
+                        <Route
+                            path="/canary_templates/:template_id/edit"
+                            element={<RouteWithMinimalLayout layout={WhiteTopMinimal} component={AddCanary} />}
+                        />
+                        <Route
+                            path="/event-listener/status"
+                            element={<RouteWithMinimalLayout layout={MainLayout} component={EventListenerStatus} />}
+                        />
+                        <Route
+                            path="/event-listener/details/:event_id"
+                            element={<RouteWithMinimalLayout layout={MainLayout} component={EventListenerDetails} />}
+                        />
+                        {
+                            getRoutesWithLayout(stateKey)
+                        }
+                        <Route
+                            path="/application/:application_id/manifest-placeholder"
+                            element={<RouteWithLayout layout={MainLayout} component={ManifestPlaceholder} />}
+                        />
+                        <Route
+                            path="/application/:application_id/database-templates"
+                            element={<RouteWithLayout layout={MainLayout} component={DatabaseTemplateListing} />}
+                        />
+                        <Route
+                            path="/application/:project_id/env/:env_id/detail"
+                            element={<RouteWithLayout layout={MainLayout} component={EditEnv} />}
+                        />
+                        <Route
+                            path="/application/:project_id/env/add"
+                            element={<RouteWithLayout layout={MainLayout} component={AddEnv} />}
+                        />
+                        <Route
+                            path="/application/:project_id/env/:env_id/edit"
+                            element={<RouteWithLayout layout={MainLayout} component={AddEnv} />}
+                        />
+                        {/* <RouteWithLayout path="/application/:project_id/workflow" layout={MainLayout}  component={WorkFlow} /> */}
+                        <Route
+                            path="/application/:project_id/env/:env_id/:project_env_namespace_id/config/add"
+                            element={<RouteWithLayout layout={MainLayout} component={ConfigMap} />}
+                        />
+                        <Route
+                            path="/application/:project_id/env/:env_id/:project_env_namespace_id/secret/add"
+                            element={<RouteWithLayout layout={MainLayout} component={AddSecrets} />}
+                        />
+                        <Route
+                            path="/application/:project_id/env/:env_id/:project_env_namespace_id/config/:config_name/edit/:config_status"
+                            element={<RouteWithLayout layout={MainLayout} component={ConfigMap} />}
+                        />
+                        <Route
+                            path="/application/:project_id/env/:env_id/:project_env_namespace_id/secret/:secret_name/edit/:secret_status"
+                            element={<RouteWithLayout layout={MainLayout} component={AddSecrets} />}
+                        />
+                        <Route
+                            path="/application/:project_id/env/compare"
+                            element={<RouteWithLayout layout={MainLayout} component={CompareEnv} />}
+                        />
+                        <Route
+                            path="/source/monitoring"
+                            element={<RouteWithLayout layout={MainLayout} component={MonitoringSourceList} />}
+                        />
+                        <Route path="/add/stability/matrix" element={<RouteWithLayout layout={Minimal} component={AddStabilityMatrix} />} />
+                        <Route
+                            path="/edit/stability/matrix/:stability_id"
+                            element={<RouteWithLayout layout={MainLayout} component={AddStabilityMatrix} />}
+                        />
+                        <Route
+                            path="/ticketing/system/configure"
+                            element={<RouteWithLayout layout={MainLayout} component={AddTicketingSystemDialog} />}
+                        />
+                        <Route
+                            path="/webhook-events/setup/strategy"
+                            element={<RouteWithLayout layout={MainLayout} component={CreateEventListener} />}
+                        />
+                        <Route
+                            path="/create/webhook-events"
+                            element={<RouteWithLayout layout={MainLayout} component={EventListenerList} />}
+                        />
+                        <Route
+                            path="/update/:edit_id/webhook-events"
+                            element={<RouteWithLayout layout={MainLayout} component={EventListenerList} />}
+                        />
+                        <Route
+                            path="/credentials"
+                            element={<RouteWithLayout layout={MainLayout} component={ViewCredentials} />}
+                        />
+                        <Route
+                            path="/health"
+                            element={<RouteWithLayout layout={MainLayout} component={Celery} />}
+                        />
+                        <Route
+                            path="/activity1.0"
+                            element={<RouteWithLayout layout={MainLayout} component={OnGoingActivity} />}
+                        />
+                        <Route
+                            path="/activity"
+                            element={<RouteWithLayout layout={MainLayout} component={OnGoingActivityNew} />}
+                        />
+                        <Route
+                            path="/infinitescroll"
+                            element={<RouteWithLayout layout={MainLayout} component={ViewLogsInfiniteScroll} />}
+                        />
+                        <Route
+                            path="/build-insights"
+                            element={<RouteWithLayout layout={MainLayout} component={BuildInsights} />}
+                        />
+                        <Route
+                            path="/application/:application_id/service/:service_id/:action/:action_id/workspace/"
+                            element={<RouteWithLayout layout={CustomLayoutLogs} component={WorkspaceAccess} />}
+                        />
+                        <Route
+                            path="/application/:application_id/service/:service_id/job/:job_name/workspace-v3/"
+                            element={<RouteWithLayout layout={CustomLayoutLogs} component={WorkspaceAccessV3} />}
+                        />
+
+
+                        <Route
+                            path="/integration/containerRegistries"
+                            element={<RouteWithLayout layout={MainLayout} component={ContainerRegistries} />}
+                        />
+
+                        <Route
+                            path="/integration/artifactory"
+                            element={<RouteWithLayout layout={MainLayout} component={ArtifactoryList} />}
+                        />
+
+                        <Route
+                            path="/integration/addRegistry"
+                            element={<RouteWithLayout layout={MainLayout} component={AddRegistry} />}
+                        />
+                        <Route
+                            path="/secrets/list"
+                            element={<RouteWithLayout layout={MainLayout} component={Secrets} />}
+                        />
+                        <Route
+                            path="/secrets/add"
+                            element={<RouteWithMinimalLayout layout={Minimal} component={AddSecret} />}
+                        />
+                        <Route
+                            path="/secrets/:edit_id/edit"
+                            element={<RouteWithMinimalLayout layout={Minimal} component={AddSecret} />}
+                        />
+                        <Route
+                            path="/tickets/list"
+                            element={<RouteWithLayout layout={MainLayout} component={Tickets} />}
+                        />
+                        <Route
+                            path="/tickets/add"
+                            element={<RouteWithMinimalLayout layout={Minimal} component={AddTicket} />}
+                        />
+                        <Route
+                            path="/ticket/:edit_id/edit"
+                            element={<RouteWithMinimalLayout layout={Minimal} component={AddTicket} />}
+                        />
+                        <Route
+                            path="/repo/bitbucket/add"
+                            element={<RouteWithLayout layout={WhiteTopMinimal} component={AddBitBucket} />}
+                        />
+                        <Route
+                            path="/repo/bitbucket/:edit_id/edit"
+                            element={<RouteWithLayout layout={WhiteTopMinimal} component={AddBitBucket} />}
+                        />
+                        <Route
+                            path="/repo/git/add"
+                            element={<RouteWithLayout layout={WhiteTopMinimal} component={AddBitBucket} />}
+                        />
+                        <Route path="/repo/gitlab/add" element={<RouteWithLayout layout={WhiteTopMinimal} component={GitLabLayout} />} />
+                        <Route path="/repo/gitlab/:edit_id/edit" element={<RouteWithLayout layout={WhiteTopMinimal} component={GitLabLayout} />} />
+                        <Route path="/repo/github/add" element={<RouteWithLayout layout={WhiteTopMinimal} component={AddGitHub} />} />
+                        <Route path="/repo/github/:edit_id/edit" element={<RouteWithLayout layout={WhiteTopMinimal} component={AddGitHub} />} />
+                        <Route path="/repo/list" element={<RouteWithLayout layout={MainLayout} component={ReposListing} />} />
+                        <Route path="/helm/integration/list" element={<RouteWithLayout layout={MainLayout} component={HelmIntegrationList} />} />
+                        <Route path="/permission-not-found" element={<RouteWithLayout layout={MainLayout} component={ErrorPageNotFound} />} />
+                        <Route path="/eventlistener/list" element={<RouteWithLayout layout={MainLayout} component={EventListener} />} />
+                        <Route path="/eventlistener/add" element={<RouteWithLayout layout={MainLayout} component={AddEventListenerFrom} />} />
+                        <Route path="/event/add" element={<RouteWithLayout layout={MainLayout} component={CreateEvent} />} />
+
+
+                        <Route path="/eventlistener/:git_provider_id/edit/:edit_id" element={<RouteWithLayout layout={MainLayout} component={AddEventListenerFrom} />} />
+                        <Route path="/deploy-insights" element={<RouteWithLayout layout={MainLayout} component={DeployInsights} />} />
+                        <Route path="/velocity-insights" element={<RouteWithMinimalLayout layout={MainLayout} component={VelocityInsight} />} />
+                        <Route path="/application/:application_id/pipeline/:pipeline_id/runtime-params-update" element={<RouteWithLayout layout={MainLayout} component={PipelineRuntimeParamsUpdate} />} />
+                        <Route path="/aman" element={<RouteWithLayout layout={MainLayout} component={PipelineRuntimeParamsUpdate} />} />
+                        <Route path="/application/:application_id/pipeline/listing/:pipeline_id/history" element={<RouteWithLayout layout={MainLayout} component={PipelineHistoryListing} />} />
+
+
+                        <Route path="/global/job/templates" element={<RouteWithLayout layout={MainLayout} component={GlobalJobTemplates} />} />
+                        <Route path="/global/job/template/add" element={<RouteWithMinimalLayout layout={Minimal} component={AddGlobalJobTemplate} />} />
+                        <Route path="/global/job/template/:template_id/edit" element={<RouteWithLayout layout={MainLayout} component={EditGlobalJobTemplate} />} />
+                        <Route path="/global/job/job-edit/:template_id/job/:job_code/steps" element={<RouteWithLayout layout={MainLayout} component={AddStepToJob} />} />
+                        <Route path="/global/pipeline/listing" element={<RouteWithLayout layout={MainLayout} component={PipelineCardRevamp} />} />
+                        <Route path="/application/:application_id/pipeline/listing-old" element={<RouteWithLayout layout={MainLayout} component={PipelineCard} />} />
+
+                        <Route path="/global/pipeline/add" element={<RouteWithLayout layout={MainLayout} component={AddGlobalPipeline} />} />
+                        <Route path="/global/pipeline/:pipeline_id/edit" element={<RouteWithLayout layout={MainLayout} component={AddGlobalPipeline} />} />
+                        <Route path="/global/pipeline/:pipeline_id/execution/:pipeline_instance_id" element={<RouteWithLayout layout={MainLayout} component={PipelineExecution} />} />
+                        <Route path="/global/pipeline/listing/:pipeline_id/history" element={<RouteWithLayout layout={MainLayout} component={PipelineHistoryListing} />} />
+                        <Route path="/select-application" element={<RouteWithLayout layout={MainLayout} component={SelectApplicationForSpirntApprove} />} />
+                        <Route path="/sprint/scope" element={<RouteWithLayout layout={MainLayout} component={SprintApprove} />} />
+                        <Route path="/finalize/sprint-scope" element={<RouteWithLayout layout={MainLayout} component={MoveSprintTask} />} />
+                        <Route path="/sprint/move-bulk-item" element={<RouteWithLayout layout={MainLayout} component={BulkMoveSprintTask} />} />
+
+
+                        {/* Release Package */}
+                        <Route path="/release-package/manual/add" element={<RouteWithLayout layout={WhiteTopMinimal} component={ReleasePackageAddForm} />} />
+                        <Route path="/release-package/release-ticket/add" element={<RouteWithLayout layout={WhiteTopMinimal} component={ReleaseTicketRPAddFrom} />} />
+                        <Route path="/release-package/:release_package_id/edit" element={<RouteWithLayout layout={WhiteTopMinimal} component={ReleasePackageAddForm} />} />
+                        <Route path="/release-package/listing" element={<RouteWithLayout layout={MainLayout} component={ReleasePackageIndex} />} />
+                        <Route path="/release-package/:release_package_id" element={<RouteWithLayout layout={MainLayout} component={SingleReleasePackage} />} />
+                        <Route path="/release-package/configuration/:configuration_type" element={<RouteWithLayout layout={WhiteTopMinimal} component={ConfigurationSetup} />} />
+                        <Route path="/release-package/update/:configuration_type/:id/" element={<RouteWithLayout layout={WhiteTopMinimal} component={ConfigurationSetup} />} />
+                        <Route path="/release-package/configuration/" element={<RouteWithLayout layout={MainLayout} component={ReleasePackageConfigurationListing} />} />
+                        <Route path="/release-package/release-ticket/:release_package_id/edit" element={<RouteWithLayout layout={WhiteTopMinimal} component={ReleaseTicketRPAddFrom} />} />
+                        <Route path="/release-package/add" element={<RouteWithLayout layout={WhiteTopMinimal} component={ReleasePackageAddForm} />} />
+                        {/* Database Management */}
+
+                        <Route path="/database/list" element={<RouteWithLayout layout={MainLayout} component={DatabaseListing} />} />
+                        <Route path="/database/add" element={<RouteWithLayout layout={WhiteTopMinimal} component={AddDatabaseFlow} />} />
+                        <Route path="/database/edit/:edit_id/" element={<RouteWithLayout layout={WhiteTopMinimal} component={AddDatabaseFlow} />} />
+                        <Route path="/database/:database_id/view/" element={<RouteWithLayout layout={MainLayout} component={ViewDatabaseDetails} />} />
+                        <Route
+                            path="/application/:application_id/database-templates/add/"
+                            element={<RouteWithLayout layout={MainLayout} component={AddDatabaseMetricTemplate} />}
+                        />
+                        <Route
+                            path="/audit-trails"
+                            element={<RouteWithLayout layout={MainLayout} component={AuditTrails} />}
+                        />
+                        <Route
+                            path="/audit-trails/diff-checker/:id/"
+                            element={<RouteWithLayout layout={MainLayout} component={DiffCheckerView} />}
+                        />
+                        <Route
+                            path="/application/:application_id/database-templates/edit/:edit_id"
+                            element={<RouteWithLayout layout={MainLayout} component={AddDatabaseMetricTemplate} />}
+                        />
+                        <Route
+                            path="/application/:application_id/database-templates/details/:edit_id"
+                            element={<RouteWithLayout layout={MainLayout} component={DatabaseMetricTemplateDetails} />}
+                        />
+
+                        <Route path="/monitoring_source/configuration" element={<RouteWithLayout layout={MainLayout} component={MonitoringSourceListing} />} />
+                        <Route path="/stability/matrix" element={<RouteWithLayout layout={MainLayout} component={StabilityMatrixListNew} />} />
+                        <Route path="/stability_matrix/group/add" element={<RouteWithLayout layout={WhiteTopMinimal} component={AddStabilityMatrixGroup} />} />
+                        <Route path="/stability_matrix/group/:group_id/edit" element={<RouteWithLayout layout={WhiteTopMinimal} component={AddStabilityMatrixGroup} />} />
+                        {/* Database Management */}
+
+                        {/* CronJobs Management */}
+
+
+
+
+                        <Route
+                            path="/application/:application_id/service/:component_id/env/:component_env_id/cronjob/cd/add"
+                            element={<RouteWithLayout layout={MainLayout} component={CdCronjobInfo} />}
+                        />
+                        <Route
+                            path="/application/:application_id/service/:component_id/env/:component_env_id/cronjob/cd/:cd_id/edit"
+                            element={<RouteWithLayout layout={MainLayout} component={CdCronjobInfo} />}
+                        />
+                        {/* CronJobs Management */}
+
+                        {/* <RouteWithLayout path="/manage-users" layout={MainLayout} component={MultiUsersList} /> */}
+
+                        {/* Env Configuration */}
+                        <Route
+                            path="/application/:application_id/env-configuration/"
+                            element={<RouteWithLayout layout={MainLayout} component={EnvConfigurationIndex} />}
+                        />
+                        <Route
+                            path="/application/:application_id/env-configuration/:clone_configuration_id/"
+                            element={<RouteWithLayout layout={MainLayout} component={EnvCloneConfigurationView} />}
+                        />
+                        <Route
+                            path="/application/:application_id/env-configuration/:clone_configuration_id/:entity_type/"
+                            element={<RouteWithLayout layout={MainLayout} component={EntityConfigurationListing} />}
+                        />
+                        <Route
+                            path="/application/:application_id/env-configuration/:clone_configuration_id/:entity_type/:entity_id/:type"
+                            element={<RouteWithLayout layout={MainLayout} component={EntityConfigurationForm} />}
+                        />
+                        <Route
+                            path="/application/:application_id/env/clone"
+                            element={<RouteWithLayout layout={MainLayout} component={EnvCloneForm} />}
+                        />
+                        <Route
+                            path="/application/:application_id/env/clone/:activity_id"
+                            element={<RouteWithLayout layout={MainLayout} component={CloneActivityPage} />}
+                        />
+                        <Route
+                            path="/application/:application_id/env-configuration/:clone_configuration_id/history/"
+                            element={<RouteWithLayout layout={MainLayout} component={CloneExecutionHistory} />}
+                        />
+                        {/* Env Configuration */}
+
+                        {IsSuperUser('loading_routes') ? <>
+                            <Route path="/artifactory/add" element={<RouteWithMinimalLayout layout={Minimal} component={AddArtifactory} />} />
+                            <Route path="/artifactory/:artifactory_id/edit" element={<RouteWithMinimalLayout layout={Minimal} component={AddArtifactory} />} />
+                            <Route path="/cluster/:cluster_id/AWS/add" element={<RouteWithMinimalLayout layout={CustomDialogLayout} component={AwsAdd} />} />
+                            <Route path="/cluster/:cluster_id/ingress/:ingress_id/aws/edit" element={<RouteWithMinimalLayout layout={CustomDialogLayout} component={AwsAdd} />} />
+                            <Route path="/cluster/:cluster_id/GCP/add" element={<RouteWithMinimalLayout layout={CustomDialogLayout} component={GcpAdd} />} />
+                            <Route path="/cluster/:cluster_id/ingress/:ingress_id/gcp/edit" element={<RouteWithMinimalLayout layout={CustomDialogLayout} component={GcpAdd} />} />
+                            <Route path="/service-request/category/list" element={<RouteWithLayout layout={MainLayout} component={ServiceRequestCategoryListing} />} />
+                            <Route path="/service-request/workflow/list" element={<RouteWithLayout layout={MainLayout} component={ServiceRequestWorkflowListing} />} />
+                            <Route path="/billing" element={<ProfileLayout layout={ProflieLayout} component={BillingModule} />} />
+                            {/* <RouteWithLayout path="/registry/list"  layout={MainLayout} component={Registrieslist} /> */}
+                            <Route path="/registry/add" element={<RouteWithMinimalLayout layout={Minimal} component={AddRegistries} />} />
+                            <Route path="/registry/:registery_id/edit" element={<RouteWithMinimalLayout layout={Minimal} component={AddRegistries} />} />
+                            <Route path="/cluster-permissions" element={<RouteWithLayout layout={MainLayout} component={ClusterPermissions} />} />
+                            <Route path="/role-groups" element={<RouteWithLayout layout={MainLayout} component={UserAndExternalRoles} />} />
+                            <Route path="/manage-users" element={<RouteWithLayout layout={MainLayout} component={ManageUsers} />} />
+                            <Route path="/external-group-mapping" element={<RouteWithLayout layout={MainLayout} component={ExternalGroupingMapping} />} />
+                            <Route path="/upload-users" element={<RouteWithLayout layout={MainLayout} component={UploadUsers} />} />
+                            <Route path="/upload-users-new" element={<RouteWithLayout layout={MainLayout} component={UploadUsersNew} />} />
+                            <Route path="/upload/user-group" element={<RouteWithLayout layout={MainLayout} component={UploadUserGroup} />} />
+                            <Route path="/cluster/addform" element={<RouteWithLayout layout={MainLayout} component={AddClusterSecondFlow} />} />
+                            <Route path="/cluster/add/firstpage" element={<RouteWithLayout layout={MainLayout} component={AddClusterFlow} />} />
+                            <Route path="/vm-groups/list" element={<RouteWithLayout layout={MainLayout} component={VirtualMachineSetListing} />} />
+                            <Route path="/vm-group/configure" element={<RouteWithLayout layout={MainLayout} component={AddVirtualMachineSet} />} />
+                            <Route path="/vm-group/:id/edit" element={<RouteWithLayout layout={MainLayout} component={AddVirtualMachineSet} />} />
+                            <Route path="/load-balancer/list" element={<RouteWithLayout layout={MainLayout} component={LoadbalancerList} />} />
+                            <Route path="/load-balancer/configure" element={<RouteWithMinimalLayout layout={CustomDialogLayout} component={AddLoadBalancer} />} />
+                            <Route path="/load-balancer/:edit_id/edit" element={<RouteWithMinimalLayout layout={CustomDialogLayout} component={AddLoadBalancer} />} />
+
+
+                            {/* <RouteWithLayout path="/vm-group/:id/edit" layout={MainLayout} component={AddVirtualMachineSet} /> */}
+
+                            <Route path="/cluster/:cluster_id/ingress/add" element={<RouteWithLayout layout={MainLayout} component={AddIngress} />} />
+                            <Route path="/cluster/:cluster_id/ingress/:ingress_id/edit" element={<RouteWithLayout layout={MainLayout} component={AddIngress} />} />
+                            <Route path="/cluster/:cluster_id/monitoring/log/add" element={<RouteWithLayout layout={MainLayout} component={AddLogMonitioring} />} />
+                            <Route path="/cluster/:cluster_id/monitoring/log/:log_monitoring_id/edit" element={<RouteWithLayout layout={MainLayout} component={AddLogMonitioring} />} />
+                            <Route path="/cluster/:cluster_id/nodes/list" element={<RouteWithLayout layout={MainLayout} component={NodesListing} />} />
+                            <Route path="/cluster/:cluster_id/node/list" element={<RouteWithLayout layout={MainLayout} component={NodesListing} />} />
+                            <Route path="/cluster/:cluster_id/node/:node/pod/list" element={<RouteWithLayout layout={MainLayout} component={PodsListing} />} />
+                            <Route path="/cluster/:cluster_id/detail" element={<RouteWithLayout layout={MainLayout} component={ClusterDetail} />} />
+                            <Route path="/backup/add" element={<RouteWithLayout layout={MainLayout} component={ClusterBackup} />} />
+                            <Route path="/backup/:backup_id/edit" element={<RouteWithLayout layout={MainLayout} component={ClusterBackup} />} />
+                            <Route path="/backup/list" element={<RouteWithLayout layout={MainLayout} component={ClusterBackupListing} />} />
+                            <Route path="/cluster/:cluster_id/ingress/list" element={<RouteWithLayout layout={MainLayout} component={IngressList} />} />
+                            <Route path="/cluster/:cluster_id/namepsace/list" element={<RouteWithLayout layout={MainLayout} component={NamespaceList} />} />
+
+
+
+                            {/* <RouteWithLayout path="/usersetting" layout={MainLayout} component={UserInfo} /> */}
+
+                            <Route path="/system-settings" element={<RouteWithLayout layout={MainLayout} component={SystemSetting} />} />
+                            <Route path="/old-system-setting" element={<RouteWithLayout layout={MainLayout} component={SystemSettings} />} />
+                            <Route path="/cluster/:cluster_id/namespace/:namespace_name/pod/:pod_name" element={<RouteWithLayout layout={MainLayout} component={PodsDetails} />} />
+                            <Route path="/ErrorPage" element={<RouteWithLayout layout={MainLayout} component={ErrorPage} />} />
+                            <Route path="/clusterlist" element={<RouteWithLayout layout={MainLayout} component={ClusterDetails} />} />
+                            <Route path="/cluster/aws/add" element={<RouteWithLayout layout={MainLayout} component={AddNewCluster} />} />
+                            <Route path="/cluster/ldc/add" element={<RouteWithLayout layout={MainLayout} component={LDCForm} />} />
+                            <Route path="/cluster/add" element={<RouteWithLayout layout={MainLayout} component={AddClusterFlow} />} />
+                            <Route path="/cluster/:cluster_id/namespace/:namespace_id/edit" element={<RouteWithLayout layout={MainLayout} component={AddNamespaces} />} />
+                            <Route path="/cluster/:cluster_id/namespace/add" element={<RouteWithLayout layout={MainLayout} component={AddNamespaces} />} />
+                            <Route path="/cluster/:cluster_id/monitoring/infra/add" element={<RouteWithLayout layout={MainLayout} component={AddMonitoring} />} />
+                            <Route path="/cluster/:cluster_id/monitoring/infra/:monitoring_id/edit" element={<RouteWithLayout layout={MainLayout} component={AddMonitoring} />} />
+                            <Route path="/cluster/:cluster_id/istio/add" element={<RouteWithLayout layout={MainLayout} component={AddIstio} />} />
+                            <Route path="/cluster/:cluster_id/istio/:istio_id/edit" element={<RouteWithLayout layout={MainLayout} component={AddIstio} />} />
+                            <Route path="/cluster/:cluster_id/keda/add" element={<RouteWithLayout layout={MainLayout} component={AddKeda} />} />
+                            <Route path="/cluster/:cluster_id/keda/:keda_id/edit" element={<RouteWithLayout layout={MainLayout} component={AddKeda} />} />
+                            <Route path="/cluster/:cluster_id/istio/:istio_id/gateway/add" element={<RouteWithLayout layout={MainLayout} component={AddIstioGateway} />} />
+                            <Route path="/cluster/:cluster_id/istio/:istio_id/gateway/:gateway_id/edit" element={<RouteWithLayout layout={MainLayout} component={AddIstioGateway} />} />
+                            <Route path="/cluster/:cluster_id/gateway/list" element={<RouteWithLayout layout={MainLayout} component={GatewayList} />} />
+                            <Route path="/cluster/:cluster_id/istio/:istio_id/addons/add" element={<RouteWithLayout layout={MainLayout} component={IstioAddOns} />} />
+                            <Route path="/cluster/:cluster_id/istio/:istio_id/addons/:addons_id/edit" element={<RouteWithLayout layout={MainLayout} component={IstioAddOns} />} />
+                            <Route path="/project/add" element={<RouteWithLayout layout={MainLayout} component={AddProjectWithCluster} />} />
+                            <Route path="/project/:project_id/edit" element={<RouteWithLayout layout={MainLayout} component={AddProjectWithCluster} />} />
+                            <Route path="/cluster/:cluster_id/sonar/add" element={<RouteWithLayout layout={MainLayout} component={AddSonar} />} />
+                            <Route path="/cluster/:cluster_id/vault/add" element={<RouteWithLayout layout={MainLayout} component={AddVault} />} />
+                            <Route path="/cluster/:cluster_id/sonar/:resource_id/edit" element={<RouteWithLayout layout={MainLayout} component={AddSonar} />} />
+                            <Route path="/cluster/:cluster_id/vault/:resource_id/edit" element={<RouteWithLayout layout={MainLayout} component={AddVault} />} />
+                            <Route path="/project/list" element={<RouteWithLayout layout={MainLayout} component={ProjectListing} />} />
+                            <Route path="/permissions/listing" element={<RouteWithLayout layout={MainLayout} component={PermissionsListing} />} />
+                            <Route path="/policy/listing" element={<RouteWithLayout layout={MainLayout} component={PermissionsPoliciesListing} />} />
+                            <Route path="/user/group/list" element={<RouteWithLayout layout={MainLayout} component={UserGroupList} />} />
+                            <Route path="/policy/template/listing" element={<RouteWithLayout layout={MainLayout} component={PolicyTemplateListing} />} />
+                            <Route path="/manage-database" element={<RouteWithLayout layout={MainLayout} component={DatabaseListing} />} />
+                            <Route path="/cluster/:cluster_id/dr/cluster/onboard" element={<RouteWithLayout layout={MainLayout} component={AddClusterFlow} />} />
+                            <Route path="/projects/freeze-deployments" element={<RouteWithLayout layout={MainLayout} component={DeploymentsFreezeListing} />} />
+                            <Route path="/change-freeze/add" element={<RouteWithMinimalLayout layout={CustomDialogLayout} component={AddChangeFreeze} />} />
+                            <Route path="/change-freeze/:freeze_id/edit" element={<RouteWithMinimalLayout layout={CustomDialogLayout} component={AddChangeFreeze} />} />
+                            <Route path="/buildpiper-license/view" element={<RouteWithLayout layout={MainLayout} component={BuildpiperLicense} />} />
+                            {/* <RouteWithMinimalLayout path="/registry/:docker_registry_id/edit" layout={Minimal} component={Setup} /> */}
+                            <Route path="/load-balancer/configure/aws" element={<RouteWithMinimalLayout layout={CustomDialogLayout} component={AddLoadBalancerAws} />} />
+                            <Route path="/golden-ami/configure" element={<RouteWithMinimalLayout layout={CustomDialogLayout} component={AddGoldenAmi} />} />
+                            <Route path="/golden-ami/list" element={<RouteWithLayout layout={MainLayout} component={GoldenAmiList} />} />
+                        </> : <Route component={ErrorPage} />}
+
+                        <Route element={ErrorPage} />
+
+                    </>
+                    : <Route element={<Navigate to={{ pathname: redirectTo, state: { prevLocation: location } }} />} />}
+            </Routes>
+        </>
+    )
+}
+
+export default AppRoutes
