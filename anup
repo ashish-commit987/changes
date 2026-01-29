@@ -1,4 +1,4 @@
- <Box sx={{
+<Box sx={{
                                     border: 'none',
                                     '& > div > div': {
                                         border: 'none !important',
@@ -133,3 +133,24 @@
                                 }}
                                     className="step-progress-detailes-wrapper"
                                 >
+                                    <div className='font-18 font-weight-600 color-white d-flex align-center space-between' style={{ backgroundColor: '#fff', padding: '13.5px 20px' }}>
+                                        <button
+                                            className='btn float-cancel-button'
+                                            style={showInfoSection ? { left: '396px' } : state.showLeftPanel ? {} : { left: '396px' }}
+                                            onClick={handleClose}
+                                        >
+                                            <span className='ri-close-line'></span>
+                                        </button>
+                                    </div>
+                                    <StepProgressDetailed
+                                        task_id={state.task_id}
+                                        variant="SAME_PAGE_REDIRECT"
+                                        // variant="cluster_onboarding"
+                                        type="new"
+                                        placeholders={{}}
+                                        refresh={closeDialogAndGetAttachedVMS}
+                                        handleClickToSkip={closeDialogAndGetAttachedVMS}
+                                        handleContinueToNextTab={closeDialogAndGetAttachedVMS}
+                                        handleRefresh={closeDialogAndGetAttachedVMS}
+                                    />
+                                </Box>
