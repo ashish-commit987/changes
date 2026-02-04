@@ -1,0 +1,1896 @@
+import React, { useState, useEffect, Fragment, useCallback, useMemo, useRef } from 'react';
+import { Input } from '../../../../components/genericComponents/Input';
+import { VALIDATION_TYPE_REQUIRED, ValidateDataSet } from '../../../../util/Validator';
+import GenerateURL, { GenerateEndpointURL } from '../../../../util/APIUrlProvider';
+import properties from '../../../../properties/properties';
+import InvokeApi, { PostData } from '../../../../util/apiInvoker';
+import Snackbar from '@mui/material/Snackbar';
+import Alert from '@mui/material/Alert';
+import { Loading } from '../../../utils/Loading';
+import Dialog from '@mui/material/Dialog';
+import Tooltip from '@mui/material/Tooltip';
+import { Box, styled } from "@mui/system";
+
+import '../../../../assets/buttons.css'
+import { evaluateAgentStatus, showErrorHandlerUpdated } from '../../../../util/util';
+import BpAgentStatusActionAlert from '../../../../components/genericComponents/BpAgentStatusActionAlert';
+import Popover from '@mui/material/Popover';
+import BuildFlowActionAlert from '../../../../components/genericComponents/BuildFlowActionAlert';
+import CurrentProgressDataNew from './CurrentProgressDataNew';
+import GenericSkeleton from '../../../../components/genericComponents/Skeletons/GenericSkeleton';
+import RuntimeOverridableVarV2 from './RuntimeOverridableVarV2';
+import { ResetComponent } from '../../../serviceRevamp/add/ci_flow/SourceDetails';
+import { useCustomSnackbar } from '../../../../contexts/SnackbarContext';
+import { usePermissions } from '../../../../contexts/PermissionContext';
+import { useIsolatedPermissionLoader } from '../../../../util/useIsolatedPermissionLoader';
+import ExternalConfigurationComponent from './ExterenalConfiguration/ExternalConfgurationComponent';
+import useCiDataFetch from './useCiDataFetch';
+import Button from '../../../../components/genericComponents/Button';
+import AdvanceTriggerBuildConf from './AdvanceTriggerBuildConf';
+import { getDefaultBuildEnvVarState, keyValueParser, keyValueParserForBuildLabels } from '../../../serviceRevamp/add/ci_flow/BuildEnvVariable';
+import { getEnableRuntimeVariablesDefaultState } from '../../../serviceRevamp/add/ci_flow/EnableRuntimeVars';
+import { getMultiRowDefaultState } from '../../../../components/genericComponents/MultiRow';
+import { getRuntimeVarList } from '../../../serviceRevamp/add/ci_flow/CiInfo';
+import { getCiScopeState } from '../../../serviceRevamp/add/ci_flow/BasicInfo_CI';
+
+const TriggerActionCardNew = (props) => {
+    const [state, setState] = useState({
+        tag: "",
+        docker_cache: true,
+        data: {
+
+        },
+        child: {},
+        branch_list: [],
+        tag_loaded_status: false,
+        errors: {},
+        refresh_count: 1,
+        open: false,
+        branch_loading: true,
+        show_bp_agent_warning: false,
+        down_bp_agent_names: null,
+        type_of_action: 'only-build',
+        open_custom: false,
+        trigger: null,
+        parallBuildFeatureData: null,
+        branchRequired: false,
+        alert_loading: false,
+        runtime_var_override: false,
+        commit_sha_override: false,
+        child_inherits: {
+            override_var: {
+                "validateForm": () => { return { valid: true } },
+                "getState": () => { return {} },
+                "getData": () => { return {} }
+            }
+        },
+        child_branch_loading: {},
+        child_branches: {}
+    });
+
+    const [advanceConfState,setAdvanceConfState] = useState({
+        open: false,
+        mode: null,
+        buildKey: null,
+        buildData: null,
+    })
+    const [advanceConfigStore, setAdvanceConfigStore] = useState({
+        main: null,            
+        children: {} 
+    });
+
+    const [childBuildAnchor, setChildBuildAnchor] = useState({});
+    const [multipleBuildEnabled, setMultipleBuildEnabled] = useState(false);
+    const [additionalGitRepos, setAdditionalGitRepos] = useState([]);
+    const [supportExternalConfig, setSupportExternalConfig] = useState(false);
+    const formRefForExternalConfiguraiton = useRef({});
+    const formRefForChildBuildExternalConfiguraiton = useRef({});
+    const service_id = props.service_id;
+    const env_id = props.env_id;
+
+    const { ciLoading, ciData: complete_ci_data, error } = useCiDataFetch({ service_id, component_env_id: env_id, multiple_build_enabled: multipleBuildEnabled, systemSettingFetched: state.data_loading == "SUCCESS" });
+    console.log(complete_ci_data, 'complete_ci_data_001');
+    const type = 'BUILD';
+    const service_data = props.service_data;
+    const top_summary_data = props.top_summary_data;
+    const is_env_down = props.is_env_down ? props.is_env_down : null
+    const deploy_env_offline_flag = props.deploy_env_offline_flag ? props.deploy_env_offline_flag : null;
+    const disable_parallel_build = props.disable_parallel_build ? props.disable_parallel_build : null
+    const env = service_data.env;
+    const configuration_data = props.configuration_data;
+    const service_env_name = props.service_env_name;
+    const serviceEnv = props.service_env;
+    const env_list = [];
+    const { showSnackbar } = useCustomSnackbar();
+    const { hasPermission, permissions } = usePermissions();
+    const { hasIsolatedPermission } = useIsolatedPermissionLoader();
+
+    const all_available_deployments = props.all_available_deployments && props.all_available_deployments.length > 0 ?
+        props.all_available_deployments.map(item => {
+            return { label: item.deployment_name ? item.deployment_name : item.label, id: item.deployment_name ? item.deployment_name : item.label }
+        }) : []
+
+    var url = GenerateURL({ service_id: service_id, env_id: env_id }, properties.api.env_build_request_url, true);
+
+    const trigger_build_url = GenerateEndpointURL({ service_id: service_id, env_id: env_id }, properties.api.env_build_request_url);
+
+    const is_permited = useMemo(() => { return hasPermission('POST', trigger_build_url) }, [permissions, service_id, env_id]);
+    const is_build_permited = useMemo(() => { return hasIsolatedPermission('POST', trigger_build_url) }, [permissions, service_id, env_id]);
+
+    var flag_for_feature_tag = properties.flag_for_feature_id
+    const build_action_card = props.build_action_card;
+    const handleCloseDialog = props.handleCloseDialog;
+    console.log(formRefForChildBuildExternalConfiguraiton, 'log_odsdssd');
+    // Logic to form env->subenv list
+    if (env) {
+        env.forEach(element => {
+            if (element.id != env_id) {
+                env_list.push({
+                    id: element.id,
+                    label: element.env_master.name + "->" + element.env_name
+                });
+            }
+        });
+    }
+
+    useEffect(() => {
+        fetchSystemSettingsData()
+    }, [])
+
+    useEffect(() => {
+        console.log(complete_ci_data, "fkjskdafcurrent_ci_data")
+
+        if (complete_ci_data) {
+            var current_ci_data = complete_ci_data?.find(item => item.status === "APPROVED")
+            let additionalRepos = current_ci_data?.additional_git_repos || [];
+            setAdditionalGitRepos(additionalRepos);
+            if (current_ci_data && current_ci_data.git_repo) {
+                if (current_ci_data.git_repo.git_url) {
+                    testAndGetBranches(current_ci_data.git_repo.git_url, current_ci_data.git_repo.credential_id)
+                }
+            } else {
+                setState(prev => ({
+                    ...prev,
+                    branch_loading: false
+                }));
+            }
+
+            if (multipleBuildEnabled) {
+
+                getChildBuildList()
+            }
+        }
+
+    }, [complete_ci_data])
+
+    useEffect(() => {
+        if (multipleBuildEnabled && state?.child_build_override && state?.child_build_list?.length > 0) {
+            formRefForChildBuildExternalConfiguraiton.current = {};
+            state?.child_build_list.forEach(childBuild => {
+                formRefForChildBuildExternalConfiguraiton.current[childBuild.type_label] = React.createRef();
+            });
+            state.child_build_list.forEach((child) => {
+                const { git_url, credential_id } = child.git_repo;
+                const { id } = child;
+                if (state.child_branch_loading?.[id] || state.child_branches?.[id]) return;
+
+                setState(prev => ({
+                    ...prev,
+                    child_branch_loading: {
+                        ...prev.child_branch_loading,
+                        [id]: true
+                    }
+                }));
+
+                const post_data = {
+                    git_url,
+                    credential_id,
+                };
+                if (!credential_id) {
+                    delete post_data.credential_id;
+                }
+
+                PostData(
+                    GenerateURL({}, properties.api.git_test),
+                    post_data,
+                    (data) => onChildBranchSuccess(data, id),
+                    (err) => onChildBranchFail(err, id),
+                    false, true
+                );
+            });
+        }
+    }, [state?.child_build_list, state?.child_build_override]);
+
+    function onChildBranchSuccess(data, child_id) {
+        const branch_list = (data.branches || []).map(item => ({
+            id: item,
+            label: item
+        }));
+
+        setState(prev => ({
+            ...prev,
+            child_branches: {
+                ...prev.child_branches,
+                [child_id]: branch_list
+            },
+            child_branch_loading: {
+                ...prev.child_branch_loading,
+                [child_id]: false
+            },
+            child_branch_with_commit_sha: {
+                ...prev.child_branch_with_commit_sha,
+                [child_id]: data.branch_with_commit_sha || {}
+            }
+        }));
+    }
+
+    function onChildBranchFail(error, child_id) {
+        let error_msg = showErrorHandlerUpdated(error);
+        setState(prev => ({
+            ...prev,
+            child_branch_loading: {
+                ...prev.child_branch_loading,
+                [child_id]: false
+            },
+            errors: {
+                ...prev.errors,
+                [`branch_${child_id}`]: error_msg
+            }
+        }));
+    }
+
+    function getChildBuildList() {
+        var list = []
+        complete_ci_data.forEach((item) => {
+            if (item.type_label !== null) {
+                list.push(item)
+            }
+        })
+
+        setState((new_state) => ({
+            ...new_state,
+            child_build_list: list
+        }))
+    }
+
+    function fetchSystemSettingsData() {
+        var requestInfo = {
+            endPoint: GenerateURL({}, properties.api.system_settings),
+            httpMethod: "GET",
+            httpHeaders: { "Content-Type": "application/json" }
+        }
+        InvokeApi(requestInfo, fetchSystemSettingsDataSuccess, fetchSystemSettingsDataFailed);
+
+        setState(new_state => ({
+            ...new_state,
+            data_loading: "LOADING"
+        }))
+
+    }
+
+    function fetchSystemSettingsDataSuccess(data) {
+        let branchRequired = false;
+        let disable_parallel_build = null;
+        let build_runtime_var_support = null;
+
+        data.forEach(item => {
+            switch (item.key) {
+                case "BRANCH_SELECTION_REQUIRED_FOR_EVERY_BUILD":
+                    branchRequired = item.value === "true";
+                    break;
+                case "DISABLE_PARALLEL_BUILD":
+                    disable_parallel_build = item;
+                    break;
+                case "BUILD_RUNTIME_ENV_VARIABLE":
+                    build_runtime_var_support = item.value === "true";
+                    break;
+                case "SUPPORT_EXTERNAL_REPO_CONFIGRATION":
+                    setSupportExternalConfig(item.value === "true");
+                    break;
+                case "MULTIPLE_BUILD_CONFIGURATION":
+                    setMultipleBuildEnabled(item.value === "true");
+                    break;
+            }
+        });
+
+        console.log(branchRequired, 'bgf')
+        setState(new_state => ({
+            ...new_state,
+            data_loading: "SUCCESS",
+            branchRequired: branchRequired?.value == 'true' ? true : false,
+            disable_parallel_build: disable_parallel_build,
+            build_runtime_var_support: build_runtime_var_support,
+        }));
+
+    }
+    function fetchSystemSettingsDataFailed(error) {
+
+        setState(new_state => ({
+            ...new_state,
+            error: error,
+            data_loading: "FAILED"
+        }))
+    }
+
+    function getCommitSha() {
+        let parent_ci_info = complete_ci_data.find((item) => {
+            if (item.type_label == null) {
+                return item
+            }
+        })
+        let default_branch_name = parent_ci_info?.branch_name
+        let commit_sha_obj;
+        if (state.branch_name) {
+            let selected_branch_name = state.branch_name
+            commit_sha_obj = state.branch_with_commit_sha && state.branch_with_commit_sha.find((item) => {
+                if (item[selected_branch_name]) {
+                    return item[selected_branch_name]
+                }
+            })
+        } else {
+            commit_sha_obj = state.branch_with_commit_sha && state.branch_with_commit_sha.find((item) => {
+                if (item[default_branch_name]) {
+                    return item[default_branch_name]
+                }
+            })
+        }
+        let commit_sha = commit_sha_obj && Object.values(commit_sha_obj)[0]
+
+        return commit_sha;
+    }
+
+    function testAndGetBranches(git_url, credential_id) {
+        const post_data = {
+            git_url: git_url,
+            credential_id: credential_id,
+        };
+        if (!post_data.credential_id) {
+            delete post_data.credential_id;
+        }
+        if (props.variant == "ServiceCard") {
+            PostData(GenerateURL({}, properties.api.git_test), post_data, onFetchSuccess, onFetchFail, true);
+        } else {
+            PostData(GenerateURL({}, properties.api.git_test), post_data, onFetchSuccess, onFetchFail, false, true);
+        }
+        setState(new_state => ({
+            ...new_state,
+            branch_loading: true,
+        }));
+
+    }
+
+    function onFetchSuccess(data) {
+        if (data.branches && data.branches.length > 0) {
+            var branch_list = data.branches.map(item => {
+                return { id: item, label: item }
+            })
+        }
+        setState(new_state => ({
+            ...new_state,
+            branch_loading: false,
+            branch_list: branch_list && branch_list.length > 0 ? branch_list : [],
+            action_card: !new_state.action_card,
+            branch_with_commit_sha: data.branch_with_commit_sha,
+        }));
+
+    }
+    function onFetchFail(error) {
+        setState(new_state => ({
+            ...new_state,
+            branch_loading: false,
+            errors: {
+                ...new_state.errors,
+                branch_name: error
+            }
+
+        }));
+    }
+
+    function getEnvNamefromId() {
+        var env_data = {};
+        if (service_data && service_data.component_env) {
+            service_data.component_env.map(item => {
+                if (item.id == env_id) {
+                    env_data.env_name = item.project_env.name
+                    env_data.env_type = service_data.type
+                }
+            })
+        }
+        return env_data;
+    }
+
+    function successBuildTriggerCallBack(response) {
+        showSnackbar("success", "Build scheduled successfully.");
+        setState(prevState => ({
+            ...prevState,
+            build_status: response.status,
+            build_id: response.id,
+            trigger: "success",
+            tag: "",
+            custom_tag: "",
+            feature_tag: "",
+            branch_name: "",
+            docker_cache: true,
+            is_deploy: false,
+            error: {},
+            show_bp_agent_warning: false,
+            alert_loading: false,
+            triggerBuildLoading: false,
+            runtime_var_override: false,
+            commit_sha_override: false,
+            overwritten_commit_sha: ''
+        }));
+        setAdvanceConfState({
+            open: false,
+            mode: null,
+            buildKey: null,
+            buildData: null,
+        })
+        setAdvanceConfigStore({
+            main: null,            
+            children: {}
+        })
+        refreshGrid();
+    }
+
+    function failedBuildTriggerCallBack(error) {
+        let error_msg = showErrorHandlerUpdated(error)
+        showSnackbar("error", "Failed to schedule build.", error_msg)
+        setState(prevState => ({
+            ...prevState,
+            trigger: "failed",
+            error_msg: error.detail ? error.detail : error,
+            show_bp_agent_warning: false,
+            alert_loading: false,
+        }));
+    }
+
+    function handleClose() {
+        setState({
+            ...state,
+            trigger: null,
+        });
+    }
+
+    function checkForParallelBuild(serviceId, envId) {
+        return new Promise(function (myResolve, myReject) {
+
+            var requestInfo = {
+                endPoint: GenerateURL({ service_id: serviceId, env_id: envId }, properties.api.buildPossible),
+                httpMethod: "GET",
+                httpHeaders: { "Content-Type": "application/json" }
+            }
+
+            InvokeApi(requestInfo, (fetchedData) => {
+                myResolve(fetchedData)
+            }, (error) => { myReject(error) })
+        });
+
+    }
+    function successBuildTriggerCallBackFromActionDialouge(response) {
+        setState(prevState => ({
+            ...prevState,
+            build_status: response.status,
+            build_id: response.id,
+            trigger: "success",
+            tag: "",
+            custom_tag: "",
+            feature_tag: "",
+            branch_name: "",
+            docker_cache: true,
+            is_deploy: false,
+            error: {},
+            show_bp_agent_warning: false,
+            parallBuildFeatureData: null,
+            commit_sha_override: false,
+            overwritten_commit_sha: ''
+        }));
+        refreshGrid();
+    }
+
+    function failedBuildTriggerCallBackFromActionDialouge(error) {
+
+        setState(prevState => ({
+            ...prevState,
+            trigger: "failed",
+            error_msg: error.detail ? error.detail : error,
+            show_bp_agent_warning: false,
+            parallBuildFeatureData: null
+        }));
+    }
+    const triggerPipelineFromActionDialouge = (actionType) => {
+        if (state.parallBuildFeatureData && actionType != undefined)
+            PostData(state.parallBuildFeatureData?.url, { ...state.parallBuildFeatureData?.data, action: actionType }, successBuildTriggerCallBackFromActionDialouge, failedBuildTriggerCallBackFromActionDialouge);
+    }
+
+    function validateAndTrigger(deploy_this_tag) {
+        console.log(deploy_this_tag, "bfgjfghjbvdhfbvhj")
+        var result = { valid: true }
+        if (state.build_and_deploy) {
+            result = ValidateDataSet(
+                {
+                    deployment_name: state.deployment_name,
+                },
+                {
+                    deployment_name: [VALIDATION_TYPE_REQUIRED]
+                })
+        }
+
+        if (state.branchRequired) {
+            const resultForBuild = ValidateDataSet(
+                {
+                    branch_name: state.branch_name,
+                },
+                {
+                    branch_name: [VALIDATION_TYPE_REQUIRED]
+                }
+            )
+            if (!resultForBuild.valid) {
+                const branchError = resultForBuild.error
+                if (!result.valid) {
+                    result.error = { ...result.error, ...branchError }
+                }
+                else {
+                    result.error = branchError
+                    result.valid = false
+                }
+            }
+            console.log(resultForBuild, 'rbgh')
+
+        }
+        if (result && result.valid) {
+            let additionalGitRepo = null;
+            if (supportExternalConfig && additionalGitRepos.length) {
+                let additionalGitRepoFormData = formRefForExternalConfiguraiton.current?.getFormData() || {};
+                if (additionalGitRepoFormData.override_branch_external_source) {
+                    additionalGitRepo = additionalGitRepoFormData?.additional_git_repo_branches ?? null;
+                }
+            }
+
+            var data = {
+                // custom_tag: state.tag,
+                branch_name: state.branch_name,
+                no_cache: state.docker_cache ? false : true,
+                feature_tag: state.feature_tag,
+                is_deploy: deploy_this_tag === "DEPLOY_THIS_TAG" ? true : false,
+                deployment_name: [],
+                commit_sha: getCommitSha(),
+                additional_git_repo_branches: additionalGitRepo,
+            }
+            if (state?.commit_sha_override && state?.overwritten_commit_sha) {
+                data["commit_sha"] = state.overwritten_commit_sha;
+                data['clone_with_commit'] = true;
+            }
+            if(advanceConfigStore.main){
+                data["advance_configuration"] = advanceConfigStore.main;
+            }
+            if (multipleBuildEnabled && state.child_build_override) {
+                const child = Object.entries(state.child).map(([key, value]) => ({ [key]: value }));
+
+                if (supportExternalConfig) {
+                    let childBuildAdditionalRepos = {};
+
+                    Object.entries(formRefForChildBuildExternalConfiguraiton.current).forEach(([id, ref]) => {
+                        let additionalRepos = null;
+                        let additionalRepoFromData = ref.current?.getFormData() || {};
+                        if (additionalRepoFromData.override_branch_external_source) {
+                            additionalRepos = additionalRepoFromData.additional_git_repo_branches;
+                            childBuildAdditionalRepos[id] = additionalRepos ?? null;
+                        }
+
+                    });
+
+                    console.log(child, childBuildAdditionalRepos, 'data_redfs_001');
+                    child.forEach(childItem => {
+                        const childId = Object.keys(childItem)[0];
+                        if (childBuildAdditionalRepos[childId]) {
+                            childItem[childId] = {
+                                ...childItem[childId],
+                                additional_git_repo_branches: childBuildAdditionalRepos[childId]
+                            };
+                        }
+                    });
+                }
+
+                child.forEach(childObj => {
+                    const [childKey] = Object.keys(childObj);
+
+                    if (advanceConfigStore.children[childKey]) {
+                        childObj[childKey].advance_configuration =
+                        advanceConfigStore.children[childKey];
+                    }
+                });
+
+                data = { ...data, child }
+                console.log("jshdf", data);
+            }
+            if (deploy_this_tag === "DEPLOY_THIS_TAG") {
+                data.deployment_name = state.deployment_name
+            }
+            // else {
+
+            //     delete data.deployment_name
+
+            // }
+            if (state.open_custom && state.custom_tag != "") {
+                data.custom_tag = state.custom_tag;
+                delete data.tag
+            } else {
+                data.tag = state.tag
+                delete data.custom_tag
+            }
+            if (state.open_custom && (state.tag && state.tag != "")) {
+                delete data.tag
+            }
+            if (!state.open_custom && (state.custom_tag && state.custom_tag != "")) {
+                delete data.custom_tag
+            }
+            if (!data.custom_tag) {
+                delete data.custom_tag;
+            }
+            if (!data.tag) {
+                delete data.tag;
+            }
+            if (!data.branch_name) {
+                delete data.branch_name;
+            }
+            if (!data.feature_tag) {
+                delete data.feature_tag
+            }
+            if (deploy_this_tag === "DEPLOY_THIS_TAG" && all_available_deployments && all_available_deployments.length == 1) {
+                data.deployment_name = all_available_deployments[0].label ? [all_available_deployments[0].label] : null
+            }
+            if (state.build_runtime_var_support && state.runtime_var_override) {
+                let hasError = state.child_inherits.override_var.validateForm()
+                if (hasError) return;
+                let overrideData = state.child_inherits.override_var.getState();
+                data['run_time_environment_variables'] = overrideData?.data || [];
+            }
+            if (disable_parallel_build && disable_parallel_build.value && disable_parallel_build.value === "true") {
+                checkForParallelBuild(service_id, env_id).then(parallelBuildData => {
+
+                    console.log(data, 'd_fgbn')
+                    if (!parallelBuildData?.parallel_build_status) {
+                        const possibleActions = parallelBuildData?.possible_action
+                        setState(prevState => ({
+                            ...prevState,
+                            parallBuildFeatureData: {
+                                parallelBuildData: parallelBuildData,
+                                possibleActions: possibleActions,
+                                data: data,
+                                url: GenerateURL({ service_id: service_id, env_id: env_id }, properties.api.env_build_request_url)
+                            }
+                        }))
+                    }
+                    else {
+                        var endPoint = GenerateURL({ service_id: service_id, env_id: env_id }, properties.api.env_build_request_url);
+                        showSnackbar("info", "Scheduling parallel build...")
+                        setState((prevState) => ({
+                            ...prevState,
+                            alert_loading: true
+                        }))
+                        console.log('post_data_0001_023', data);
+                        PostData(endPoint, data, successBuildTriggerCallBack, failedBuildTriggerCallBack, false, true);
+                    }
+
+                }).catch(error => {
+                    showSnackbar("error", "Failed to schedule build.", error)
+                    console.log(error, 'error->>')
+                })
+            } else {
+                console.log("jjsdbhjkdjfbf", data);
+                var endPoint = GenerateURL({ service_id: service_id, env_id: env_id }, properties.api.env_build_request_url);
+                showSnackbar("info", "Scheduling build...")
+                setState((prevState) => ({
+                    ...prevState,
+                    alert_loading: true
+                }))
+                console.log('post_data_0001_023', data);
+
+                PostData(endPoint, data, successBuildTriggerCallBack, failedBuildTriggerCallBack, false, true);
+            }
+
+        } else {
+            let error_msg = showErrorHandlerUpdated(result.error)
+            showSnackbar("error", "Failed to schedule build.", error_msg)
+            console.log(result, 'rsgt_pps')
+            setState({
+                ...state,
+                errors: {
+                    ...state.errors,
+                    ...result.error
+                }
+            });
+        }
+
+    }
+
+    const onChangeHandler = (e) => {
+        console.log(e.target.name, e.target.value, "shbdhbdshbchsdbc")
+        if (!(e.target.name == "tag" && e.target.value.includes(" "))) {
+            console.log(e.target.value, "hjdbhsbcjhsdbchsd")
+            var name = e.target.name
+            var value = e.target.value
+            setState((new_state) => ({
+                ...new_state,
+                [name]: value,
+                errors: {
+                    ...new_state.errors,
+                    [name]: "",
+                }
+            }));
+        }
+    }
+
+    const onTagChangeHandler = (e) => {
+        console.log(e.target.name, e.target.value, "shbdhbdshbchsdbc")
+        if (!(e.target.name == "tag" && e.target.value.includes(" "))) {
+            console.log(e.target.value, "hjdbhsbcjhsdbchsd")
+            var name = e.target.name
+            var value = e.target.value
+            setState((new_state) => ({
+                ...new_state,
+                [name]: value,
+                errors: {
+                    ...new_state.errors,
+                    [name]: "",
+                }
+            }));
+        }
+    }
+
+    const onChildChangeHandler = (e, type) => {
+        if (!(e.target.name == "tag" && e.target.value.includes(" "))) {
+            console.log(e.target.name, e.target.value, type, "dtatnenkjnfjkwens")
+            const value = e.target.value
+            const name = e.target.name
+            setState((new_state) => ({
+                ...new_state,
+                child: {
+                    ...new_state.child,
+                    [type]: {
+                        ...new_state.child[type],
+                        [name]: value,
+                    }
+                },
+                errors: {
+                    ...state.errors,
+                    [name]: "",
+                }
+            }));
+        }
+    }
+
+
+    const onChildCacheChangeHandler = (e, type) => {
+        if (!(e.target.name == "tag" && e.target.value.includes(" "))) {
+            console.log(e.target.name, e.target.checked, type, "dtatnenkjnfjkwens")
+            const value = e.target.checked;
+            const name = "no_cache";
+            console.log("ksjdh", state);
+            setState((new_state) => ({
+                ...new_state,
+                child: {
+                    ...new_state.child,
+                    [type]: {
+                        ...new_state.child?.[type],
+                        [name]: !value,
+                    }
+                },
+                errors: {
+                    ...state.errors,
+                    [name]: "",
+                }
+            }));
+        }
+        // if(!(e.target.name == "custom_tag" && e.target.value.includes(" "))){
+        //     setState({
+        //         ...state,
+        //         [e.target.name]: e.target.value,
+        //         errors: {
+        //             ...state.errors,
+        //             [e.target.name]: "",
+        //         }
+        //     });
+        // }
+    }
+    const onChangeHandlerForDockerCache = (e) => {
+        console.log("sklkslam", e)
+        if (!(e.target.name == "tag" && e.target.value.includes(" "))) {
+            setState((new_state) => ({
+                ...new_state,
+                [e.target.name]: e.target.checked,
+                errors: {
+                    ...new_state.errors,
+                    [e.target.name]: "",
+                }
+            }));
+        }
+    }
+
+    function checkForFeatureTag() {
+        if (typeof (Storage) !== "undefined") {
+            localStorage.setItem("feature_tag", flag_for_feature_tag);
+            var feature_tag = localStorage.getItem("feature_tag");
+            feature_tag = JSON.parse(feature_tag) === true;
+            if (feature_tag) {
+                return (
+                    <div className={type == "DEPLOY" ? "deploy_class" : ""}>
+                        <Input
+                            type="text-new"
+                            mandatorySign={type == "BUILD" ? false : true}
+                            data={{ feature_tag: state.feature_tag }}
+                            name="feature_tag"
+                            error={{ feature_tag: state.errors.feature_tag }}
+                            onChangeHandler={onChangeHandler}
+                            label="Feature Id"
+                            placeholder="Enter Feature Id"
+                        />
+                    </div>
+                )
+            }
+        } else {
+            return (
+                <p>Sorry, your browser does not support Web Storage.</p>
+            )
+
+        }
+    }
+
+    function onClose() {
+        setState(prevState => ({
+            ...prevState,
+            show_bp_agent_warning: false,
+            alert_loading: false
+        }))
+    }
+
+    const refreshGrid = useCallback(() => {
+        setState(new_state => ({
+            ...new_state,
+            refresh_count: new_state.refresh_count + 1,
+        }));
+
+    }, [])
+    function toggleState() {
+        setState({
+            ...state,
+            open: !state.open,
+            branch_name: null,
+        });
+    }
+    function toggleChildState(name, value) {
+        setState((new_state) => ({
+            ...new_state,
+            [name]: value,
+        }));
+    }
+    const toggleTagState = () => {
+        var custom_tag_flag = state.open_custom;
+        if (custom_tag_flag) {
+            setState({
+                ...state,
+                loading_tag: true,
+                tag: null
+            });
+            setTimeout(() => {
+                setState({
+                    ...state,
+                    open_custom: !state.open_custom,
+                    loading_tag: false,
+                    tag: null
+                });
+            }, 200);
+        } else {
+            setState({
+                ...state,
+                loading_tag: true,
+                custom_tag: null
+            });
+            setTimeout(() => {
+                setState({
+                    ...state,
+                    open_custom: !state.open_custom,
+                    loading_tag: false,
+                    custom_tag: null
+                });
+            }, 200);
+        }
+
+    }
+
+
+
+    const onKeyValueChangeHandler = (k, v, name) => {
+        console.log(k, v, name, "sdbhchusbchbshbc")
+        setState((new_state) => ({
+            ...new_state,
+            child: {
+                ...new_state.child,
+                [name]: {
+                    ...new_state.child[name],
+                    [k]: v,
+                }
+            },
+            errors: { ...state.errors, [k]: "" }
+        }));
+    }
+
+    console.log(state, "sdbhchusbchbshbc")
+
+    const onParentKeyValueChangeHandler = (k, v) => {
+        setState((new_state) => ({
+            ...new_state,
+            [k]: v,
+            errors: { ...state.errors, [k]: "" }
+        }));
+    }
+
+
+    const evaluateAgentStatusOnTrigger = (deployTag) => {
+        console.log(deployTag, 'inside_function')
+        const resultOfEvalution = evaluateAgentStatus(null, 'build')
+        console.log(resultOfEvalution, 'bp_agent_state_ev_fun_d001');
+        if (resultOfEvalution && resultOfEvalution.type === "unHealthy") {
+            console.log("function_running")
+            setState(prevState => ({
+                ...prevState,
+                show_bp_agent_warning: true,
+                type_of_action: deployTag === 'DEPLOY_THIS_TAG' ? 'deploy-too' : 'only-build'
+            }))
+        }
+        else {
+            deployTag === 'DEPLOY_THIS_TAG' ? validateAndTrigger("DEPLOY_THIS_TAG") : validateAndTrigger();
+        }
+    }
+    console.log(state, "fdajsdja")
+    const onChangeToggleState = (e) => {
+        console.log(state, e.target.name, "yyy")
+        const name = e.target.name;
+        if (name == 'child_build_override') {
+            let childBuildStates = {};
+            state.child_build_list.map((item) => {
+                childBuildStates[item.type_label] = {
+                    no_cache: false,
+                };
+            });
+            setState((new_state) => ({
+                ...new_state,
+                child: {
+                    ...new_state.child,
+                    ...childBuildStates,
+                }
+            }))
+        }
+        setState(new_state => ({
+            ...new_state,
+            [name]: !new_state[name],
+        }));
+    }
+    function onChangeHandlerForKeyValue(key, value) {
+
+        if (key == "deployment_name") {
+            value.forEach((id, index) => {
+                value[index] = id;
+            });
+        }
+        setState({
+            ...state, [key]: value,
+            errors: { ...state.errors, [key]: "" }
+        });
+    }
+
+    function onChangeOverridable(e) {
+        let value = e.target.checked;
+        setState((new_state) => ({
+            ...new_state,
+            runtime_var_override: value,
+        }));
+    }
+
+    const [anchorEl, setAnchorEl] = useState(null);
+    const handleClickOpenPopover = (event) => {
+        setAnchorEl(event.currentTarget);
+    };
+
+    const handleClickClosePopover = () => {
+        setAnchorEl(null);
+    };
+
+    const OpenPopover = Boolean(anchorEl);
+    const id = OpenPopover ? 'simple-popover' : undefined;
+
+    console.log(all_available_deployments, deploy_env_offline_flag, "svbhsbvhbshvbshfvb")
+    console.log("djkdsjkjskds", state);
+
+    const handleChildBuildAnchorClick = (id) => {
+        setChildBuildAnchor((prev) => ({
+            ...prev,
+            [id]: !prev[id]
+        }));
+    }
+
+    const mainBuild = useMemo(() =>{
+        if(complete_ci_data){
+            return complete_ci_data.find((ele) => !ele.type_label)
+        }else{
+            return null;
+        }
+    },[complete_ci_data])
+
+    function openAdvanceConfDialog(buildData,childIdentifier=null){
+            setAdvanceConfState((prev) => {
+                const mode = childIdentifier ? 'child' : 'main';
+                const buildKey = childIdentifier || '';
+                let formatedBuildData = formatBuildDataForAdvanceConf(buildData);
+                return{
+                    open: true,
+                    mode,
+                    buildKey,
+                    buildData:formatedBuildData,
+                }
+            })
+    }
+
+    const closeAdvanceConf = useCallback(() => {
+        setAdvanceConfState((prev) => {
+            return {
+                open:false,
+                mode:null,
+                buildKey:null,
+                buildData:null,
+            }
+        })
+    },[])
+
+    function formatBuildDataForAdvanceConf(data) {
+        return {
+            ...getDefaultBuildEnvVarState(),
+
+            key_value: data.env_ci_build_variable,
+
+            env_build_labels: Array.isArray(data.env_ci_build_label) && data.env_ci_build_label.length > 0
+            ? data.env_ci_build_label.map(item => ({
+                ...item,
+                env_key: item.key,
+                env_value: item.value
+                }))
+            : [],
+
+            env_runtime_variables:
+            Array.isArray(data.env_ci_run_time_variable) && data.env_ci_run_time_variable.length > 0
+                ? {
+                    ...getEnableRuntimeVariablesDefaultState(),
+                    runtime_childs: {
+                    ...getMultiRowDefaultState(),
+                    ...getRuntimeVarList(data.env_ci_run_time_variable)
+                    }
+                }
+                : {
+                    ...getEnableRuntimeVariablesDefaultState()
+                },
+
+            data: {
+                key_value: data.env_ci_build_variable?.length > 0,
+                env_build_labels: data.env_ci_build_label?.length > 0,
+                ci_enabled: Boolean(data.sonar_project_key),
+                env_runtime_variables: data.env_ci_run_time_variable?.length > 0,
+                shallow_cloning: Boolean(data.shallow_cloning),
+            },
+
+            ci_scope: data.sonar_project_key
+            ? {
+                ...getCiScopeState(),
+                data: {
+                    ci_scope: data.project_ci_scope_id,
+                    sonar_project_key: data.sonar_project_key ? data.sonar_project_key : ""
+                }
+                }
+            : null
+        };
+    }
+
+    function formatAdvanceConfDataForSave(panel_data) {
+        const post_data = {};
+        let env_ci_run_time_variable = [];
+
+        post_data.project_ci_scope_id = null;
+
+        post_data.shallow_cloning = Boolean(panel_data.data.shallow_cloning);
+
+        post_data.sonar_project_key = panel_data.ci_scope
+            ? panel_data.ci_scope.data.sonar_project_key
+            : null;
+
+        post_data.env_ci_build_variable = panel_data.key_value
+            ? keyValueParser(panel_data.key_value)
+            : null;
+
+        post_data.env_ci_build_label = panel_data.env_build_labels
+            ? keyValueParserForBuildLabels(panel_data.env_build_labels)
+            : [];
+
+        if (
+            panel_data.env_runtime_variables &&
+            panel_data.env_runtime_variables.runtime_childs
+        ) {
+            Object.keys(panel_data.env_runtime_variables.runtime_childs).forEach(key => {
+            if (
+                key === "data" ||
+                key === "child_inherits" ||
+                key === "show_view" ||
+                key === "count"
+            ) {
+                return;
+            }
+
+            const emptyDir =
+                panel_data.env_runtime_variables.runtime_childs[key].data;
+
+            const emptyDirData = {
+                env_key: emptyDir.env_key,
+                env_value: emptyDir.env_value
+            };
+
+            if (emptyDir.id) {
+                emptyDirData.id = emptyDir.id;
+            }
+
+            env_ci_run_time_variable.push(emptyDirData);
+            });
+        }
+
+        post_data.env_ci_run_time_variable = env_ci_run_time_variable;
+
+        return post_data;
+    }
+
+    function handleAdvanceConfSave(buildData) {
+        const formattedData = formatAdvanceConfDataForSave(buildData);
+
+        setAdvanceConfigStore(prev => {
+            // MAIN BUILD
+            if (advanceConfState.mode === 'main') {
+            return {
+                ...prev,
+                main: formattedData
+            };
+            }
+
+            // CHILD BUILD
+            return {
+            ...prev,
+            children: {
+                ...prev.children,
+                [advanceConfState.buildKey]: formattedData
+            }
+            };
+        });
+
+        closeAdvanceConf();
+    }
+
+    console.log(state, mainBuild,"ci_001_0sd1");
+
+    console.log(state.branch_loading, 'branch_loading_001')
+
+    return (
+
+        <>
+
+            <Dialog
+                open={build_action_card}
+                onClose={handleCloseDialog}
+                style={{ overflow: "visible", height: "100vh", transition: "0.2s all ease-in-out" }}
+                className="integrations-dialog action_card_dialog_width"
+                aria-labelledby="alert-dialog-slide-title"
+                aria-describedby="alert-dialog-slide-description"
+            >
+                <button
+                    className='btn float-cancel-button'
+                    onClick={props.closebox}
+                    style={{ left: "-54px" }}
+                >
+                    <span className='ri-close-line'></span>
+                </button>
+
+
+                {/* this is the header of the this card */}
+                <div className='card-header-new'>
+                    <div className='d-flex align-center space-between' style={{ width: '100%' }}>
+                        <div className='d-flex align-center'>
+                            <span className='font-18 ml-5 d-inline-block font-weight-600' style={{ color: '#fff', lineHeight: "21.94px" }}>
+                                Trigger a new Build
+                            </span>
+                        </div>
+                    </div>
+                </div>
+
+                {
+                    state.branch_loading ?
+                        <Loading varient="light" />
+                        :
+                        // if he has the permission to trigger the build
+                        is_permited || is_build_permited ?
+                            <>
+                                <div style={{ overflowY: "scroll", height: "100%", padding: "70px 16px", display: "flex", alignItems: "start", flexDirection: "column", gap: "20px", width: "100%" }} className='d-flex'>
+                                    {
+                                        configuration_data && configuration_data.env_ci_detail && Object.keys(configuration_data.env_ci_detail).length > 0 ?
+
+                                            <>
+                                                <div className='card-new' style={{ width: "inherit", height: "max-content" }}>
+
+                                                    <div className='d-flex-top' style={{ padding: "12px 16px 12px 16px", borderBottom: "1px solid #E6E6E6", height: "48px", width: "100%" }}>
+                                                        <div className='d-flex'>
+                                                            <span className='ri-tools-line' style={{ fontSize: "24px", lineHeight: "1" }}></span>
+                                                            <p style={{ color: '#2F2F2F', fontSize: "14px", fontWeight: '700', marginLeft: "6px" }}>MAIN BUILD</p>
+                                                        </div>
+                                                        {configuration_data && configuration_data.env_ci_detail ?
+                                                            <Input
+                                                                type="switch"
+                                                                padding="0px"
+                                                                name="docker_cache"
+                                                                label="Docker Cache"
+                                                                data={state}
+                                                                onChangeHandler={onChangeHandlerForDockerCache}
+                                                                error={{}}
+                                                            /> : null}
+
+                                                    </div>
+                                                    <BpAgentStatusActionAlert open={state.show_bp_agent_warning} onClose={onClose} onTrigger={state.type_of_action === 'only-build' ? () => validateAndTrigger() : () => validateAndTrigger("DEPLOY_THIS_TAG")} type='Build Agent' />
+
+                                                    {/* this is body of the card */}
+                                                    <div className='card-body-new' style={{ position: "relative" }}>
+                                                        <>
+                                                            <>
+                                                                {
+                                                                    state.loading_tag ?
+                                                                        <>
+                                                                            <Loading varient="light" style={{
+                                                                                height: "40px",
+                                                                                width: "48%",
+                                                                                display: "flex",
+                                                                                alignItems: "center",
+                                                                                justifyContent: "center",
+                                                                                position: "absolute",
+
+                                                                            }} />
+
+                                                                            <div style={{ height: "40px", width: "48%" }}></div>
+
+                                                                        </> :
+                                                                        <div style={{ width: "49%", }}>
+                                                                            <Input
+                                                                                type={"text-new"}
+                                                                                height="41px"
+                                                                                name={state.open_custom ? "custom_tag" : "tag"}
+                                                                                placeholder={state.open_custom ? "custom-tag" : "Enter Tag"}
+                                                                                subHeading={"(Optional)"}
+                                                                                label={state.open_custom ? "Enter Custom Tag" : "Enter Tag"}
+                                                                                mandatory
+                                                                                data={{ tag: state.tag }}
+                                                                                error={{ tag: state.errors?.tag }}
+                                                                                onChangeHandler={onTagChangeHandler}
+                                                                                extraDiv={<p className="mr-0 cursor-pointer text-anchor-blue pr-0" onClick={toggleTagState} onKeyDown={() => { }}>{state.open_custom ? "Choose Tag" : "Provide Custom Tag"}</p>}
+                                                                            />
+                                                                        </div>
+                                                                }
+                                                                {
+                                                                    // state.branch_loading ? <Loading varient="light" /> :
+                                                                    <div className='section-input d-block' style={{ width: "49%" }}>
+                                                                        <Input
+                                                                            style={{ height: "41px", width: "100%" }}
+                                                                            type={state.open ? "text" : "auto-complete-dropdown"}
+                                                                            name="branch_name"
+                                                                            placeholder="Ex. Master"
+                                                                            subHeading="(Optional)"
+                                                                            getOptionLabel={(option) => option.label}
+                                                                            list={state.branch_list && state.branch_list.length > 0 ? state.branch_list : []}
+                                                                            label="Branch Name"
+                                                                            data={{ branch_name: state.branch_name }}
+                                                                            error={{ branch_name: state.errors.branch_name }}
+                                                                            onChangeHandler={state.open ? onChangeHandler : onParentKeyValueChangeHandler}
+                                                                            extraDiv={<p className="mr-0 cursor-pointer text-anchor-blue pr-0" onClick={toggleState} onKeyDown={() => { }}>{state.open ? "Choose Branch" : "Provide Custom Branch"}</p>}
+                                                                        />
+                                                                    </div>
+                                                                }
+
+                                                                {checkForFeatureTag()}
+
+                                                            </>
+                                                        </>
+
+                                                    </div>
+
+                                                    <Box
+                                                        sx={{
+                                                            padding: '0px 16px',
+                                                            gap:'12px'
+                                                        }}
+                                                        className="d-flex align-center"
+                                                    >
+                                                        <Button 
+                                                            variant='outline'
+                                                            size='sm'
+                                                            onClick={() =>openAdvanceConfDialog(advanceConfigStore.main ? advanceConfigStore.main : mainBuild)}
+                                                        >
+                                                            <span className='font-12 font-weight-600 text-transform-uppercase'>
+                                                                Advance Configuration
+                                                            </span>
+                                                        </Button>
+                                                        {advanceConfigStore.main ? 
+                                                            <span className='ri-checkbox-circle-fill font-24' style={{lineHeight:'1',color:'#00B860'}}></span>
+                                                        : null}
+                                                    </Box>
+
+                                                    <div style={{ padding: "0px 16px", width: "inherit" }}>
+                                                        <div className='card m-10' style={{ width: '100%' }}>
+                                                            <div className={`${state.build_and_deploy ? "card-header border-bottom" : "card-header"}`} style={{ width: '100%', backgroundColor: 'white' }}>
+                                                                <p className='font-12'>Do you want to trigger a build for a specific commit ID?</p>
+                                                                <Input
+                                                                    type="switch"
+                                                                    padding="0px"
+                                                                    name="commit_sha_override"
+                                                                    label=""
+                                                                    data={state}
+                                                                    onChangeHandler={onChangeToggleState}
+                                                                    error={{}}
+                                                                />
+
+
+                                                            </div>
+                                                            {
+                                                                state.commit_sha_override &&
+                                                                <div className='card-body pd-10'>
+                                                                    <Input
+                                                                        type="text"
+                                                                        name="overwritten_commit_sha"
+                                                                        label="Enter Commit id"
+                                                                        placeholder="Please enter a valid commit id"
+                                                                        data={state}
+                                                                        error={state.errors}
+                                                                        onChangeHandler={onChangeHandler}
+                                                                    />
+                                                                </div>
+                                                            }
+                                                        </div>
+                                                    </div>
+                                                    {// multirepo builds
+                                                        supportExternalConfig && additionalGitRepos.length > 0 &&
+                                                        <ExternalConfigurationComponent
+                                                            ref={formRefForExternalConfiguraiton}
+                                                            additionalGitRepos={additionalGitRepos}
+                                                            rootStyle={{ paddingRight: '16px', paddingLeft: '16px', paddingTop: '16px' }} />
+                                                    }
+                                                    {
+                                                        all_available_deployments && all_available_deployments.length > 1 &&
+                                                        <div style={{ padding: "0px 16px", width: "inherit" }}>
+                                                            <div className='card m-10' style={{ width: '100%' }}>
+                                                                <div className={`${state.build_and_deploy ? "card-header border-bottom" : "card-header"}`} style={{ width: '100%', backgroundColor: 'white' }}>
+                                                                    <p className='font-12'>Do you want to deploy this tag?</p>
+                                                                    <Input
+                                                                        type="switch"
+                                                                        padding="0px"
+                                                                        name="build_and_deploy"
+                                                                        label=""
+                                                                        data={{ is_deploy: state.is_deploy }}
+                                                                        onChangeHandler={onChangeToggleState}
+                                                                        error={{ is_deploy: state.is_deploy }}
+                                                                    />
+
+
+                                                                </div>
+                                                                {
+                                                                    state.build_and_deploy &&
+                                                                    <div className='card-body pd-10'>
+                                                                        <Input
+                                                                            type="checkbox"
+                                                                            name="deployment_name"
+                                                                            label="Available Deployments"
+                                                                            mandatorySign
+                                                                            data={{ deployment_name: state.deployment_name }}
+                                                                            error={{ deployment_name: state.errors.deployment_name }}
+                                                                            list={all_available_deployments.length > 0 ? all_available_deployments : []}
+                                                                            onChangeHandler={onChangeHandlerForKeyValue}
+                                                                        />
+                                                                    </div>
+                                                                }
+                                                            </div>
+                                                        </div>
+                                                    }
+                                                    {
+                                                        multipleBuildEnabled && complete_ci_data && complete_ci_data.length > 1 &&
+                                                        <div style={{ padding: "0px 16px", width: "inherit" }}>
+                                                            <TopHeader>
+                                                                <span className='ri-information-line' style={{ color: '#124D9B', fontSize: '20px' }}></span>
+                                                                <Title>Along with the main build secondary builds will also be performed. Override Details?</Title>
+
+                                                                <Box sx={{ '& .input-component': { marginBottom: 0 } }} className="switch-input-wrapper-v2">
+                                                                    <Input
+                                                                        type="only-switch"
+                                                                        name="child_build_override"
+                                                                        label=""
+                                                                        data={{}}
+                                                                        onChangeHandler={onChangeToggleState}
+                                                                        error={{}}
+                                                                    />
+                                                                </Box>
+                                                            </TopHeader>
+                                                            {
+                                                                state.child_build_override &&
+                                                                <div style={{ padding: "0", width: "100%" }}>
+
+                                                                    {
+
+                                                                        state.child_build_list?.map((item, index) => {
+                                                                            return (
+                                                                                <>
+                                                                                    <ChildBuildContainer key={item.type_label}>
+
+                                                                                        <HeaderContainer>
+                                                                                            <div className='d-flex align-center' style={{ gap: "12px" }}>
+                                                                                                <LogoContainer>
+                                                                                                    <span className='ri-open-arm-line' style={{ fontSize: "17px", color: '#124D9B' }}></span>
+                                                                                                </LogoContainer>
+                                                                                                <HeaderTitle>
+                                                                                                    Child build-{item.type_label}
+                                                                                                </HeaderTitle>
+                                                                                            </div>
+
+                                                                                            <span
+                                                                                                onClick={() => handleChildBuildAnchorClick(item.id)}
+                                                                                                style={{ fontSize: "20px", color: '#787878', cursor: 'pointer' }}
+                                                                                                className={childBuildAnchor?.[item.id] ? 'ri-arrow-up-s-line' : 'ri-arrow-down-s-line'}>
+
+                                                                                            </span>
+
+                                                                                        </HeaderContainer>
+                                                                                        {
+                                                                                            childBuildAnchor?.[item.id] &&
+                                                                                            <>
+                                                                                                {state.child_branch_loading?.[item.id] ?
+                                                                                                    <GenericSkeleton variant={'rect'} width={"100%"} height={"63px"} />
+
+                                                                                                    :
+                                                                                                    <>
+                                                                                                        <div style={{ width: "100%", display: "flex", alignItems: "center", gap: '40px' }}>
+                                                                                                            <Box sx={{
+                                                                                                                width: "70%",
+                                                                                                                '& .label-controller': {
+                                                                                                                    fontSize: '12px',
+                                                                                                                    fontWeight: '600',
+                                                                                                                }
+                                                                                                            }} className='section-input d-block'>
+                                                                                                                <Input
+                                                                                                                    style={{ height: "41px", width: "100%" }}
+                                                                                                                    type={state[item.type_label] ? "text" : "auto-complete-dropdown"}
+                                                                                                                    name="branch_name"
+                                                                                                                    placeholder="Ex. Master"
+                                                                                                                    subHeading="(Optional)"
+                                                                                                                    getOptionLabel={(option) => option.label}
+                                                                                                                    list={state.child_branches?.[item.id] && state.child_branches?.[item.id]?.length > 0 ? state.child_branches[item.id] : []}
+                                                                                                                    label="Branch Name"
+                                                                                                                    data={state.child[item.type_label] ? state.child[item.type_label] : {}}
+                                                                                                                    error={{ branch_name: state.errors?.[`branch_${item.id}`] }}
+                                                                                                                    onChangeHandler={state[item.type_label] ? (e) => onChildChangeHandler(e, item.type_label) : (k, v) => onKeyValueChangeHandler(k, v, item.type_label)}
+                                                                                                                    extraDiv={<p className="mr-0 cursor-pointer text-anchor-blue pr-0" onClick={state[item.type_label] ? () => toggleChildState(item.type_label, false) : () => toggleChildState(item.type_label, true)} onKeyDown={() => { }}>{state[item.type_label] ? "Choose Branch" : "Provide Custom Branch"}</p>}
+                                                                                                                />
+                                                                                                            </Box>
+                                                                                                            <Box sx={{
+                                                                                                                '& .input-component': { marginBottom: 0 }, '& .label-controller': {
+                                                                                                                    fontSize: '14px',
+                                                                                                                    fontWeight: '500',
+                                                                                                                }
+                                                                                                            }} className="switch-input-wrapper-v2">
+
+                                                                                                                <Input
+                                                                                                                    type="only-switch"
+                                                                                                                    padding="0px"
+                                                                                                                    name="docker_cache"
+                                                                                                                    label="Docker Cache"
+                                                                                                                    data={state.child[item.type_label] ? { docker_cache: !(state.child[item.type_label].no_cache || false) } : {}}
+                                                                                                                    onChangeHandler={(e) => onChildCacheChangeHandler(e, item.type_label)}
+                                                                                                                    error={{}}
+                                                                                                                // varient="child-build"
+                                                                                                                />
+                                                                                                            </Box>
+                                                                                                        </div>
+                                                                                                        <Box
+                                                                                                            className="d-flex align-center"
+                                                                                                            sx={{
+                                                                                                                gap:'12px'
+                                                                                                            }}
+                                                                                                        >
+                                                                                                            <Button 
+                                                                                                                variant='outline'
+                                                                                                                size='sm'
+                                                                                                                onClick={() => openAdvanceConfDialog(advanceConfigStore.children[item.type_label] ? advanceConfigStore.children[item.type_label] : item,item.type_label)}
+                                                                                                            >
+                                                                                                                <span className='font-12 font-weight-600 text-transform-uppercase'>
+                                                                                                                    Advance Configuration
+                                                                                                                </span>
+                                                                                                            </Button>
+                                                                                                            {advanceConfigStore.children[item.type_label] ? 
+                                                                                                                <span className='ri-checkbox-circle-fill font-24' style={{lineHeight:'1',color:'#00B860'}}></span>
+                                                                                                            : null}
+                                                                                                        </Box>
+                                                                                                        {
+                                                                                                            supportExternalConfig && item?.additional_git_repos?.length > 0 &&
+                                                                                                            <ExternalConfigurationComponent
+                                                                                                                additionalGitRepos={item?.additional_git_repos || []}
+                                                                                                                childBuildLabel={item.type_label}
+                                                                                                                ref={formRefForChildBuildExternalConfiguraiton.current[item.type_label]} />
+
+                                                                                                        }
+                                                                                                    </>
+                                                                                                }
+
+                                                                                            </>
+                                                                                        }
+                                                                                    </ChildBuildContainer>
+                                                                                </>
+
+                                                                            )
+                                                                        })
+
+                                                                    }
+                                                                </div>
+
+
+                                                            }
+
+                                                        </div>
+
+                                                    }
+
+                                                    {state.build_runtime_var_support &&
+                                                        <div style={{ padding: "0 16px", width: "100%" }}>
+                                                            <div className='child-build-branch-div' style={{ marginTop: '0px' }}>
+
+                                                                <div className='width-full'>
+                                                                    <Input
+                                                                        type="switch"
+                                                                        padding="0px"
+                                                                        name="runtime_var_override"
+                                                                        label={<div className='d-flex align-center' style={{ gap: '8px' }}>
+                                                                            <span className='ri-information-line' style={{ fontSize: "24px", lineHeight: "1", color: "#124D9B" }}></span>
+                                                                            <p>Provide/Update Runtime Environment Variables</p>
+                                                                        </div>
+                                                                        }//"Provide/Update Runtime Environment Variables"
+                                                                        data={state}
+                                                                        onChangeHandler={onChangeOverridable}
+                                                                        error={state.errors}
+                                                                        enabledComponent={<RuntimeOverridableVarV2 required_data={{ env_id: env_id, service_id: service_id }} prev_state={state} inherits={state.child_inherits.override_var} />}
+                                                                        disabledComponent={<ResetComponent inherits={state.child_inherits.override_var} />}
+                                                                    />
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    }
+                                                    <div className='d-flex align-center space-between'
+                                                        style={{ padding: '0px 16px', width: "100%" }}
+                                                    >
+                                                        <p className=" font-12 d-flex align-center" style={{ gap: "5px" }}>
+
+                                                            <div className='d-flex align-center' style={{ gap: "5px" }}>
+                                                                <span className="chip-sq dev-chip" style={{ textTransform: "uppercase" }}>
+                                                                    {top_summary_data ?
+                                                                        top_summary_data.type :
+                                                                        getEnvNamefromId().env_type ? getEnvNamefromId().env_type : null}
+                                                                </span>
+                                                                <span className='ri-arrow-right-s-line' style={{ fontSize: "20px" }}></span>
+                                                            </div>
+                                                            <span className='d-flex align-center' style={{ verticalAlign: 'middle', gap: "5px", color: "#787878" }}>Sub Env: <span className='text-grey-new d-flex align-center'>
+                                                                {top_summary_data ?
+                                                                    top_summary_data.env_name :
+                                                                    getEnvNamefromId().env_name ? getEnvNamefromId().env_name : null}</span>
+                                                                <Tooltip title="This is the environment where the build will be triggered" placement="top">
+                                                                    <span className='ri-information-line' style={{ fontSize: "17px" }}></span>
+                                                                </Tooltip>
+                                                            </span>
+
+                                                        </p>
+                                                        <div className="d-flex align-center" style={{ gap: "10px" }}>
+                                                            {configuration_data && configuration_data.env_ci_detail ?
+                                                                <>
+                                                                    <button className="btn-cancel-blue" style={{ padding: '1rem', width: "84px", height: "40px" }} onClick={props.closebox} >Cancel</button>
+
+                                                                </> : null}
+
+                                                            {(configuration_data && configuration_data.env_ci_detail) &&
+                                                                <>
+                                                                    {state.alert_loading ?
+                                                                        <GenericSkeleton width={168} height={39} style={{ borderRadius: '6px' }} rootStyle={{ flex: 0 }} />
+                                                                        :
+                                                                        <button
+                                                                            className={state.build_and_deploy ? 'btn d-flex align-center gap-6 color-orange-btn' : 'btn d-flex align-center gap-6 color-blue-new'}
+                                                                            style={{ padding: '0.5rem 1rem', height: "40px", color: "white", margin: "0px" }}
+                                                                            onClick={
+                                                                                state.build_and_deploy ?
+                                                                                    () => { evaluateAgentStatusOnTrigger('DEPLOY_THIS_TAG') }
+                                                                                    :
+                                                                                    evaluateAgentStatusOnTrigger} >
+                                                                            <span
+                                                                                className={state.build_and_deploy ? 'ri-settings-3-line font-24' : 'ri-play-circle-line font-24'}></span>
+                                                                            {
+                                                                                state.build_and_deploy ?
+                                                                                    "Trigger Build & Deploy" :
+                                                                                    "Trigger Build"
+                                                                            } &nbsp;
+
+                                                                        </button>
+                                                                    }
+
+                                                                </>
+
+                                                            }
+
+                                                            {
+                                                                all_available_deployments && all_available_deployments.length == 1 && (configuration_data && configuration_data.env_ci_detail) &&
+                                                                <>
+                                                                    {state.alert_loading ?
+                                                                        <GenericSkeleton width={168} height={39} style={{ borderRadius: '6px' }} rootStyle={{ flex: 0 }} />
+                                                                        :
+                                                                        deploy_env_offline_flag && deploy_env_offline_flag.value && deploy_env_offline_flag.value === "true" ?
+                                                                            (top_summary_data && top_summary_data.is_env_down) || (is_env_down) ?
+                                                                                <button className="btn d-flex align-center gap-6 color-orange-btn" style={{ padding: '0.5rem 1rem', height: "40px", color: "white", margin: "0px" }} onClick={handleClickOpenPopover} >
+
+                                                                                    <span className='ri-settings-3-line' style={{ fontSize: "27px" }}></span>
+                                                                                    Trigger Build &amp; Deploy{' '}</button>
+                                                                                :
+                                                                                <button className="btn d-flex align-center gap-6 color-orange-btn" style={{ padding: '0.5rem 1rem', height: "40px", color: "white", margin: "0px" }} onClick={() => { evaluateAgentStatusOnTrigger('DEPLOY_THIS_TAG') }} >
+                                                                                    <span className='ri-settings-3-line'></span>
+                                                                                    Trigger Build &amp; Deploy{' '}</button>
+                                                                            :
+                                                                            <button className="btn d-flex align-center gap-6 color-orange-btn" style={{ padding: '0.5rem 1rem', height: "40px", color: "white", margin: "0px" }} onClick={() => { evaluateAgentStatusOnTrigger('DEPLOY_THIS_TAG') }} >
+                                                                                <span className='ri-settings-3-line font-24'></span>
+                                                                                Trigger Build &amp; Deploy{' '}</button>
+                                                                    }
+
+                                                                </>
+
+                                                            }
+                                                            <BuildFlowActionAlert
+                                                                onClose={() => setState(prevState => ({ ...prevState, parallBuildFeatureData: null }))}
+                                                                onTrigger={triggerPipelineFromActionDialouge}
+                                                                buidFlowData={state.parallBuildFeatureData}
+
+                                                            />
+
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </>
+                                            :
+                                            <p className="font-12 text-center pd-10 mt-12 mb-12" style={{ width: "100%", color: "crimson" }}>Build Details not configured</p>
+                                    }
+
+
+                                    <div style={{ background: "#F4F4F4", width: "inherit" }}>
+
+                                        {
+                                            // state.branch_loading ? <div style={{ height: '195.5px' }}><Loading varient="light" /></div> :
+                                            <CurrentProgressDataNew
+                                                top_summary_data={top_summary_data}
+                                                is_env_down={top_summary_data && top_summary_data.is_env_down ? top_summary_data.is_env_down : is_env_down ? is_env_down : null}
+                                                type={type}
+                                                recent_history={configuration_data}
+                                                service_id={service_id}
+                                                service_data={service_data}
+                                                build_status={state.build_status}
+                                                refresh={refreshGrid}
+                                                closebox={props.closebox}
+                                                refresh_count={state.refresh_count}
+                                                branch_with_commit_sha={state.branch_with_commit_sha}
+                                                application_id={props.application_id}
+                                                service_env_name={service_env_name}
+                                                env_id={env_id}
+                                                serviceEnv={serviceEnv}
+                                                ci_data={complete_ci_data}
+                                            />
+                                        }
+                                    </div>
+                                </div>
+                            </>
+                            :
+
+                            <div style={{ margin: '15px', height: "100%", width: "100%", justifyContent: "center !important", gap: "10px", fontSize: "20px" }} className='d-flex align-center justify-center' >
+                                <h3 className="popup-card-main-heading pd-10" style={{ fontSize: "17px", color: "crimson" }}>
+                                    You are not allowed to perform this action, Contact Project Admin
+                                </h3>
+                                <div>
+                                    <button className="btn btn-transparent" onClick={props.closebox}  >
+                                        <span className='ri-close-line font-24' ></span>
+                                    </button>
+                                </div>
+                            </div>
+                }
+                <div className='build-card-bottom'>
+                    <div>
+                        <button onClick={props.closebox}>Close</button>
+                    </div>
+                </div>
+            </Dialog >
+
+            {advanceConfState.open && 
+                <AdvanceTriggerBuildConf 
+                    open={advanceConfState.open}
+                    onClose={closeAdvanceConf}
+                    mode={advanceConfState.mode}
+                    buildKey={advanceConfState.buildKey}
+                    buildData={advanceConfState.buildData}
+
+                    // savedConfig={
+                    // advanceConfState.mode === 'main'
+                    //     ? advanceConfigStore.main
+                    //     : advanceConfigStore.children[advanceConfState.buildKey]
+                    // }
+
+                    onSave={handleAdvanceConfSave}
+                />
+            }
+            <Snackbar
+                anchorOrigin={{
+                    vertical: 'top',
+                    horizontal: 'right',
+                }}
+                open={Boolean(state.trigger === "success" || state.trigger === "failed")}
+                onClose={handleClose}
+                sx={{
+                    zIndex: 1400,
+                    '& .MuiPaper-root': {
+                        width: 'auto',
+                        maxWidth: 'auto',
+                        boxShadow: 3,
+                        borderRadius: 1,
+                    },
+                }}
+                autoHideDuration={3000}
+            >
+                {state.trigger === "success" ? (
+                    <Alert
+                        severity="success"
+                        variant="filled"
+                        onClose={handleClose}
+                        sx={{
+                            width: '100%',
+                            '& .MuiAlert-icon': {
+                                fontSize: '2rem', // Adjust icon size
+                            },
+                            '& .MuiAlert-message': {
+                                fontSize: '12px',
+                            },
+                            '& .MuiAlert-action': {
+                                marginRight: 0, // Ensure close button aligns properly
+                            },
+                        }}
+                    >
+                        {"SUCCESSFULLY SCHEDULED " + type}
+                    </Alert>
+                ) : state.trigger === "failed" ? (
+                    <Alert
+                        severity="error"
+                        variant="filled"
+                        onClose={handleClose}
+                        sx={{
+                            width: '100%',
+                            '& .MuiAlert-icon': {
+                                fontSize: '2rem', // Adjust icon size
+                            },
+                            '& .MuiAlert-message': {
+                                fontSize: '12px',
+                            },
+                            '& .MuiAlert-action': {
+                                marginRight: 0, // Ensure close button aligns properly
+                            },
+                        }}
+                    >
+                        {type + " SCHEDULE FAILED"}
+                        <div className="error-div">{state.error_msg || "Unknown error"}</div>
+                    </Alert>
+                ) : null}
+            </Snackbar>
+
+            <Popover
+                id={id}
+                open={OpenPopover}
+                anchorEl={anchorEl}
+                onClose={handleClickClosePopover}
+                anchorOrigin={{
+                    vertical: 'bottom',
+                    horizontal: 'center',
+                }}
+                transformOrigin={{
+                    vertical: 'top',
+                    horizontal: 'center',
+                }}
+            >
+                <div className="popover-content" style={{ padding: '20px', width: '400px', }}>
+
+                    <div className='' style={{ width: '100%', position: 'relative' }}>
+                        <button className="btn btn-transparent btn-icon" style={{ position: "absolute", right: '10px', top: '0px' }} onClick={handleClickClosePopover}><i className='ri-close-line font-18' style={{ color: '#0086ff', }} /></button>
+                        <i style={{ color: '#0086ff', width: '100%' }} className='ri-information-line font-48 mb-10 text-center' />
+                        <p className='font-18 font-weight-bold text-center mb-5' style={{ color: '#0086ff', width: '100%' }}>ENVIRONMENT IS OFFLINE</p>
+                        <p className='font-12 font-weight-400 text-center' style={{ color: '#787878', width: '100%' }}>Please note you cannot trigger build as the envrionment is offline now.
+                            Please contact your team administrator to get the environment online.</p>
+                    </div>
+
+                </div>
+            </Popover>
+        </>
+
+    )
+}
+
+
+export default TriggerActionCardNew;
+
+const ChildBuildContainer = styled('div')({
+    width: '100%',
+    height: 'fit-content',
+    gap: '24px',
+    opacity: 1,
+    borderRadius: '10px',
+    padding: '12px',
+    marginTop: '12px',
+    marginBottom: '20px',
+    border: '1px solid #E6E6E6',
+    display: 'flex',
+    flexDirection: 'column',
+});
+
+const HeaderContainer = styled('div')({
+    height: '28px',
+    width: '100%',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+});
+
+const HeaderTitle = styled('span')({
+    fontFamily: 'Montserrat, sans-serif',
+    fontWeight: 700,
+    fontStyle: 'normal',
+    fontSize: '14px',
+    lineHeight: '1',
+    letterSpacing: '0',
+    color: '#505050',
+});
+
+const LogoContainer = styled('div')({
+    width: '28px',
+    height: '28px',
+    gap: '10px',
+    opacity: 1,
+    borderRadius: '6px',
+    padding: '4px',
+    background: '#EBF5FF',
+    border: '1px solid #DFEDFF',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+});
+
+
+const Title = styled('span')({
+    fontFamily: 'Montserrat',
+    fontWeight: 600,
+    fontStyle: 'normal',
+    fontSize: '14px',
+    letterSpacing: '0%',
+    color: '#505050',
+});
+
+const TopHeader = styled('div')({
+    width: '100%',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px',
+});
+
+
+
+
+
+
+
