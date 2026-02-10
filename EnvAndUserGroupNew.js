@@ -270,7 +270,7 @@ const useStyles = makeStyles((theme) => ({
         display: 'flex',
         alignItems: 'center',
         color: '#0086FF',
-        padding: '12px 16px',
+        padding: '12px 6px 0 12px',
         //borderBottom: '1px solid #e0e0e0',
         fontSize: '14px',
         fontWeight: 700,
@@ -291,7 +291,7 @@ const useStyles = makeStyles((theme) => ({
         fontSize: '14px',
         fontWeight: 600,
         color: '#0086FF',
-        marginLeft: '10px'
+        marginLeft: '12px'
 
     },
     noteBody: {
@@ -301,7 +301,7 @@ const useStyles = makeStyles((theme) => ({
         marginLeft: '10px',
 
         '& p': {
-            margin: '0 0 8px 0',
+            margin: '0 0 18px 0',
         },
 
         '& ol': {
@@ -310,7 +310,7 @@ const useStyles = makeStyles((theme) => ({
         },
 
         '& li': {
-            marginBottom: '6px',
+            marginBottom: '3px',
             color: '#0086FF',
             cursor: 'pointer',
         },
