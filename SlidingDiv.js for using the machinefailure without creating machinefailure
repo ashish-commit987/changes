@@ -1,0 +1,542 @@
+import React, { useState } from 'react';
+import PropTypes from 'prop-types';
+import GenerateURL from '../../../../util/APIUrlProvider';
+import properties from '../../../../properties/properties';
+import InvokeApi, { SubscribeToApi, UnsubscribeToApi } from '../../../../util/apiInvoker';
+import { Link } from 'react-router-dom';
+import { Input } from '../../../../components/genericComponents/Input';
+import Tooltip from '@mui/material/Tooltip';
+import { Loading } from '../../../utils/Loading';
+import RerunAfterFailure from '../../listing/component/RerunAfterFailure';
+import FillApprovalQuestions from './FillApprovalQuestions';
+import moment from 'moment';
+import GenericSkeleton from '../../../../components/genericComponents/Skeletons/GenericSkeleton';
+import EnvAndUserGroupNew from '../../../serviceRevamp/components/EnvAndUserGroupNew';
+
+const SlidingDiv = (props) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [state, setState] = useState({ data: [], formData: {}, formError: {}, failed_stage_data: {}, deployment_type: "rolling", complete_rollback: false });
+  const [servicesWillConitue, setServicesWillContinue] = useState([]);
+  const [failedServices, setFailedServices] = useState([]);
+  const [failedCanaryServices, setFailedCanaryServices] = useState([]);
+  const [successCanaryServices, setSuccessCanaryServices] = useState([]);
+  const pipeline_instance_id = props.pipeline_instance_id ? props.pipeline_instance_id : null;
+  const pipeline_id = props.pipeline_id;
+  const postFinalData = props.postFinalData ? props.postFinalData : () => { };
+  const stage_instance = props.data ? props.data : [];
+  const all_stages = props.all_stages ? props.all_stages : [];
+  const ollyEnabled = props.ollyEnabled ? props.ollyEnabled : false;
+
+  const failed_stage_instance = stage_instance[stage_instance.length - 1];
+  const filterApprovalQuestionsStage = all_stages.find(item => item.id === failed_stage_instance.stage_id)
+
+  const failed_task_instance = failed_stage_instance && failed_stage_instance.task_instance
+    .filter(item => item.status === "FAILED")
+    .reduce((latest, current) => {
+      return !latest || new Date(current.updated_at) > new Date(latest.updated_at)
+        ? current
+        : latest;
+    }, null);
+  const failed_task_dep_type = failed_task_instance?.task_type == "DEPLOY" ? failed_task_instance.deployment_type == "CANARY" ? "canary" : "rolling" : null
+  const continuePipelineFailure = props.continuePipelineFailure ? props.continuePipelineFailure : null;
+  const rerunPipeline = props.rerunPipeline;
+  const rerun_pipeline_status = props.rerun_pipeline_status ? props.rerun_pipeline_status : null;
+  const totalServices = props.totalServices;
+  const [showTable, setShowTable] = useState(true);
+
+  const continueClicked = () => {
+    setShowTable(false);
+  };
+
+  const backClicked = () => {
+    setShowTable(true);
+    setState((new_state) => ({
+      ...new_state,
+      complete_rollback: false,
+    }))
+  };
+
+  const handleCompleteRollback = () => {
+    setShowTable(false);
+    setState((new_state) => ({
+      ...new_state,
+      complete_rollback: true
+    }))
+  }
+
+  function closeDialogAndApiHit(data) {
+    // toggleDiv()
+    var post_data = {
+      ...data,
+      stage_instance_id: failed_stage_instance && failed_stage_instance.id,
+      task_instance_id: failed_task_instance && failed_task_instance.id,
+    }
+    rerunPipeline(post_data);
+    setIsOpen(!isOpen);
+  }
+
+  function getServiceDetails() {
+    var requestInfo = {
+      endPoint: GenerateURL({
+        pipeline_id: pipeline_id,
+        pipeline_instance_id: pipeline_instance_id ? pipeline_instance_id : null,
+        stage_instance_id: failed_stage_instance && failed_stage_instance.id,
+        task_instance_id: failed_task_instance && failed_task_instance.id,
+      }, properties.api.task_service_details),
+      httpMethod: "GET",
+      httpHeaders: { "Content-Type": "application/json" }
+    }
+
+    InvokeApi(requestInfo, handleResponse, handleError);
+
+    setState(new_state => ({
+      ...new_state,
+      loaded: false
+    }));
+  }
+
+  function handleResponse(data) {
+    console.log(data, "abcdsbcgsdhbvg")
+    setState(new_state => ({
+      ...new_state,
+      loaded: true,
+      data: renderTableComponent(data)
+    }));
+  }
+
+  function handleError(error) {
+    console.log(error, "findingerrpr")
+    setState({
+      ...state,
+      loaded: true,
+      error: error
+    });
+  }
+
+  const renderTableComponent = (data) => {
+    if (!data) return [];
+
+    // Task handlers mapping
+    const taskHandlers = {
+      component_task_instance: handleComponentTasks,
+      jira_integration_task_instance: handleJiraTasks,
+      rest_api_task_instance: handleRestApiTasks,
+      canary_analysis_task_instance: handleCanaryTasks,
+      pipeline_task_job_instance: handlePipelineTasks,
+      snow_integration_task_instance: handleSnowTasks,
+      attech_documents_task_instance: handleAttechDocumentsTasks,
+      global_deploy_task_instance: handleGlobalProjectTasks,
+      global_build_task_instance: handleGlobalProjectTasks,
+      global_promote_task_instance: handleGlobalProjectTasks
+    };
+
+    // Find the first available task type and process it
+    for (const [taskType, handler] of Object.entries(taskHandlers)) {
+      if (data[taskType] && data[taskType].length > 0) {
+        return handler(data[taskType], data);
+      }
+    }
+    return [];
+  };
+
+  // Component task handler
+  function handleComponentTasks(taskInstances, data) {
+    const failedTasks = taskInstances.filter(item =>
+      item.activity_status?.status === "FAILED" ||
+      item.activity_status?.status === "DONT_RUN"
+    );
+
+    const successTasks = taskInstances.filter(item =>
+      item.activity_status?.status === "SUCCESS"
+    );
+
+    var filterFailedTask = data.component_task_instance.filter(item => item.activity_status?.status === "FAILED" || item.activity_status?.status === "DONT_RUN");
+    var filterSuccessServices = data.component_task_instance.filter(item => item.activity_status?.status === "SUCCESS");
+
+    // Set global state
+    setServicesWillContinue(successTasks.map(item => item.component.name));
+    setFailedServices(failedTasks.map(item => item.component.name));
+    setFailedCanaryServices(filterFailedTask)
+    setSuccessCanaryServices(filterSuccessServices)
+
+    return failedTasks.reduce((uniqueTasks, item) => {
+      const component_name = item.component.name;
+      const project_env = item?.project_env;
+      const branch_name = item.activity_status?.payload_json?.filter_details?.branches?.[project_env]?.[component_name];
+
+      const existingTask = uniqueTasks.find(task =>
+        task.service_name === component_name &&
+        task.env_name === (project_env || null) &&
+        task.branch_name === (branch_name || null) &&
+        task.status === item.status
+      );
+
+      if (!existingTask || existingTask.task_type === item.task_type) {
+        uniqueTasks.push({
+          service_name: component_name || null,
+          env_name: project_env || null,
+          branch_name: branch_name || null,
+          status: item.status,
+          logs_url: `${item.global_task_id}&service_name=${component_name}&service_env=${data.project_environment}&status=${item.status}&tab_id=${item.id}`,
+          task_type: failed_task_instance.task_type,
+          manage_failure_json: item.manage_failure_json || null,
+          deployment_type: /* failed_task_instance.deployment_type */"canary",
+        });
+      }
+
+      return uniqueTasks;
+    }, []);
+  }
+
+  // Jira task handler
+  function handleJiraTasks(taskInstances) {
+    const failedTasks = taskInstances.filter(item => item.status === "FAILED");
+
+    return failedTasks.map(item => ({
+      status: item.status,
+      issue_type: item?.jira_task_details?.issuetype,
+      issue_key: item?.jira_task_details?.issue_key,
+      operation: item?.jira_task_details?.operation,
+      logs_url: `${item.global_task_id}&status=${item.status}&tab_id=${item.id}`,
+      task_type: failed_task_instance.task_type
+    }));
+  }
+
+  // REST API task handler
+  function handleRestApiTasks(taskInstances) {
+    const failedTasks = taskInstances.filter(item => item.status === "FAILED");
+
+    return failedTasks.map(item => ({
+      status: item.status,
+      logs_url: `${item.global_task_id}&status=${item.status}&tab_id=${item.id}`,
+      task_type: failed_task_instance.task_type,
+      method: item.rest_api_task_details?.method || "N/A",
+      timeout: item.rest_api_task_details?.request_timeout || "N/A",
+      url: item.rest_api_task_details?.url || "N/A",
+    }));
+  }
+
+  // Canary analysis task handler
+  function handleCanaryTasks(taskInstances) {
+    const failedTasks = taskInstances.filter(item => item.status === "FAILED");
+
+    return failedTasks.map(item => ({
+      status: item.status,
+      logs_url: `${item.global_task_id}&status=${item.status}&tab_id=${item.id}`,
+      task_type: failed_task_instance.task_type,
+      duration: item.task_data?.canary_analysis_duration ? `${item.task_data.canary_analysis_duration} s` : "N/A"
+    }));
+  }
+
+  // Pipeline task handler
+  function handlePipelineTasks(taskInstances) {
+    const failedTasks = taskInstances.filter(item => item.status === "FAILED");
+    const failedServices = [];
+
+    const tableData = failedTasks.map(item => {
+      const taskType = item.job_json.is_dependent ? 'dependent_job' : 'independent_job';
+
+      if (taskType === "dependent_job") {
+        failedServices.push(item.job_meta_data.component_name);
+      }
+
+      return {
+        status: item.status,
+        logs_url: `${item.global_task_id}&status=${item.status}&tab_id=${item.id}`,
+        task_type: taskType,
+        dynamic_job: Boolean(item.job_code),
+        duration: "N/A"
+      };
+    });
+
+    setFailedServices(failedServices);
+    return tableData;
+  }
+
+  function handleSnowTasks(taskInstances) {
+    const failedTasks = taskInstances.filter(item => item.status === "FAILED");
+
+    return failedTasks.map(item => ({
+      status: item.status,
+      issue_key: item?.snow_task_details?.issue_key,
+      operation: item?.snow_task_details?.snow_operation,
+      logs_url: `${item.global_task_id}&status=${item.status}&tab_id=${item.id}`,
+      task_type: failed_task_instance.task_type
+    }));
+  }
+
+  function handleAttechDocumentsTasks(taskInstances) {
+    const failedTasks = taskInstances.filter(item => item.status === "FAILED");
+
+    return failedTasks.map(item => ({
+      status: item.status,
+      operation: item?.attach_task_details?.attach_operation,
+      logs_url: `${item.global_task_id}&status=${item.status}&tab_id=${item.id}`,
+      task_type: failed_task_instance.task_type
+    }));
+  }
+
+  function handleGlobalProjectTasks(taskInstances, data) {
+    console.log(taskInstances, data, "lkslkalks");
+    const failedTasks = taskInstances[0].project_build_instances.filter(item =>
+      item?.status === "FAILED" ||
+      item?.status === "DONT_RUN"
+    );
+
+    const successTasks = taskInstances[0].project_build_instances.filter(item =>
+      item?.status === "SUCCESS"
+    );
+
+    const filterFailedTask = taskInstances[0].project_build_instances?.flatMap(project_task =>
+      project_task.component_task_insatnce?.filter(
+        item =>
+          item.activity_status?.status === "FAILED" ||
+          item.activity_status?.status === "DONT_RUN"
+      ).map(item => ({
+        ...item,
+        project_env: project_task.project_env
+      })) || []
+    );
+    const filterSuccessServices = taskInstances[0].project_build_instances?.flatMap(project_task =>
+      project_task.component_task_insatnce?.filter(
+        item => item.activity_status?.status === "SUCCESS"
+      ).map(item => ({
+        ...item,
+        project_env: project_task.project_env
+      })) || []
+    );
+
+    setServicesWillContinue(filterSuccessServices.map(data => data.component.name));
+    setFailedServices(filterFailedTask.map(data => data.component.name));
+    setFailedCanaryServices(filterFailedTask)
+    setSuccessCanaryServices(filterSuccessServices)
+    let uniqueTasks = [];
+    return filterFailedTask.reduce((uniqueTasks, item) => {
+      const component_name = item.component.name;
+      const project_env = item?.project_env?.name;
+      const branch_name = item.activity_status?.payload_json?.filter_details?.branches?.[project_env]?.[component_name];
+
+      const existingTask = uniqueTasks.find(task =>
+        task.service_name === component_name &&
+        task.env_name === (project_env || null) &&
+        task.branch_name === (branch_name || null) &&
+        task.status === item.status
+      );
+
+      if (!existingTask || existingTask.task_type === item.task_type) {
+        uniqueTasks.push({
+          service_name: component_name || null,
+          env_name: project_env || null,
+          branch_name: branch_name || null,
+          status: item.status,
+          logs_url: `${item.global_task_id}&service_name=${component_name}&service_env=${data.project_environment}&status=${item.status}&tab_id=${item.id}`,
+          task_type: failed_task_instance.task_type,
+          manage_failure_json: item.manage_failure_json || null,
+          deployment_type: /* failed_task_instance.deployment_type */"canary",
+        });
+      }
+
+      return uniqueTasks;
+    }, []);
+  }
+
+
+  const toggleDiv = () => {
+    if (isOpen) {
+      setIsOpen(!isOpen);
+      UnsubscribeToApi(GenerateURL({
+        pipeline_id: pipeline_id,
+        pipeline_instance_id: pipeline_instance_id ? pipeline_instance_id : null,
+        stage_instance_id: failed_stage_instance && failed_stage_instance.id,
+        task_instance_id: failed_task_instance && failed_task_instance.id,
+      }, properties.api.task_service_details));
+    } else {
+      setIsOpen(!isOpen);
+      if (!failed_task_instance && failed_stage_instance && (failed_stage_instance.stageinstanceapproval && failed_stage_instance.stageinstanceapproval != null)) {
+        setState(new_state => ({
+          ...new_state,
+          failed_stage_data: failed_stage_instance,
+          loaded: true
+        }));
+
+      } else {
+        SubscribeToApi(GenerateURL({
+          pipeline_id: pipeline_id,
+          pipeline_instance_id: pipeline_instance_id ? pipeline_instance_id : null,
+          stage_instance_id: failed_stage_instance && failed_stage_instance.id,
+          task_instance_id: failed_task_instance && failed_task_instance.id,
+        }, properties.api.task_service_details));
+        getServiceDetails();
+      }
+    }
+    setShowTable(true);
+    setState((new_state) => ({
+      ...new_state,
+      complete_rollback: false,
+    }))
+  };
+
+  const postContinuePipelineData = () => {
+    var find_task_type = state.data && state.data[0] && state.data[0].task_type;
+    console.log(find_task_type, "find_task_type");
+    console.log("hdsjhsjd", failed_task_instance);
+    var post_data = {}
+    if (find_task_type == "BUILD" || find_task_type == "DEPLOY" || find_task_type == "PROMOTE"
+      || find_task_type == "GLOBAL_BUILD" || find_task_type == "GLOBAL_DEPLOY" || find_task_type == "GLOBAL_PROMOTE" || find_task_type == "ANDROID_BUILD" || find_task_type == "ANDROID_DEPLOY"
+    ) {
+      post_data = {
+        "stage_instance_id": failed_stage_instance && failed_stage_instance.id,
+        "task_instance_id": failed_task_instance && failed_task_instance.id,
+        "components": failedServices,//servicesWillConitue
+      }
+    } else if (find_task_type == "DEPLOY" && failed_task_dep_type == "canary") {
+      post_data = {
+        "stage_instance_id": failed_stage_instance && failed_stage_instance.id,
+        "task_instance_id": failed_task_instance && failed_task_instance.id,
+        "failed_services": getFailedSuccessServices(failedCanaryServices),
+        "success_services": getFailedSuccessServices(successCanaryServices),
+        "complete_rollback": state.complete_rollback,
+        "deployment_type": "CANARY"
+      }
+    } else if (find_task_type == "DEPLOY" && failed_task_dep_type != "canary") {
+      post_data = {
+        "stage_instance_id": failed_stage_instance && failed_stage_instance.id,
+        "task_instance_id": failed_task_instance && failed_task_instance.id,
+        "components": failedServices,
+        "complete_rollback": state.complete_rollback,
+        "deployment_type": "ROLLING"
+      }
+    }
+    else {
+      if (find_task_type == "JIRA_INTEGRATION") {
+        var ticket_key = state.data.map(item => { return item.issue_key });
+        ticket_key = ticket_key && ticket_key[0];
+        post_data = {
+          ...state.formData,
+          "stage_instance_id": failed_stage_instance && failed_stage_instance.id,
+          "task_instance_id": failed_task_instance && failed_task_instance.id,
+        }
+      } else {
+        if (find_task_type == "REST_API") {
+          post_data = {}
+        } else if (find_task_type == "dependent_job") {
+          post_data = {
+            "stage_instance_id": failed_stage_instance && failed_stage_instance.id,
+            "task_instance_id": failed_task_instance && failed_task_instance.id,
+            "components": failedServices,
+          }
+        } else if (find_task_type == "SNOW_INTEGRATION") {
+          post_data = {
+            ...state.formData,
+            "stage_instance_id": failed_stage_instance && failed_stage_instance.id,
+            "task_instance_id": failed_task_instance && failed_task_instance.id,
+          }
+        } else {
+          post_data = {
+            "stage_instance_id": failed_stage_instance && failed_stage_instance.id,
+            "task_instance_id": failed_task_instance && failed_task_instance.id,
+          }
+        }
+      }
+    }
+    continuePipelineFailure(post_data)
+    toggleDiv()
+  }
+
+  const getIdList = (data) => {
+    let id_list = [];
+    for (let key in data) {
+      id_list.push(data[key].phase_deploy_history_id)
+    }
+
+    return id_list;
+  }
+
+  const getFailedSuccessServices = (service_list) => {
+    let updated_list = [];
+    service_list.forEach(service => {
+      let obj = {
+        name: service.component.name,
+        phase_deployment_id_list: getIdList(service.activity_status.payload_json.cd_phase_history_mapping)
+      }
+      updated_list.push(obj);
+    });
+
+    return updated_list;
+  }
+
+  const showContinueButton = servicesWillConitue.length > 0 || (state.data && state.data.length > 0);
+  const showRollbackButton = (failed_task_dep_type && ["canary", "rolling"].includes(failed_task_dep_type.toLowerCase())) ||
+    (failed_task_instance && String(failed_task_instance.task_type).toUpperCase() === "DEPLOY") ||
+    (state.data && state.data.length > 0 && String(state.data[0].task_type).toUpperCase() === "DEPLOY");
+  const showRerunButton = state.data && state.data.length > 0;
+
+  return (
+    <>
+      {failed_stage_instance && failed_stage_instance.status == "FAILED" && (
+        <>
+          {rerun_pipeline_status === "POST" ? (
+            <GenericSkeleton width={213} height={40} variant="rect" style={{
+              borderRadius: '20px',
+              position: 'absolute',
+              bottom: '10px',
+              right: '50px'
+            }} />
+          ) : (
+            <button className='btn btn-danger-v2 btn-posi-bottom d-flex align-center' style={ollyEnabled && ollyEnabled === "true" ? { right: '115px' } : {}} onClick={toggleDiv}>
+              <i className="ri-error-warning-line font-18"></i>&nbsp;<span>{"Manage Failures"} </span>
+            </button>
+          )}
+
+          {/* Use the new reusable component */}
+          <EnvAndUserGroupNew
+            open={isOpen}
+            handleClose={toggleDiv}
+            executionData={state.data}
+            headerTitle={`Execution details for ${state.data[0]?.task_type?.toLowerCase() || 'failed'} job`}
+            envName={state.data[0]?.env_name || "Env"}
+            showTable={showTable}
+            isRollbackConfirmation={state.complete_rollback}
+            onContinue={postContinuePipelineData} // This acts as clicking the button to proceed to confirmation
+            onRerun={() => closeDialogAndApiHit(state.data)}
+            onRollback={handleCompleteRollback}
+            onBack={backClicked}
+            onConfirm={postContinuePipelineData} // Acts as 'Confirm' in the confirmation view
+            canContinue={showContinueButton}
+            canRollback={showRollbackButton}
+            canRerun={showRerunButton}
+            loading={!state.loaded}
+            error={state.error}
+            failedStageName={state.failed_stage_data?.name}
+            failedTaskName={failed_task_instance && failed_task_instance.task_name}
+          />
+
+          {/* Approval Questions Failures */}
+          {state.failed_stage_data && Object.keys(state.failed_stage_data).length !== 0 && (
+            <div style={{ display: 'none' }}>
+              {/* Hidden because we haven't integrated FillApprovalQuestions into the new EnvAndUserGroupNew component yet, 
+                             keeping it here logically but invisible until we decide where to put it in the new UI.
+                             Previous implementation had it in the footer. */}
+              <FillApprovalQuestions
+                stage_instance_id={failed_stage_instance && failed_stage_instance.id}
+                pipeline_id={pipeline_id ? pipeline_id : ""}
+                pipeline_instance_id={pipeline_instance_id ? pipeline_instance_id : ""}
+                postFinalData={postFinalData}
+                stage_name={failed_stage_instance.name}
+                btnVariant="re_attempt"
+                stage_instance_status={failed_stage_instance && failed_stage_instance.status}
+                questionnaires={filterApprovalQuestionsStage && filterApprovalQuestionsStage.questionnaires}
+              />
+            </div>
+          )}
+        </>
+      )}
+    </>
+  );
+};
+
+SlidingDiv.propTypes = {
+  ...PropTypes.objectOf(PropTypes.any),
+};
+
+export default SlidingDiv;
