@@ -3,9 +3,9 @@ import PropTypes from 'prop-types';
 import Dialog from '@mui/material/Dialog';
 import { makeStyles } from '@mui/styles';
 import { color } from "highcharts";
-import NewChip from "../../../components/newChip/NewChip";
+import NewChip from "../../../../components/newChip/NewChip";
 
-const EnvAndUserGroupNew = (props) => {
+const MachineFailure = (props) => {
     const classes = useStyles();
     const { open, handleClose } = props;
 
@@ -53,6 +53,7 @@ const EnvAndUserGroupNew = (props) => {
                 }
                 <div className='right-panel-dialog bg-white'>
                     <>
+                        {/* ... header ... */}
                         <div className='font-18 font-weight-600 color-white d-flex align-center space-between' style={{ backgroundColor: '#0086ff', padding: '13.5px 20px' }}>
                             <p>Manage Failure</p>
 
@@ -69,8 +70,12 @@ const EnvAndUserGroupNew = (props) => {
                         </div>
 
                         {/* Table Section */}
-                        <div className="body-panel-new-one" style={{ padding: '0 20px 80px 20px' }}>
+                        <div
+                            className="body-panel-new-one"
+                            style={{ padding: '0 0px 0px 20px' }}
+                        >
                             <div className={classes.tableContainer}>
+                                {/* ... table content ... */}
                                 <div className={classes.tableHeader}>
 
                                     <span className={classes.headerTitle}>
@@ -142,26 +147,27 @@ const EnvAndUserGroupNew = (props) => {
                                 </div>
 
                             </div>
-                        </div>
 
-                        <div className='footer-right-panel d-flex align-center justify-end' style={{ gap: '5px' }}>
-                            <button className='btn btn-outlined d-flex align-center justify-center btn-semi-bold' style={{ color: '#124D9B' }}>CONTINUE WITH FAILURE</button>
-                            <button className='btn btn-secondary d-flex align-center justify-center btn-semi-bold' style={{ backgroundColor: '#FEA111' }}>COMPLETE ROLLBACK</button>
-                            <button className='btn btn-primary d-flex align-center justify-center btn-semi-bold' >RE-RUN JOB</button>
+                            <div className='footer-right-panel d-flex align-center justify-end' style={{ gap: '5px', marginTop: '20px' }}>
+                                <button className='btn btn-outlined d-flex align-center justify-center btn-semi-bold' style={{ color: '#124D9B' }}>CONTINUE WITH FAILURE</button>
+                                <button className='btn btn-secondary d-flex align-center justify-center btn-semi-bold' style={{ backgroundColor: '#FEA111' }}>COMPLETE ROLLBACK</button>
+                                <button className='btn btn-primary d-flex align-center justify-center btn-semi-bold' >RE-RUN JOB</button>
+                            </div>
+
                         </div>
                     </>
-                </div>
-            </div>
-        </Dialog>
+                </div >
+            </div >
+        </Dialog >
     );
 };
 
-EnvAndUserGroupNew.propTypes = {
+MachineFailure.propTypes = {
     open: PropTypes.bool,
     handleClose: PropTypes.func,
 }
 
-export default EnvAndUserGroupNew;
+export default MachineFailure;
 
 const useStyles = makeStyles((theme) => ({
     root: {
@@ -213,9 +219,9 @@ const useStyles = makeStyles((theme) => ({
         '& .footer-right-panel': {
             //backgroundColor: '#fafafa',
             padding: '16px',
-            position: 'absolute',
-            bottom: '0px',
-            width: '650px',
+            // position: 'absolute', // Removed absolute positioning
+            // bottom: '0px',        // Removed bottom alignment
+            width: '100%',        // Changed to 100% to fit container
             '& .btn-semi-bold': {
                 fontFamily: 'Montserrat, sans-serif',
                 fontWeight: 600,
@@ -239,13 +245,15 @@ const useStyles = makeStyles((theme) => ({
         border: '1px solid #e0e0e0',
         borderRadius: '4px',
         overflow: 'hidden',
+        marginRight: '20px'
     },
     noteContainer: {
         border: '1px solid #e0e0e0',
         borderRadius: '4px',
         overflow: 'hidden',
         marginTop: '24px',
-        background: '#DFEDFF'
+        background: '#DFEDFF',
+        marginRight: '20px'
     },
     tableHeader: {
         //backgroundColor: 'none',
@@ -287,7 +295,7 @@ const useStyles = makeStyles((theme) => ({
 
     },
     noteBody: {
-        padding: '0 16px 16px 41px',
+        padding: '0 12px 16px 41px',
         fontSize: '13px',
         color: '#0086FF',
         marginLeft: '10px',
