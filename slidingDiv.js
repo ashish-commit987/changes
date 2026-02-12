@@ -1,0 +1,1644 @@
+import React, { useState } from 'react';
+import PropTypes from 'prop-types';
+import GenerateURL from '../../../../util/APIUrlProvider';
+import properties from '../../../../properties/properties';
+import InvokeApi, { SubscribeToApi, UnsubscribeToApi } from '../../../../util/apiInvoker';
+import { Link } from 'react-router-dom';
+import { Input } from '../../../../components/genericComponents/Input';
+import Tooltip from '@mui/material/Tooltip';
+import { Loading } from '../../../utils/Loading';
+import RerunAfterFailure from '../../listing/component/RerunAfterFailure';
+import FillApprovalQuestions from './FillApprovalQuestions';
+import moment from 'moment';
+import GenericSkeleton from '../../../../components/genericComponents/Skeletons/GenericSkeleton';
+import MachineFailure from './MachineFailure';
+
+
+const SlidingDiv = (props) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [stripedRows] = useState(true);
+  const [state, setState] = useState({ data: [], formData: {}, formError: {}, failed_stage_data: {}, deployment_type: "rolling", complete_rollback: false });
+  const [servicesWillConitue, setServicesWillContinue] = useState([]);
+  const [failedServices, setFailedServices] = useState([]);
+  const [failedCanaryServices, setFailedCanaryServices] = useState([]);
+  const [successCanaryServices, setSuccessCanaryServices] = useState([]);
+  const pipeline_instance_id = props.pipeline_instance_id ? props.pipeline_instance_id : null;
+  const pipeline_id = props.pipeline_id;
+  const postFinalData = props.postFinalData ? props.postFinalData : () => { };
+  const stage_instance = props.data ? props.data : [];
+  const all_stages = props.all_stages ? props.all_stages : [];
+  const ollyEnabled = props.ollyEnabled ? props.ollyEnabled : false;
+  console.log(all_stages, "all_stagesall_stages", stage_instance)
+  console.log(props, state, "all_stagesall_stages")
+  const pipeline_data = props.pipeline_data ? props.pipeline_data : null;
+
+  const onHandleOpenFillQuestions = props.onHandleOpenFillQuestions ? props.onHandleOpenFillQuestions : () => { }
+  const failed_stage_instance = stage_instance[stage_instance.length - 1];
+
+  const filterApprovalQuestionsStage = all_stages.find(item => item.id === failed_stage_instance.stage_id)
+
+  const failed_task_instance = failed_stage_instance && failed_stage_instance.task_instance
+    .filter(item => item.status === "FAILED")
+    .reduce((latest, current) => {
+      return !latest || new Date(current.updated_at) > new Date(latest.updated_at)
+        ? current
+        : latest;
+    }, null);
+  const failed_task_dep_type = failed_task_instance?.task_type == "DEPLOY" ? failed_task_instance.deployment_type == "CANARY" ? "canary" : "rolling" : null
+  console.log(failed_stage_instance, "pipeline_datapipeline_data", filterApprovalQuestionsStage)
+  const continuePipelineFailure = props.continuePipelineFailure ? props.continuePipelineFailure : null;
+  const rerunPipeline = props.rerunPipeline;
+  const rerun_pipeline_status = props.rerun_pipeline_status ? props.rerun_pipeline_status : null;
+  const totalServices = props.totalServices;
+  const [showTable, setShowTable] = useState(true);
+  const [isFlipped, setIsFlipped] = useState(false);
+  const pipeline_post_data = props.pipeline_post_data;
+  console.log(failed_task_instance, "pipeline_post_data")
+  const continueClicked = () => {
+    setIsFlipped(true);
+    setTimeout(() => {
+      setShowTable(false);
+      setIsFlipped(false);
+    }, 500);
+  };
+
+  const backClicked = () => {
+    setIsFlipped(true);
+    setTimeout(() => {
+      setShowTable(true);
+      setIsFlipped(false);
+    }, 500);
+    setState((new_state) => ({
+      ...new_state,
+      complete_rollback: false,
+    }))
+  };
+
+  const handleCompleteRollback = () => {
+    setIsFlipped(true);
+    setTimeout(() => {
+      setShowTable(false);
+      setIsFlipped(false);
+    }, 500);
+    setState((new_state) => ({
+      ...new_state,
+      complete_rollback: true
+    }))
+  }
+
+  function closeDialogAndApiHit(data) {
+   
+    var post_data = {
+      ...data,
+      stage_instance_id: failed_stage_instance && failed_stage_instance.id,
+      task_instance_id: failed_task_instance && failed_task_instance.id,
+    }
+    rerunPipeline(post_data);
+    setIsOpen(!isOpen);
+  }
+ 
+
+  function getServiceDetails() {
+    var requestInfo = {
+      endPoint: GenerateURL({
+        pipeline_id: pipeline_id,
+        pipeline_instance_id: pipeline_instance_id ? pipeline_instance_id : null,
+        stage_instance_id: failed_stage_instance && failed_stage_instance.id,
+        task_instance_id: failed_task_instance && failed_task_instance.id,
+      }, properties.api.task_service_details),
+      httpMethod: "GET",
+      httpHeaders: { "Content-Type": "application/json" }
+    }
+
+    InvokeApi(requestInfo, handleResponse, handleError);
+
+    setState(new_state => ({
+      ...new_state,
+      loaded: false
+    }));
+  }
+
+  function handleResponse(data) {
+    console.log(data, "abcdsbcgsdhbvg")
+    setState(new_state => ({
+      ...new_state,
+      loaded: true,
+      data: renderTableComponent(data)
+    }));
+  }
+
+
+
+  function handleError(error) {
+    console.log(error, "findingerrpr")
+    setState({
+      ...state,
+      loaded: true,
+      error: error
+    });
+  }
+  function getDuration(startTime, endTime) {
+    try {
+      const start = moment(startTime);
+      const end = moment(endTime);
+      const duration = moment.duration(end.diff(start));
+
+      const hours = duration.hours();
+      const minutes = duration.minutes();
+      const seconds = duration.seconds();
+
+      let result = [];
+      if (hours > 0) result.push(`${hours}h`);
+      if (minutes > 0) result.push(`${minutes}m`);
+      if (seconds > 0 || result.length === 0) result.push(`${seconds}s`);
+
+      return result.join(' ');
+    }
+    catch (e) {
+      return 'NA'
+    }
+
+  }
+  
+
+  const renderTableComponent = (data) => {
+    console.log(data, "Processing table data");
+
+    if (!data) {
+      return [];
+    }
+
+    
+    const taskHandlers = {
+      component_task_instance: handleComponentTasks,
+      jira_integration_task_instance: handleJiraTasks,
+      rest_api_task_instance: handleRestApiTasks,
+      canary_analysis_task_instance: handleCanaryTasks,
+      pipeline_task_job_instance: handlePipelineTasks,
+      snow_integration_task_instance: handleSnowTasks,
+      attech_documents_task_instance: handleAttechDocumentsTasks,
+      global_deploy_task_instance: handleGlobalProjectTasks,
+      global_build_task_instance: handleGlobalProjectTasks,
+      global_promote_task_instance: handleGlobalProjectTasks
+    };
+
+   
+    for (const [taskType, handler] of Object.entries(taskHandlers)) {
+      if (data[taskType] && data[taskType].length > 0) {
+        return handler(data[taskType], data);
+      }
+    }
+
+    return [];
+  };
+
+ 
+  function handleComponentTasks(taskInstances, data) {
+    const failedTasks = taskInstances.filter(item =>
+      item.activity_status?.status === "FAILED" ||
+      item.activity_status?.status === "DONT_RUN"
+    );
+
+    const successTasks = taskInstances.filter(item =>
+      item.activity_status?.status === "SUCCESS"
+    );
+
+    var filterFailedTask = data.component_task_instance.filter(item => item.activity_status?.status === "FAILED" || item.activity_status?.status === "DONT_RUN");
+    var filterSuccessServices = data.component_task_instance.filter(item => item.activity_status?.status === "SUCCESS");
+
+    
+    setServicesWillContinue(successTasks.map(item => item.component.name));
+    setFailedServices(failedTasks.map(item => item.component.name));
+    setFailedCanaryServices(filterFailedTask)
+    setSuccessCanaryServices(filterSuccessServices)
+
+    return failedTasks.reduce((uniqueTasks, item) => {
+      const component_name = item.component.name;
+      const project_env = item?.project_env;
+      const branch_name = item.activity_status?.payload_json?.filter_details?.branches?.[project_env]?.[component_name];
+
+      const existingTask = uniqueTasks.find(task =>
+        task.service_name === component_name &&
+        task.env_name === (project_env || null) &&
+        task.branch_name === (branch_name || null) &&
+        task.status === item.status
+      );
+
+      if (!existingTask || existingTask.task_type === item.task_type) {
+        uniqueTasks.push({
+          service_name: component_name || null,
+          env_name: project_env || null,
+          branch_name: branch_name || null,
+          status: item.status,
+          logs_url: `${item.global_task_id}&service_name=${component_name}&service_env=${data.project_environment}&status=${item.status}&tab_id=${item.id}`,
+          task_type: failed_task_instance.task_type,
+          manage_failure_json: item.manage_failure_json || null,
+          deployment_type: /* failed_task_instance.deployment_type */"canary",
+        });
+      }
+
+      return uniqueTasks;
+    }, []);
+  }
+
+  
+  function handleJiraTasks(taskInstances) {
+    const failedTasks = taskInstances.filter(item => item.status === "FAILED");
+
+    return failedTasks.map(item => ({
+      status: item.status,
+      issue_type: item?.jira_task_details?.issuetype,
+      issue_key: item?.jira_task_details?.issue_key,
+      operation: item?.jira_task_details?.operation,
+      logs_url: `${item.global_task_id}&status=${item.status}&tab_id=${item.id}`,
+      task_type: failed_task_instance.task_type
+    }));
+  }
+
+ 
+  function handleRestApiTasks(taskInstances) {
+    const failedTasks = taskInstances.filter(item => item.status === "FAILED");
+
+    return failedTasks.map(item => ({
+      status: item.status,
+      logs_url: `${item.global_task_id}&status=${item.status}&tab_id=${item.id}`,
+      task_type: failed_task_instance.task_type,
+      method: item.rest_api_task_details?.method || "N/A",
+      timeout: item.rest_api_task_details?.request_timeout || "N/A",
+      url: item.rest_api_task_details?.url || "N/A",
+    }));
+  }
+
+  
+  function handleCanaryTasks(taskInstances) {
+    const failedTasks = taskInstances.filter(item => item.status === "FAILED");
+
+    return failedTasks.map(item => ({
+      status: item.status,
+      logs_url: `${item.global_task_id}&status=${item.status}&tab_id=${item.id}`,
+      task_type: failed_task_instance.task_type,
+      duration: item.task_data?.canary_analysis_duration ? `${item.task_data.canary_analysis_duration} s` : "N/A"
+    }));
+  }
+
+  
+  function handlePipelineTasks(taskInstances) {
+    const failedTasks = taskInstances.filter(item => item.status === "FAILED");
+    const failedServices = [];
+
+    const tableData = failedTasks.map(item => {
+      const taskType = item.job_json.is_dependent ? 'dependent_job' : 'independent_job';
+
+      if (taskType === "dependent_job") {
+        failedServices.push(item.job_meta_data.component_name);
+      }
+
+      return {
+        status: item.status,
+        logs_url: `${item.global_task_id}&status=${item.status}&tab_id=${item.id}`,
+        task_type: taskType,
+        dynamic_job: Boolean(item.job_code),
+        duration: "N/A"
+      };
+    });
+
+    setFailedServices(failedServices);
+    return tableData;
+  }
+
+  function handleSnowTasks(taskInstances) {
+    const failedTasks = taskInstances.filter(item => item.status === "FAILED");
+
+    return failedTasks.map(item => ({
+      status: item.status,
+      issue_key: item?.snow_task_details?.issue_key,
+      operation: item?.snow_task_details?.snow_operation,
+      logs_url: `${item.global_task_id}&status=${item.status}&tab_id=${item.id}`,
+      task_type: failed_task_instance.task_type
+    }));
+  }
+
+  function handleAttechDocumentsTasks(taskInstances) {
+    const failedTasks = taskInstances.filter(item => item.status === "FAILED");
+
+    return failedTasks.map(item => ({
+      status: item.status,
+      operation: item?.attach_task_details?.attach_operation,
+      logs_url: `${item.global_task_id}&status=${item.status}&tab_id=${item.id}`,
+      task_type: failed_task_instance.task_type
+    }));
+  }
+
+  function handleGlobalProjectTasks(taskInstances, data) {
+    console.log(taskInstances, data, "lkslkalks");
+    const failedTasks = taskInstances[0].project_build_instances.filter(item =>
+      item?.status === "FAILED" ||
+      item?.status === "DONT_RUN"
+    );
+
+    const successTasks = taskInstances[0].project_build_instances.filter(item =>
+      item?.status === "SUCCESS"
+    );
+
+    const filterFailedTask = taskInstances[0].project_build_instances?.flatMap(project_task =>
+      project_task.component_task_insatnce?.filter(
+        item =>
+          item.activity_status?.status === "FAILED" ||
+          item.activity_status?.status === "DONT_RUN"
+      ).map(item => ({
+        ...item,
+        project_env: project_task.project_env
+      })) || []
+    );
+    const filterSuccessServices = taskInstances[0].project_build_instances?.flatMap(project_task =>
+      project_task.component_task_insatnce?.filter(
+        item => item.activity_status?.status === "SUCCESS"
+      ).map(item => ({
+        ...item,
+        project_env: project_task.project_env
+      })) || []
+    );
+
+    setServicesWillContinue(filterSuccessServices.map(data => data.component.name));
+    setFailedServices(filterFailedTask.map(data => data.component.name));
+    setFailedCanaryServices(filterFailedTask)
+    setSuccessCanaryServices(filterSuccessServices)
+    let uniqueTasks = [];
+    return filterFailedTask.reduce((uniqueTasks, item) => {
+      const component_name = item.component.name;
+      const project_env = item?.project_env?.name;
+      const branch_name = item.activity_status?.payload_json?.filter_details?.branches?.[project_env]?.[component_name];
+
+      const existingTask = uniqueTasks.find(task =>
+        task.service_name === component_name &&
+        task.env_name === (project_env || null) &&
+        task.branch_name === (branch_name || null) &&
+        task.status === item.status
+      );
+
+      if (!existingTask || existingTask.task_type === item.task_type) {
+        uniqueTasks.push({
+          service_name: component_name || null,
+          env_name: project_env || null,
+          branch_name: branch_name || null,
+          status: item.status,
+          logs_url: `${item.global_task_id}&service_name=${component_name}&service_env=${data.project_environment}&status=${item.status}&tab_id=${item.id}`,
+          task_type: failed_task_instance.task_type,
+          manage_failure_json: item.manage_failure_json || null,
+          deployment_type: /* failed_task_instance.deployment_type */"canary",
+        });
+      }
+
+      return uniqueTasks;
+    }, []);
+  }
+
+
+  const toggleDiv = () => {
+    console.log(state, "usyguggsdv")
+    if (isOpen) {
+      setIsOpen(!isOpen);
+      UnsubscribeToApi(GenerateURL({
+        pipeline_id: pipeline_id,
+        pipeline_instance_id: pipeline_instance_id ? pipeline_instance_id : null,
+        stage_instance_id: failed_stage_instance && failed_stage_instance.id,
+        task_instance_id: failed_task_instance && failed_task_instance.id,
+      }, properties.api.task_service_details));
+    } else {
+      setIsOpen(!isOpen);
+      if (!failed_task_instance && failed_stage_instance && (failed_stage_instance.stageinstanceapproval && failed_stage_instance.stageinstanceapproval != null)) {
+        console.log(state, "usyguggsdv")
+        setState(new_state => ({
+          ...new_state,
+          failed_stage_data: failed_stage_instance,
+          loaded: true
+        }));
+
+      } else {
+        console.log(state, "usyguggsdv")
+        SubscribeToApi(GenerateURL({
+          pipeline_id: pipeline_id,
+          pipeline_instance_id: pipeline_instance_id ? pipeline_instance_id : null,
+          stage_instance_id: failed_stage_instance && failed_stage_instance.id,
+          task_instance_id: failed_task_instance && failed_task_instance.id,
+        }, properties.api.task_service_details));
+        getServiceDetails();
+        console.log(state, "usyguggsdv")
+      }
+
+      console.log("close state")
+    }
+    backClicked()
+  };
+  function onChangeHandler(e) {
+    var key = e.target.name;
+    var value = e.target.value;
+
+    setState({
+      ...state,
+      formData: {
+        ...state.formData,
+        [key]: value,
+      },
+      formError: {
+        ...state.formError,
+        [key]: null,
+      }
+    });
+  }
+
+
+  const postContinuePipelineData = () => {
+    var find_task_type = state.data && state.data[0] && state.data[0].task_type;
+    console.log(find_task_type, "find_task_type");
+    console.log("hdsjhsjd", failed_task_instance);
+    var post_data = {}
+    if (find_task_type == "BUILD" || find_task_type == "DEPLOY" || find_task_type == "PROMOTE"
+      || find_task_type == "GLOBAL_BUILD" || find_task_type == "GLOBAL_DEPLOY" || find_task_type == "GLOBAL_PROMOTE" || find_task_type == "ANDROID_BUILD" || find_task_type == "ANDROID_DEPLOY"
+    ) {
+      post_data = {
+        "stage_instance_id": failed_stage_instance && failed_stage_instance.id,
+        "task_instance_id": failed_task_instance && failed_task_instance.id,
+        "components": failedServices,
+      }
+    } else if (find_task_type == "DEPLOY" && failed_task_dep_type == "canary") {
+      post_data = {
+        "stage_instance_id": failed_stage_instance && failed_stage_instance.id,
+        "task_instance_id": failed_task_instance && failed_task_instance.id,
+        "failed_services": getFailedSuccessServices(failedCanaryServices),
+        "success_services": getFailedSuccessServices(successCanaryServices),
+        "complete_rollback": state.complete_rollback,
+        "deployment_type": "CANARY"
+      }
+    } else if (find_task_type == "DEPLOY" && failed_task_dep_type != "canary") {
+      post_data = {
+        "stage_instance_id": failed_stage_instance && failed_stage_instance.id,
+        "task_instance_id": failed_task_instance && failed_task_instance.id,
+        "components": failedServices,
+        "complete_rollback": state.complete_rollback,
+        "deployment_type": "ROLLING"
+      }
+    }
+    else {
+      if (find_task_type == "JIRA_INTEGRATION") {
+        var ticket_key = state.data.map(item => { return item.issue_key });
+        ticket_key = ticket_key && ticket_key[0];
+        console.log(state.formData, "task_type")
+        post_data = {
+          ...state.formData,
+          "stage_instance_id": failed_stage_instance && failed_stage_instance.id,
+          "task_instance_id": failed_task_instance && failed_task_instance.id,
+          
+        }
+      } else {
+        if (find_task_type == "REST_API") {
+          var ticket_key = state.data.map(item => { return item.issue_key });
+          ticket_key = ticket_key && ticket_key[0];
+          console.log(state.formData, "task_type")
+          post_data = {}
+        } else if (find_task_type == "dependent_job") {
+          post_data = {
+            "stage_instance_id": failed_stage_instance && failed_stage_instance.id,
+            "task_instance_id": failed_task_instance && failed_task_instance.id,
+            "components": failedServices,
+            
+          }
+        } else if (find_task_type == "SNOW_INTEGRATION") {
+          var ticket_key = state.data.map(item => { return item.issue_key });
+          ticket_key = ticket_key && ticket_key[0];
+          console.log(state.formData, "task_type")
+          post_data = {
+            ...state.formData,
+            "stage_instance_id": failed_stage_instance && failed_stage_instance.id,
+            "task_instance_id": failed_task_instance && failed_task_instance.id,
+            
+          }
+        } else {
+          post_data = {
+            "stage_instance_id": failed_stage_instance && failed_stage_instance.id,
+            "task_instance_id": failed_task_instance && failed_task_instance.id,
+            
+          }
+        }
+      }
+    }
+    continuePipelineFailure(post_data)
+    toggleDiv()
+  }
+  console.log(state, "ffdsf___safsaf")
+
+  const getIdList = (data) => {
+    let id_list = [];
+    for (let key in data) {
+      id_list.push(data[key].phase_deploy_history_id)
+    }
+
+    return id_list;
+  }
+
+  const getFailedSuccessServices = (service_list) => {
+    console.log(service_list, "asvbhabsvghvdc")
+    let updated_list = [];
+    service_list.forEach(service => {
+      let obj = {
+        name: service.component.name,
+        phase_deployment_id_list: getIdList(service.activity_status.payload_json.cd_phase_history_mapping)
+      }
+      updated_list.push(obj);
+    });
+
+    return updated_list;
+  }
+
+  const retriggerApproval = () => {
+    props.retriggerApprovalFn()
+  }
+  const handleRerunPipeline = () => {
+    rerunPipeline();
+  }
+
+  const chipStyle = {
+    borderRadius: '34px',
+    border: '1px solid #E6E6E6',
+    padding: '6px 12px',
+    backgroundColor: '#FAFAFA',
+    display: 'inline-block',
+    color: "#787878",
+    fontFamily: "Montserrat",
+    fontWeight: "600",
+    fontSize: "12px",
+    marginLeft: "9px",
+    marginTop: "12px"
+  };
+
+  const ServiceChip = ({ key, label }) => (
+    <div style={chipStyle}>{label}</div>
+  );
+
+  const servicesFailed = ['Dev ops', 'Demo-Z3', 'new_demo', 'new_demo'];
+  const servicesPassed = [
+    'Dev ops', 'Demo-Z3', 'new_demo', 'new_demo', 'new_demo',
+    'new_demo', 'new_demo', 'new_demo', '+3'
+  ];
+  console.log("dshhjajjaj", servicesWillConitue, failedServices);
+  console.log("abahbdgcagc", state)
+
+  console.log("dshhjajjaj", state, failed_stage_instance);
+  return (
+    <>{
+      failed_stage_instance && failed_stage_instance.status == "FAILED" &&
+      <>
+        {
+          rerun_pipeline_status === "POST" ?
+            <GenericSkeleton width={213} height={40} variant="rect" style={{
+              borderRadius: '20px',
+              position: 'absolute',
+              bottom: '10px',
+              right: '50px'
+            }} /> :
+            <button className='btn btn-danger-v2 btn-posi-bottom d-flex align-center' style={ollyEnabled && ollyEnabled === "true" ? { right: '115px' } : {}} onClick={toggleDiv}>
+              <i className="ri-error-warning-line font-18"></i>&nbsp;<span>{"Manage Failures"} </span>
+            </button>
+        }
+
+
+        {/* <div className={`drawer-div ${isOpen ? 'open border-none' : ''}`}>
+          <div className="content">
+            <div className='content-header d-flex align-center space-between'>
+              <div className='d-flex align-center'>
+                <img src='/images/bp-chatbot.svg' alt=".." />
+                {
+                  state.failed_stage_data && Object.keys(state.failed_stage_data).length > 0 ?
+                    <p>Stage has failed with following details : {state?.failed_stage_data?.name}</p>
+                    :
+                    <p>Job has failed with following details : {failed_task_instance && failed_task_instance.task_name ? failed_task_instance.task_name : "N/A"}</p>
+                }
+              </div>
+              <div>
+                <button className="btn btn-transparent" onClick={toggleDiv}>
+                  <span className='ri-close-line ' style={{ color: "#fff", fontSize: '18px' }} ></span>
+                </button>
+              </div>
+            </div>
+            <div className='pd-20 content-body '>
+              {!state.loaded ?
+                <Loading varient="light" />
+                :
+                state.error ?
+
+                  <div className='pd-20 text-center mt-20 mb-20' style={{ backgroundColor: '#F8F8F8', borderRadius: '8px' }}>
+                    <i className="ri-error-warning-line text-center" style={{ color: '#e9797e', textAlign: 'center', fontSize: '40px' }}></i>
+                    <p className="font-12 text-center">
+                      {typeof (state.error) == "string" ?
+                        state.error : state.error.toString()
+                      }
+                    </p>
+                    <p className="font-12 text-center">Something went wrong. please contact to the Super Admin</p>
+                  </div>
+
+                  :
+                  state.loaded ?
+
+                    <>
+                      {
+                        state.failed_stage_data && Object.keys(state.failed_stage_data).length > 0 ?
+
+                          <div className={`flip-container ${isFlipped ? 'flip' : ''}`}>
+                            <div className="flipper">
+                              <p>Stage Approval has failed.</p>
+                              <div className={`tableDivi ${showTable ? 'content-table' : 'hidden'}`}>
+                                <div className="tableDiv-container">
+                                  <table className={`tableDiv `} >
+
+                                    <thead>
+
+                                      <tr>
+                                        <th>Stage</th>
+                                        <th>Status</th>
+                                        <th>Logs</th>
+                                      </tr>
+                                    </thead>
+                                    <tr>
+                                      <th className='table-sub-header' colSpan={4}>Execution Details for failed stage </th>
+                                    </tr>
+                                    <tbody>
+                                      <tr>
+                                        <td>{state.failed_stage_data.name}</td>
+                                        <td><div className='d-flex align-center'><span className='status-bullet status-bullet-danger'></span><span className='color-danger text-transform-lower-case'>{state.failed_stage_data.status}</span></div></td>
+
+                                        <td>N/A</td>
+                                      </tr>
+                                    </tbody>
+                                  </table>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                          :
+
+                          <div className={`flip-container ${isFlipped ? 'flip' : ''}`}>
+                            <div className="flipper">
+                              {console.log(state.data, "fdsajknfjkasfhjbhjasbfhjbjsabhjfbjas")}
+                              {
+                                state.data && state.data[0] ?
+                                  state.data[0].task_type ?
+                                    state.data[0].task_type == "BUILD" || state.data[0].task_type == "DEPLOY" ||
+                                      state.data[0].task_type == "PROMOTE" || state.data[0].task_type == "JIRA_INTEGRATION" || state.data[0].task_type == "REST_API" || state.data[0].task_type == "CANARY_ANALYSIS" || state.data[0].task_type == "indpedent_job" || state.data[0].task_type == "dependent_job" || state.data[0].task_type == "SNOW_INTEGRATION" || state.data[0].task_type == "ATTACH_DOCUMENTS" || state.data[0].task_type == "GLOBAL_DEPLOY" || state.data[0].task_type == "GLOBAL_BUILD" || state.data[0].task_type == "GLOBAL_PROMOTE" || state.data[0].task_type == "ANDROID_BUILD" || state.data[0].task_type == "ANDROID_DEPLOY" || state.data[0]?.task_type ==="CRONJOB" ?
+                                      <div className={`tableDivi ${showTable ? 'content-table' : 'hidden'}`}>
+                                        <div className="tableDiv-container">
+                                          <table className={`tableDiv `} >
+
+                                            <thead>
+
+                                              {
+                                                state.data && state.data[0] && state.data[0].task_type === "DEPLOY" && state.data[0].status == "DONT_RUN" ?
+                                                  <tr>
+                                                    <th>Service</th>
+                                                    <th>Status</th>
+                                                    <th>Reason</th>
+                                                  </tr>
+                                                  :
+                                                   state.data && state.data[0] && state.data[0].task_type === "ANDROID_DEPLOY"?
+                                                  <tr>
+                                                    <th>Service</th>
+                                                    <th>Status</th>
+                                                    <th>Reason</th>
+                                                  </tr>
+                                                  :
+
+                                                  state.data && state.data[0] &&
+                                                    state.data[0].task_type && state.data[0].task_type === "BUILD" || state.data[0].task_type == "GLOBAL_BUILD" || state.data[0].task_type == "ANDROID_BUILD" ?
+                                                    <tr>
+                                                      <th>Service</th>
+                                                      <th>Env</th>
+                                                      <th>Branch</th>
+                                                      <th>Status</th>
+                                                      <th>Logs</th>
+                                                    </tr>
+                                                    :
+                                                    state.data[0]?.task_type === "DEPLOY" && failed_task_dep_type == "canary" ?
+                                                      <div>
+                                                        <div style={{
+                                                          display: 'flex',
+                                                          alignItems: 'center',
+                                                          marginBottom: "24px",
+                                                          marginTop: "10px"
+                                                        }}>
+                                                          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", width: "56px", height: "56px", borderRadius: "8px", backgroundColor: "#FFEBEB" }}>
+                                                            <span className='ri-alert-line' style={{ fontSize: "24px" }}></span>
+                                                          </div>
+                                                          <span style={{ fontFamily: "Montserrat", fontWeight: '600', fontSize: "16px", color: '#2F2F2F', marginLeft: "16px" }}>Continue with Failure to next Job</span>
+                                                        </div>
+
+                                                        <div style={{
+                                                          backgroundColor: '#F5FAFF',
+                                                          padding: "6px",
+                                                          borderRadius: "6px",
+                                                          display: 'flex',
+                                                          alignItems: 'center',
+                                                          marginBottom: "16px"
+                                                        }}>
+                                                          <span className='ri-information-line' style={{ fontSize: "16px", color: "#0086FF" }}></span>
+                                                          <span style={{
+                                                            color: "#2F2F2F", fontFamily: "Montserrat",
+                                                            fontWeight: "600",
+                                                            fontSize: "12px",
+                                                            marginLeft: "9px",
+                                                          }}>Failed Services will be rolled back to baseline version</span>
+                                                        </div>
+                                                        {
+                                                          failedServices && failedServices.length > 0 &&
+                                                          <div style={{
+                                                            marginBottom: "10px", marginTop: "12px",
+                                                            border: "1px solid #E6E6E6",
+                                                            borderRadius: "6px",
+                                                          }}
+                                                          >
+                                                            <div
+                                                              style={{
+                                                                display: "flex",
+                                                                alignItems: "center",
+                                                                justifyContent: "space-between",
+                                                                padding: "16px",
+                                                                borderBottom: "1px solid #E6E6E6"
+                                                              }}>
+                                                              <div style={{ display: "flex" }}>
+                                                                <div style={{ width: "20px", height: "20px", borderRadius: "50%", backgroundColor: "#E53737", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                                                                  <span className='ri-close-fill' style={{ color: "#FFFFFF" }}></span>
+                                                                </div>
+                                                                <span style={{marginLeft: "8px", fontFamily: "Montserrat", fontWeight: '600', fontSize: "14px", color: '#2F2F2F', }}>Failed Services</span>
+                                                              </div>
+                                                              <div style={{ padding: "6px", backgroundColor: "#FFEBEB", color: "#E53737", fontFamily: "Montserrat", fontWeight: '700', fontSize: "12px", borderRadius: "5px" }}>
+                                                                Rolling back to baseline
+                                                              </div>
+                                                            </div>
+                                                            <div style={{ display: 'flex', flexWrap: 'wrap', padding: "0 16px 12px 16px" }}>
+                                                              {failedServices.map((svc, i) => (
+                                                                <ServiceChip key={i} label={svc} />
+                                                              ))}
+                                                            </div>
+                                                          </div>
+                                                        }
+                                                        {
+                                                          servicesWillConitue && servicesWillConitue.length > 0 &&
+                                                          <div style={{
+                                                            marginBottom: "10px", marginTop: "12px",
+                                                            border: "1px solid #E6E6E6",
+                                                            borderRadius: "6px",
+                                                          }}
+                                                          >
+                                                            <div
+                                                              style={{
+                                                                display: "flex",
+                                                                alignItems: "center",
+                                                                justifyContent: "space-between",
+                                                                padding: "16px",
+                                                                borderBottom: "1px solid #E6E6E6"
+                                                              }}>
+                                                              <div style={{ display: "flex" }}>
+                                                                <div style={{ width: "20px", height: "20px", borderRadius: "50%", backgroundColor: "#2EBE79", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                                                                  <span className='ri-check-fill' style={{ color: "#FFFFFF" }}></span>
+                                                                </div>
+                                                                <span style={{ marginLeft: "8px", fontFamily: "Montserrat", fontWeight: '600', fontSize: "14px", color: '#2F2F2F', }}>Passed Services</span>
+                                                              </div>
+                                                              <div style={{ padding: "6px", backgroundColor: "#E6FBEA", color: "#2EBE79", fontFamily: "Montserrat", fontWeight: '700', fontSize: "12px", borderRadius: "5px" }}>
+                                                                Continuing with
+                                                              </div>
+                                                            </div>
+                                                            <div style={{ display: 'flex', flexWrap: 'wrap', padding: "0 16px 12px 16px" }}>
+                                                              {servicesWillConitue.map((svc, i) => (
+                                                                <ServiceChip key={i} label={svc} />
+                                                              ))}
+                                                            </div>
+                                                          </div>
+                                                        }
+                                                      </div>
+                                                      :
+                                                      state.data[0].task_type === "DEPLOY" || state.data[0].task_type == "GLOBAL_DEPLOY"  ?
+
+                                                        <>
+                                                          <tr>
+                                                            <th className='table-sub-header' colSpan={4}>Execution Details for Deploy Job</th>
+                                                          </tr>
+                                                          <tr>
+                                                            <th>Service</th>
+                                                            <th>Env</th>
+                                                            <th>Status</th>
+                                                            
+                                                          </tr></>
+                                                        :
+                                                        state.data[0].task_type === "PROMOTE" || state.data[0].task_type == "GLOBAL_PROMOTE" ?
+                                                          <tr>
+                                                            <th>Service</th>
+                                                            <th>Source Env</th>
+                                                            <th>Target Env</th>
+                                                            <th>Status</th>
+                                                            <th>Logs</th>
+                                                          </tr> :
+                                                          state.data[0].task_type === "JIRA_INTEGRATION" ?
+                                                            <tr>
+                                                              <th>Operation</th>
+                                                              <th>Issue Type</th>
+                                                              <th>Issue Key</th>
+                                                              <th>Status</th>
+                                                              <th>Logs</th>
+                                                            </tr>
+                                                            :
+                                                            state.data[0].task_type === "REST_API" ?
+                                                              <tr>
+                                                                <th>Method</th>
+                                                                <th>URL</th>
+                                                                <th>Timeout</th>
+                                                                <th>Status</th>
+                                                                <th>Logs</th>
+                                                              </tr>
+                                                              :
+                                                              state.data[0].task_type === "CANARY_ANALYSIS" ?
+                                                                <tr>
+                                                                  <th>Task Type</th>
+                                                                  <th>Duration</th>
+                                                                  <th>Status</th>
+                                                                  <th>Logs</th>
+                                                                </tr>
+                                                                :
+                                                                state.data[0].task_type === "indpedent_job" ?
+                                                                  <tr>
+                                                                    <th>Task Type</th>
+                                                                    <th>Duration</th>
+                                                                    <th>Status</th>
+                                                                    <th>Logs</th>
+                                                                  </tr> :
+
+                                                                  state.data[0].task_type === "dependent_job" ?
+                                                                    <tr>
+                                                                      <th>Service</th>
+                                                                      <th>Duration</th>
+                                                                      <th>Status</th>
+                                                                      <th>Logs</th>
+                                                                    </tr>
+                                                                    :
+                                                                    state.data[0].task_type === "SNOW_INTEGRATION" ?
+                                                                      <tr>
+                                                                        <th>Operation</th>
+                                                                        <th>Issue Key</th>
+                                                                        <th>Status</th>
+                                                                        <th>Logs</th>
+                                                                      </tr>
+                                                                      :
+                                                                      state.data[0].task_type === "ATTACH_DOCUMENTS" ?
+                                                                        <tr>
+                                                                          <th>Operation</th>
+                                                                          <th>Status</th>
+                                                                          <th>Logs</th>
+                                                                        </tr>
+                                                                        :
+                                                                        state.data[0].task_type === "CRONJOB"?
+                                                                          <>
+                                                                            <tr>
+                                                                              <th className='table-sub-header' colSpan={4}>Execution Details for Cronjob</th>
+                                                                            </tr>
+                                                                            <tr>
+                                                                              <th>Service</th>
+                                                                              <th>Env</th>
+                                                                              <th>Status</th>
+                                                                              
+                                                                            </tr></>
+                                                                        :
+                                                                        null
+
+                                              }
+                                            </thead>
+                                            <tbody>
+                                              {console.log(state.data, "Fsdfdsafsafsa")}
+                                              {
+                                                state.data.map((item, index) => (
+                                                  item.task_type == "BUILD" || item.task_type == "GLOBAL_BUILD" || item.task_type ==="ANDROID_BUILD" ?
+                                                    <tr className={stripedRows && index % 2 === 0 ? 'even-row' : 'odd-row'}>
+                                                      <td>{item.service_name ? item.service_name : "N/A"}</td>
+                                                      <td>{item.env_name ? item.env_name : "N/A"}</td>
+                                                      <td>{ item.branch_name ? item.branch_name : "N/A"}</td>
+                                                      <td><div className='d-flex align-center'><span className='status-bullet status-bullet-danger'></span><span className='color-danger text-transform-lower-case'>{item.status ? item.status : "N/A"}</span></div></td>
+                                                      <td><Link to={`/logs?global_task_id=${item.logs_url}`} target="_blank" className='text-anchor-blue '>View Logs</Link></td>
+                                                    </tr>
+                                                    :
+                                                   ( item.task_type == "DEPLOY" || item.task_type == "GLOBAL_DEPLOY") && item.status == "DONT_RUN" ?
+                                                      <tr className={stripedRows && index % 2 === 0 ? 'even-row' : 'odd-row'}>
+                                                        {console.log(item, "fdasfdsfa")}
+                                                        <td>{item.service_name ? item.service_name : "N/A"}</td>
+                                                        <td><div className='' style={{ backgroundColor: "#F4F4F4", border: "1px solid #CACACA", borderRadius: "5px", padding: "6px", color: "#797979", fontWeight: "700", width: "fit-content" }}>{item.status ? item.status : "N/A"}</div></td>
+                                                        <td>
+                                                          {item.manage_failure_json && item.manage_failure_json.conflict_meta_data ? (
+                                                            <>
+                                                              <div>Canary is Already Running</div>
+                                                              <div>
+                                                                Via Pipeline:{" "}
+                                                                <Link
+                                                                  to={`/application/${item.manage_failure_json.conflict_meta_data.project_id}/pipeline/${item.manage_failure_json.conflict_meta_data.pipeline_id}/execution/${item.manage_failure_json.conflict_meta_data.pipeline_instance_id}`}
+                                                                  target="_blank"
+                                                                  className="text-anchor-blue"
+                                                                >
+                                                                  {item.manage_failure_json.conflict_meta_data.pipeline_name}
+                                                                </Link>
+                                                              </div>
+                                                            </>
+                                                          ) : (
+                                                            <></>
+                                                          )}
+                                                        </td>
+                                                      </tr>
+                                                      :
+                                                      item.task_type == "DEPLOY" || item.task_type == "GLOBAL_DEPLOY" || item.task_type == "ANDROID_DEPLOY" || item.task_type == "CRONJOB" ?
+                                                        <tr className={stripedRows && index % 2 === 0 ? 'even-row' : 'odd-row'}>
+                                                          {console.log(item, "fdasfdsfa")}
+                                                          <td>{item.service_name ? item.service_name : "N/A"}</td>
+                                                          <td>{item.env_name ? item.env_name : "N/A"}</td>
+                                                          <td><div className='d-flex align-center'><span className='status-bullet status-bullet-danger'></span><span className='color-danger text-transform-lower-case'>{item.status ? item.status : "N/A"}</span></div></td>
+                                                          </tr>
+                                                        :
+                                                        item.task_type == "PROMOTE" || item.task_type == "GLOBAL_PROMOTE" ?
+                                                          <tr className={stripedRows && index % 2 === 0 ? 'even-row' : 'odd-row'}>
+                                                            <td>{item.service_name ? item.service_name : "N/A"}</td>
+                                                            <td>{item.env_name ? item.env_name : "N/A"}</td>
+                                                            <td>{item.branch_name ? item.branch_name : "N/A"}</td>
+                                                            <td><div className='d-flex align-center'><span className='status-bullet status-bullet-danger'></span><span className='color-danger text-transform-lower-case'>{item.status ? item.status : "N/A"}</span></div></td>
+                                                            <td><Link to={`/logs?global_task_id=${item.logs_url}`} target="_blank" className='text-anchor-blue '>View Logs</Link></td>
+                                                          </tr>
+                                                          :
+                                                          item.task_type == "JIRA_INTEGRATION" ?
+                                                            <tr className={stripedRows && index % 2 === 0 ? 'even-row' : 'odd-row'}>
+                                                              <td>{item.operation ? item.operation : "N/A"}</td>
+                                                              <td>{item.issue_type ? item.issue_type : "N/A"}</td>
+                                                              <td><Tooltip title={item.issue_key}>
+                                                                <p className='text-ellipsis-80'>{item.issue_key ? item.issue_key : "N/A"}</p>
+                                                              </Tooltip></td>
+
+                                                              <td><div className='d-flex align-center'><span className='status-bullet status-bullet-danger'></span><span className='color-danger text-transform-lower-case'>{item.status ? item.status : "N/A"}</span></div></td>
+                                                              <td><Link to={`/logs?global_task_id=${item.logs_url}`} target="_blank" className='text-anchor-blue '>View Logs</Link></td>
+                                                            </tr>
+                                                            :
+                                                            item.task_type == "REST_API" ?
+                                                              <tr className={stripedRows && index % 2 === 0 ? 'even-row' : 'odd-row'}>
+
+                                                                <td>{item.method ? item.method : "N/A"}</td>
+                                                                <td><Tooltip title={item.url}>
+                                                                  <p className='text-ellipsis-80'>{item.url ? item.url : "N/A"}</p>
+                                                                </Tooltip></td>
+                                                                <td>{item.timeout ? item.timeout : "N/A"}</td>
+
+
+                                                                <td><div className='d-flex align-center'><span className='status-bullet status-bullet-danger'></span><span className='color-danger text-transform-lower-case'>{item.status ? item.status : "N/A"}</span></div></td>
+                                                                <td><Link to={`/logs?global_task_id=${item.logs_url}`} target="_blank" className='text-anchor-blue '>View Logs</Link></td>
+                                                              </tr>
+                                                              :
+                                                              item.task_type == "CANARY_ANALYSIS" ?
+                                                                <tr className={stripedRows && index % 2 === 0 ? 'even-row' : 'odd-row'}>
+
+                                                                  <td>{item.task_type ? item.task_type : "N/A"}</td>
+                                                                  <td>
+                                                                    <p className='text-ellipsis-80'>{item.duration ? item.duration : "N/A"}</p>
+                                                                  </td>
+                                                                  <td><div className='d-flex align-center'><span className='status-bullet status-bullet-danger'></span><span className='color-danger text-transform-lower-case'>{item.status ? item.status : "N/A"}</span></div></td>
+                                                                  <td><Link to={`/logs?global_task_id=${item.logs_url}`} target="_blank" className='text-anchor-blue '>View Logs</Link></td>
+                                                                </tr>
+                                                                :
+                                                                item.dynamic_job ?
+                                                                  <tr className={stripedRows && index % 2 === 0 ? 'even-row' : 'odd-row'}>
+
+                                                                    <td>{item.service_name ? item.service_name : item.task_type ? item.task_type : "N/A"} </td>
+                                                                    <td>
+                                                                      <p className='text-ellipsis-80'>{item.duration ? item.duration : "N/A"}</p>
+                                                                    </td>
+                                                                    <td><div className='d-flex align-center'><span className='status-bullet status-bullet-danger'></span><span className='color-danger text-transform-lower-case'>{item.status ? item.status : "N/A"}</span></div></td>
+                                                                    <td><Link to={`/logs?global_task_id=${item.logs_url}`} target="_blank" className='text-anchor-blue '>View Logs</Link></td>
+                                                                  </tr>
+                                                                  :
+                                                                  item.task_type == "SNOW_INTEGRATION" ?
+                                                                    <tr className={stripedRows && index % 2 === 0 ? 'even-row' : 'odd-row'}>
+                                                                      <td>{item.operation ? item.operation : "N/A"}</td>
+                                                                      <td><Tooltip title={item.issue_key}>
+                                                                        <p className='text-ellipsis-80'>{item.issue_key ? item.issue_key : "N/A"}</p>
+                                                                      </Tooltip></td>
+
+                                                                      <td><div className='d-flex align-center'><span className='status-bullet status-bullet-danger'></span><span className='color-danger text-transform-lower-case'>{item.status ? item.status : "N/A"}</span></div></td>
+                                                                      <td><Link to={`/logs?global_task_id=${item.logs_url}`} target="_blank" className='text-anchor-blue '>View Logs</Link></td>
+                                                                    </tr>
+                                                                    :
+                                                                    item.task_type == "ATTACH_DOCUMENTS" ?
+                                                                      <tr className={stripedRows && index % 2 === 0 ? 'even-row' : 'odd-row'}>
+                                                                        <td>{item.operation ? item.operation : "N/A"}</td>
+                                                                        <td><div className='d-flex align-center'><span className='status-bullet status-bullet-danger'></span><span className='color-danger text-transform-lower-case'>{item.status ? item.status : "N/A"}</span></div></td>
+                                                                        <td><Link to={`/logs?global_task_id=${item.logs_url}`} target="_blank" className='text-anchor-blue '>View Logs</Link></td>
+                                                                      </tr>
+                                                                      :
+                                                                      null
+                                                ))
+                                              }
+                                            </tbody>
+                                          </table>
+                                        </div>
+                                        <div className='pd-20 text-center mt-20 mb-20 highlighted-box' style={state.error && !state.loaded ? { borderRadius: '8px', position: 'relative', top: '0px', backgroundColor: 'rgb(18 77 155)' } : { borderRadius: '8px', position: 'relative', backgroundColor: 'rgb(18 77 155)' }}>
+                                          <p className="text-align-left">
+                                            <p className='mb-20'><b>Please note: </b> that on pipeline failure, there are two ways of recovering from failure.</p>
+                                            <p>1. Re-run the failed job</p>
+                                            <p>2. Continue to next job with failure</p>
+                                            <p>3. Complete Rollback to baseline</p>
+                                          </p>
+                                        </div>
+                                      </div>
+                                      : null : null : <span className='d-flex align-center justify-center'><span className='mt-12 font-16 mr-auto font-weight-500 color-icon-secondary'>No Data Found</span></span>
+                              }
+                              <div className={`messageDiv ${showTable ? 'hidden' : ''}`}>
+                                {console.log(state.data, "fsfsafkjnsakjf")}
+
+                                {
+                                  state.complete_rollback ?
+                                    <div>
+                                      <div style={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        marginBottom: "24px"
+                                      }}>
+                                        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", width: "56px", height: "56px", borderRadius: "8px", backgroundColor: "#0086FF14" }}>
+                                          <span className='ri-arrow-go-back-line' style={{ fontSize: "32px", color: "#0086FF" }}></span>
+                                        </div>
+                                        <span style={{ fontFamily: "Montserrat", fontWeight: '600', fontSize: "16px", color: '#2F2F2F', marginLeft: "16px" }}>Complete Rollback to baseline version</span>
+                                      </div>
+
+                                      <div style={{
+                                        backgroundColor: '#F5FAFF',
+                                        padding: "6px",
+                                        borderRadius: "6px",
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        marginBottom: "16px"
+                                      }}>
+                                        <span className='ri-information-line' style={{ fontSize: "16px", color: "#0086FF" }}></span>
+                                        <span style={{
+                                          color: "#2F2F2F", fontFamily: "Montserrat",
+                                          fontWeight: "600",
+                                          fontSize: "12px",
+                                          marginLeft: "9px",
+                                        }}>Rolling back all services to baseline</span>
+                                      </div>
+                                      {
+                                        failedServices && failedServices.length > 0 &&
+                                        <div style={{
+                                          marginBottom: "10px", marginTop: "12px",
+                                          border: "1px solid #E6E6E6",
+                                          borderRadius: "6px",
+                                        }}
+                                        >
+                                          <div
+                                            style={{
+                                              display: "flex",
+                                              alignItems: "center",
+                                              justifyContent: "space-between",
+                                              padding: "16px",
+                                              borderBottom: "1px solid #E6E6E6"
+                                            }}>
+                                            <div style={{ display: "flex" }}>
+                                              <div style={{ width: "20px", height: "20px", borderRadius: "50%", backgroundColor: "#E53737", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                                                <span className='ri-close-fill' style={{ color: "#FFFFFF" }}></span>
+                                              </div>
+                                              <span style={{ marginLeft: "8px", fontFamily: "Montserrat", fontWeight: '600', fontSize: "14px", color: '#2F2F2F', }}>Failed Services</span>
+                                            </div>
+                                          </div>
+                                          <div style={{ display: 'flex', flexWrap: 'wrap', padding: "0px 16px 12px 16px" }}>
+                                            {failedServices.map((svc, i) => (
+                                              <ServiceChip key={i} label={svc} />
+                                            ))}
+                                          </div>
+                                        </div>
+                                      }
+                                      {
+                                        servicesWillConitue && servicesWillConitue.length > 0 &&
+                                        <div style={{
+                                          marginBottom: "10px", marginTop: "12px",
+                                          border: "1px solid #E6E6E6",
+                                          borderRadius: "6px",
+                                        }}
+                                        >
+                                          <div
+                                            style={{
+                                              display: "flex",
+                                              alignItems: "center",
+                                              justifyContent: "space-between",
+                                              padding: "16px",
+                                              borderBottom: "1px solid #E6E6E6"
+                                            }}>
+                                            <div style={{ display: "flex" }}>
+                                              <div style={{ width: "20px", height: "20px", borderRadius: "50%", backgroundColor: "#2EBE79", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                                                <span className='ri-check-fill' style={{ color: "#FFFFFF" }}></span>
+                                              </div>
+                                              <span style={{marginLeft: "8px", fontFamily: "Montserrat", fontWeight: '600', fontSize: "14px", color: '#2F2F2F', }}>Passed Services</span>
+                                            </div>
+                                          </div>
+                                          <div style={{ display: 'flex', flexWrap: 'wrap', padding: "0px 16px 12px 16px" }}>
+                                            {servicesWillConitue.map((svc, i) => (
+                                              <ServiceChip key={i} label={svc} />
+                                            ))}
+                                          </div>
+                                        </div>
+                                      }
+                                    </div>
+                                    :
+                                    state.data && state.data[0] &&
+                                      state.data[0].task_type && state.data[0].task_type === "BUILD" || state.data[0]?.task_type === "GLOBAL_BUILD" ||  state.data[0]?.task_type === "ANDROID_BUILD" ?
+                                      <div className='div-structure'>
+                                        <p>Continue with failures:</p>
+                                        <p><b>Please note:</b> pipeline will skip execution for following microservices:&nbsp;
+                                          {state.data.map((item, index) => (
+                                            <span key={index} className='chip chip-failed'>
+                                              {item.service_name}
+                                              
+                                            </span>
+                                          ))}
+                                        </p>
+                                        <p><b>On continue:</b> pipeline will proceed with following microservices:&nbsp;
+                                          {servicesWillConitue.map((item, index) => (
+                                            <span key={index} className='chip chip-success'>
+                                              {item}
+                                              
+                                            </span>
+                                          ))}
+                                        </p>
+
+
+                                      </div> :
+                                      state.data[0]?.task_type === "DEPLOY" || state.data[0]?.task_type === "GLOBAL_DEPLOY" && failed_task_dep_type == "canary" ?
+                                        <div>
+                                          <div style={{
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            marginBottom: "24px",
+                                            marginTop: "10px"
+                                          }}>
+                                            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", width: "56px", height: "56px", borderRadius: "8px", backgroundColor: "#FFEBEB" }}>
+                                              <span className='ri-alert-line' style={{ fontSize: "24px" }}></span>
+                                            </div>
+                                            <span style={{ fontFamily: "Montserrat", fontWeight: '600', fontSize: "16px", color: '#2F2F2F', marginLeft: "16px" }}>Continue with Failure to next Job</span>
+                                          </div>
+
+                                          <div style={{
+                                            backgroundColor: '#F5FAFF',
+                                            padding: "6px",
+                                            borderRadius: "6px",
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            marginBottom: "16px"
+                                          }}>
+                                            <span className='ri-information-line' style={{ fontSize: "16px", color: "#0086FF" }}></span>
+                                            <span style={{
+                                              color: "#2F2F2F", fontFamily: "Montserrat",
+                                              fontWeight: "600",
+                                              fontSize: "12px",
+                                              marginLeft: "9px",
+                                            }}>Failed Services will be rolled back to baseline version</span>
+                                          </div>
+                                          {
+                                            failedServices && failedServices.length > 0 &&
+                                            <div style={{
+                                              marginBottom: "10px", marginTop: "12px",
+                                              border: "1px solid #E6E6E6",
+                                              borderRadius: "6px",
+                                            }}
+                                            >
+                                              <div
+                                                style={{
+                                                  display: "flex",
+                                                  alignItems: "center",
+                                                  justifyContent: "space-between",
+                                                  padding: "16px",
+                                                  borderBottom: "1px solid #E6E6E6"
+                                                }}>
+                                                <div style={{ display: "flex" }}>
+                                                  <div style={{ width: "20px", height: "20px", borderRadius: "50%", backgroundColor: "#E53737", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                                                    <span className='ri-close-fill' style={{ color: "#FFFFFF" }}></span>
+                                                  </div>
+                                                  <span style={{ marginLeft: "8px", fontFamily: "Montserrat", fontWeight: '600', fontSize: "14px", color: '#2F2F2F', }}>Failed Services</span>
+                                                </div>
+                                                <div style={{ padding: "6px", backgroundColor: "#FFEBEB", color: "#E53737", fontFamily: "Montserrat", fontWeight: '700', fontSize: "12px", borderRadius: "5px" }}>
+                                                  Rolling back to baseline
+                                                </div>
+                                              </div>
+                                              <div style={{ display: 'flex', flexWrap: 'wrap', padding: "0 16px 12px 16px" }}>
+                                                {failedServices.map((svc, i) => (
+                                                  <ServiceChip key={i} label={svc} />
+                                                ))}
+                                              </div>
+                                            </div>
+                                          }
+                                          {
+                                            servicesWillConitue && servicesWillConitue.length > 0 &&
+                                            <div style={{
+                                              marginBottom: "10px", marginTop: "12px",
+                                              border: "1px solid #E6E6E6",
+                                              borderRadius: "6px",
+                                            }}
+                                            >
+                                              <div
+                                                style={{
+                                                  display: "flex",
+                                                  alignItems: "center",
+                                                  justifyContent: "space-between",
+                                                  padding: "16px",
+                                                  borderBottom: "1px solid #E6E6E6"
+                                                }}>
+                                                <div style={{ display: "flex" }}>
+                                                  <div style={{ width: "20px", height: "20px", borderRadius: "50%", backgroundColor: "#2EBE79", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                                                    <span className='ri-check-fill' style={{ color: "#FFFFFF" }}></span>
+                                                  </div>
+                                                  <span style={{  marginLeft: "8px", fontFamily: "Montserrat", fontWeight: '600', fontSize: "14px", color: '#2F2F2F', }}>Passed Services</span>
+                                                </div>
+                                                <div style={{ padding: "6px", backgroundColor: "#E6FBEA", color: "#2EBE79", fontFamily: "Montserrat", fontWeight: '700', fontSize: "12px", borderRadius: "5px" }}>
+                                                  Continuing with
+                                                </div>
+                                              </div>
+                                              <div style={{ display: 'flex', flexWrap: 'wrap', padding: "0 16px 12px 16px" }}>
+                                                {servicesWillConitue.map((svc, i) => (
+                                                  <ServiceChip key={i} label={svc} />
+                                                ))}
+                                              </div>
+                                            </div>
+                                          }
+                                        </div>
+                                        :
+                                        state.data[0]?.task_type === "DEPLOY" || state.data[0]?.task_type === "GLOBAL_DEPLOY" || state.data[0]?.task_type === "ANDROID_DEPLOY"  ?
+
+                                          <div className='div-structure'>
+                                            <p>Continue with failures:</p>
+                                            <p><b>Please note:</b> pipeline will skip execution for following microservices:&nbsp;
+                                              {state.data.map((item, index) => (
+                                                <span key={index} className='chip chip-failed'>
+                                                  {item.service_name}
+                                                  
+                                                </span>
+                                              ))}
+                                            </p>
+                                            <p><b>On continue:</b> pipeline will proceed with following microservices:&nbsp;
+                                              {servicesWillConitue.map((item, index) => (
+                                                <span key={index} className='chip chip-success'>
+                                                  {item}
+                                                  
+                                                </span>
+                                              ))}
+                                            </p>
+
+
+                                          </div>
+
+                                          :
+                                          state.data[0]?.task_type === "PROMOTE" || state.data[0]?.task_type === "GLOBAL_PROMOTE" ?
+
+
+                                            <div className='div-structure'>
+                                              <p>Continue with failures:</p>
+                                              <p><b>Please note:</b> pipeline will skip execution for following microservices:&nbsp;
+                                                {state.data.map((item, index) => (
+                                                  <span key={index} className='chip chip-failed'>
+                                                    {item.service_name}
+                                                    {index !== state.data.length - 1 && ', '}
+                                                  </span>
+                                                ))}
+                                              </p>
+
+                                              <p><b>On continue:</b> pipeline will proceed with following microservices:&nbsp;
+                                                {servicesWillConitue.map((item, index) => (
+                                                  <span key={index} className='chip chip-success'>
+                                                    {item}
+                                                    {index !== servicesWillConitue.length - 1 && ', '}
+                                                  </span>
+                                                ))}
+                                              </p>
+
+
+                                            </div>
+
+                                            :
+                                            state.data[0]?.task_type === "JIRA_INTEGRATION" ?
+
+                                              <div className='jira-integration-flow'>
+                                                <div className='pd-20 text-center mt-20 mb-20' style={{ backgroundColor: '#F8F8F8', borderRadius: '8px' }}>
+                                                  <p className="font-12 text-center mb-20">
+                                                    {
+                                                      state.data[0].operation && state.data[0].operation == "create" ?
+                                                        <><b>Please Note:</b> Your Jira ticket creation has failed, if you want to continue please create the Jira ticket manually and enter the details after clicking the continue.</>
+                                                        :
+                                                        state.data[0].operation && state.data[0].operation == "update" ?
+                                                          <><b>Please Note:</b> Your Jira ticket comment update has failed, if you want to continue please update the comment manually on the jira ticket Jira Ticket ID and click continue.</>
+                                                          :
+                                                          state.data[0].operation && state.data[0].operation == "check_conflicts" ?
+                                                            <><b>Please Note:</b> Your Merge conflicts check has failed, Please verify and resolve the merge conflicts manually before proceeding. Once resolved, continue with your workflow.</>
+                                                            :
+                                                            state.data[0].operation && state.data[0].operation == "create_pr" ?
+                                                              <><b>Please Note:</b> Your PR Creation has failed, if you want to continue please create and merge pull request manually and click continue.</>
+                                                              :
+                                                              state.data[0].operation && state.data[0].operation == "add_comment" ?
+                                                                <><b>Please Note:</b> Your Jira ticket comment addition has failed, if you want to continue please update the comment on Jira ticket manually and click continue.</>
+                                                                :
+                                                                <><b>Please Note:</b> Your Jira ticket status transition has failed, if you want to continue please update the Jira ticket status manually on the jira ticket Jira Ticket ID and click continue.</>
+                                                    }
+
+                                                  </p>
+                                                  {
+                                                    state.data[0].operation && state.data[0].operation == "create" &&
+                                                    <Input
+                                                      type="text"
+                                                      data={state.formData}
+                                                      error={state.formError}
+                                                      onChangeHandler={onChangeHandler}
+                                                      placeholder="ot-961"
+                                                      mandatorySign
+                                                      label={state.data[0].operation == "create" ? "Enter Jira Ticket" : state.data[0].operation == "update" ? "Enter Comment" : "Enter Jira Ticket"}
+                                                      name={state.data[0].issue_key}
+                                                    />
+                                                  }
+
+                                                </div>
+                                              </div> :
+                                              state.data[0]?.task_type === "INTEGRATION" ?
+
+                                                <div className='pd-20 text-center mt-20 mb-20' style={{ backgroundColor: '#F8F8F8', borderRadius: '8px' }}>
+                                                  <i className="ri-error-warning-line text-center" style={{ color: '#e9797e', textAlign: 'center', fontSize: '40px' }}></i>
+                                                  <p className="font-12 text-center">
+                                                    <b>Please Note:</b> Your Integration testing response has failed, do you still want to continue?
+                                                  </p>
+                                                </div> :
+                                                state.data[0]?.task_type === "REST_API" ?
+
+                                                  <div className='pd-20 text-center mt-20 mb-20' style={{ backgroundColor: '#F8F8F8', borderRadius: '8px' }}>
+                                                    <i className="ri-error-warning-line text-center" style={{ color: '#e9797e', textAlign: 'center', fontSize: '40px' }}></i>
+                                                    <p className="font-12 text-center">
+                                                      <b>Please Note:</b> Your API call has failed, do you want to still continue?
+                                                    </p>
+                                                  </div> :
+                                                  state.data[0]?.task_type === "ROLLBACK" ?
+
+                                                    <div className='pd-20 text-center mt-20 mb-20' style={{ backgroundColor: '#F8F8F8', borderRadius: '8px' }}>
+                                                      <i className="ri-error-warning-line text-center" style={{ color: '#e9797e', textAlign: 'center', fontSize: '40px' }}></i>
+                                                      <p className="font-12 text-center">
+                                                        <b>Please Note:</b> Rollback is failed. please re trigger the pipeline.
+                                                      </p>
+                                                    </div> :
+                                                    state.data[0]?.task_type === "CANARY_ANALYSIS" ?
+
+                                                      <div className='pd-20 text-center mt-20 mb-20' style={{ backgroundColor: '#F8F8F8', borderRadius: '8px' }}>
+                                                        <i className="ri-error-warning-line text-center" style={{ color: '#e9797e', textAlign: 'center', fontSize: '40px' }}></i>
+                                                        <p className="font-12 text-center">
+                                                          <b>Please Note:</b> Currently we do not support retrigger for the canary analysis failed job in manage failure.
+                                                        </p>
+                                                      </div>
+                                                      :
+                                                      state.data[0]?.task_type == "dependent_job" ?
+                                                        <div className='div-structure'>
+                                                          <p>Continue with failures:</p>
+                                                          <p><b>Please note:</b> pipeline will skip execution for following microservices:&nbsp;
+                                                            {failedServices.map((item, index) => (
+                                                              <span key={index} className='chip chip-failed'>
+                                                                {item}
+                                                                </span>
+                                                            ))}
+                                                          </p>
+                                                        </div>
+                                                        :
+                                                        state.data[0]?.dynamic_job ?
+
+                                                          <div className='pd-20 text-center mt-20 mb-20' style={{ backgroundColor: '#F8F8F8', borderRadius: '8px' }}>
+                                                            <i className="ri-error-warning-line text-center" style={{ color: '#e9797e', textAlign: 'center', fontSize: '40px' }}></i>
+                                                            <p className="font-12 text-center">
+                                                              <b>Please Note:</b> Current job is failed , You are about continue the pipeline.
+                                                            </p>
+                                                          </div>
+                                                          :
+                                                          state.data[0]?.task_type === "SNOW_INTEGRATION" ?
+
+                                                            <div className='jira-integration-flow'>
+                                                              <div className='pd-20 text-center mt-20 mb-20' style={{ backgroundColor: '#F8F8F8', borderRadius: '8px' }}>
+                                                                <p className="font-12 text-center mb-20">
+                                                                  {
+                                                                    state.data[0].operation && state.data[0].operation == "snow_create" ?
+                                                                      <><b>Please Note:</b> Your ServiceNow ticket creation has failed, if you want to continue please create the ServiceNow ticket manually and enter the details after clicking the continue.</>
+                                                                      :
+                                                                      state.data[0].operation && state.data[0].operation == "snow_add_notes" ?
+                                                                        <><b>Please Note:</b> Your ServiceNow Add notes has failed, if you want to continue please add them manually and click continue.</>
+                                                                        :
+                                                                        state.data[0].operation && state.data[0].operation == "snow_update_status" ?
+                                                                          <><b>Please Note:</b> Your ServiceNow ticket status update has failed, if you want to continue please update the ServiceNow ticket status manually and click continue.</>
+                                                                          :
+                                                                          state.data[0].operation && state.data[0].operation == "snow_update" ?
+                                                                            <><b>Please Note:</b> Your ServiceNow ticket update has failed, if you want to continue please update the fields manually on the ServiceNow ticket and click continue.</>
+                                                                            :
+                                                                            null
+                                                                  }
+
+                                                                </p>
+                                                                {
+                                                                  state.data[0].operation && state.data[0].operation == "snow_create" &&
+                                                                  <Input
+                                                                    type="text"
+                                                                    data={state.formData}
+                                                                    error={state.formError}
+                                                                    onChangeHandler={onChangeHandler}
+                                                                    placeholder="ot-961"
+                                                                    mandatorySign
+                                                                    label={state.data[0].operation == "snow_create" ? "Enter ServiceNow Ticket" : state.data[0].operation == "update" ? "Enter Comment" : "Enter Jira Ticket"}
+                                                                    name={state.data[0].issue_key}
+                                                                  />
+                                                                }
+
+                                                              </div>
+                                                            </div> :
+                                                            state.data[0]?.task_type === "ATTACH_DOCUMENTS" ?
+                                                              <div className='jira-integration-flow'>
+                                                                <div className='pd-20 text-center mt-20 mb-20' style={{ backgroundColor: '#F8F8F8', borderRadius: '8px' }}>
+                                                                  <p className="font-12 text-center mb-20">
+                                                                    {
+                                                                      state.data[0].operation && state.data[0].operation == "download_documents" ?
+                                                                        <><b>Please Note:</b> Your Download Documents job has failed, if you want to continue please click continue.</>
+                                                                        :
+                                                                        state.data[0].operation && state.data[0].operation == "upload_documents" ?
+                                                                          <><b>Please Note:</b> Your Upload Documents job has failed, if you want to continue please click continue.</>
+                                                                          :
+                                                                          <><b>Please Note:</b> Release notes upload has failed, if you want to continue please click continue.</>
+
+                                                                    }
+
+                                                                  </p>
+                                                                </div>
+                                                              </div>
+                                                              :
+                                                              null
+                                }
+                              </div>
+                            </div>
+                          </div>
+
+
+                      }
+
+                    </>
+                    :
+                    <div className='pd-20 text-center mt-20 mb-20' style={{ backgroundColor: '#F8F8F8', borderRadius: '8px' }}>
+                      <i className="ri-error-warning-line text-center" style={{ color: '#e9797e', textAlign: 'center', fontSize: '40px' }}></i>
+                      <p className="font-12 text-center">
+                        Unable to load data. please contact to the Super Admin
+                      </p>
+                    </div>
+              }
+            </div>
+
+            {
+              !showTable ?
+                <div className='pd-10 content-footer space-between d-flex align-center'>
+                  <button className="btn btn-outline-dark-grey" onClick={backClicked}>
+                    Back
+                  </button>
+                  <button className="btn btn-primary-v2" onClick={postContinuePipelineData}>
+                    Continue
+                  </button>
+                </div> :
+                failed_task_dep_type && failed_task_dep_type == "canary" ?
+                  <div className='pd-10 content-footer space-between d-flex align-center'
+                    style={{
+                      height: '60px',
+                      minHeight: '60px',
+                      flexShrink: 0 
+                    }}
+                  >
+                    <button className="btn btn-primary-yellow" onClick={handleCompleteRollback} style={{ marginRight: '10px', width: "fit-content" }}>
+                      ROLLBACK
+                    </button>
+                    {
+                      state.error && !state.loaded ? null :
+                        <div className='justify-end d-flex align-center'>
+                          {
+                            state.data && state.data.length > 0 ?
+                              <RerunAfterFailure
+                                pipeline={pipeline_data}
+                                data={state && state.data}
+                                rerunJob={closeDialogAndApiHit} />
+                              :
+                              state.failed_stage_data && Object.keys(state.failed_stage_data).length != 0 ?
+
+                                <FillApprovalQuestions
+                                  stage_instance_id={failed_stage_instance && failed_stage_instance.id}
+                                  pipeline_id={pipeline_id ? pipeline_id : ""}
+                                  pipeline_instance_id={pipeline_instance_id ? pipeline_instance_id : ""}
+                                  postFinalData={postFinalData}
+                                  stage_name={failed_stage_instance.name}
+                                  btnVariant="re_attempt"
+                                  stage_instance_status={failed_stage_instance && failed_stage_instance.status}
+                                  questionnaires={filterApprovalQuestionsStage && filterApprovalQuestionsStage.questionnaires}
+                                />
+
+
+                                : null
+                          }
+
+                          {
+                            state.failed_stage_data && Object.keys(state.failed_stage_data).length != 0 ?
+                              <></> :
+                              state.data && state.data[0] && state.data[0].task_type === "CANARY_ANALYSIS" ? <></>
+                                :
+                                <button className="btn btn-primary-v2" onClick={continueClicked}>
+                                  Continue with failures
+                                </button>
+                          }
+
+                        </div>
+                    }
+
+                  </div>
+                  :
+                  <div className='pd-10 content-footer space-between d-flex align-center'>
+                    <button className="btn btn-outline-dark-grey" onClick={toggleDiv}>
+                      Cancel
+                    </button>
+                    {
+                      state.error && !state.loaded ? null :
+                        <div className='justify-end d-flex align-center'>
+                          {
+                            state.data && state.data.length > 0 ?
+                              <RerunAfterFailure
+                                pipeline={pipeline_data}
+                                data={state && state.data}
+                                rerunJob={closeDialogAndApiHit} />
+                              :
+                              state.failed_stage_data && Object.keys(state.failed_stage_data).length != 0 ?
+
+                                <FillApprovalQuestions
+                                  stage_instance_id={failed_stage_instance && failed_stage_instance.id}
+                                  pipeline_id={pipeline_id ? pipeline_id : ""}
+                                  pipeline_instance_id={pipeline_instance_id ? pipeline_instance_id : ""}
+                                  postFinalData={postFinalData}
+                                  stage_name={failed_stage_instance.name}
+                                  btnVariant="re_attempt"
+                                  stage_instance_status={failed_stage_instance && failed_stage_instance.status}
+                                  questionnaires={filterApprovalQuestionsStage && filterApprovalQuestionsStage.questionnaires}
+                                />
+
+
+                                : null
+                          }
+
+                          
+                          {
+                            state.failed_stage_data && Object.keys(state.failed_stage_data).length != 0 ?
+                              <></> :
+                              state.data && state.data[0] && state.data[0].task_type === "CANARY_ANALYSIS" ? <></>
+                                :
+                                <button className="btn btn-primary-v2" onClick={continueClicked}>
+                                  Continue with failures
+                                </button>
+                          }
+
+                        </div>
+                    }
+
+                  </div>
+            }
+
+          </div>
+        </div> */}
+
+        <MachineFailure
+          open={isOpen}
+          handleClose={toggleDiv}
+          data={state.data}
+          loading={!state.loaded}
+          error={state.error}
+          failedStageData={state.failed_stage_data}
+          failedTask={failed_task_instance}
+          failedServices={failedServices}
+          servicesContinuing={servicesWillConitue}
+          pipeline_data={pipeline_data}
+          rerunJob={closeDialogAndApiHit}
+          postContinuePipelineData={postContinuePipelineData}
+          handleCompleteRollback={handleCompleteRollback}
+          failed_task_dep_type={failed_task_dep_type}
+          showTable={showTable}
+          complete_rollback={state.complete_rollback}
+          backClicked={backClicked}
+          continueClicked={continueClicked}
+          formData={state.formData}
+          formError={state.formError}
+          onChangeHandler={onChangeHandler}
+          failed_stage_instance={failed_stage_instance}
+          filterApprovalQuestionsStage={filterApprovalQuestionsStage}
+          pipeline_id={pipeline_id}
+          pipeline_instance_id={pipeline_instance_id}
+          postFinalData={postFinalData}
+        />
+      </>
+    }
+
+    </>
+
+  );
+};
+
+SlidingDiv.propTypes = {
+  ...PropTypes.objectOf(PropTypes.any),
+};
+
+export default SlidingDiv;
