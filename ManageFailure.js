@@ -213,7 +213,7 @@ const CanaryView = ({ failedServices, servicesContinuing }) => (
     </div>
 );
 
-const ConfirmationScreen = ({ data, complete_rollback, failedServices, servicesContinuing, formData, formError, onChangeHandler }) => {
+const ConfirmationScreen = ({ data, complete_rollback, failed_task_dep_type, failedServices, servicesContinuing, formData, formError, onChangeHandler }) => {
     const taskType = data && data[0] ? data[0].task_type : null;
     if (complete_rollback) {
         return (
@@ -232,6 +232,10 @@ const ConfirmationScreen = ({ data, complete_rollback, failedServices, servicesC
                 {servicesContinuing && servicesContinuing.length > 0 && <ServiceListSection title="Passed Services" services={servicesContinuing} color="#2EBE79" icon="ri-check-fill" />}
             </div>
         );
+    }
+    console.log('[ConfirmationScreen]', { taskType, failed_task_dep_type, complete_rollback, dataLength: data?.length });
+    if (taskType === "DEPLOY" || (taskType === "GLOBAL_DEPLOY" && failed_task_dep_type === "canary")) {
+        return <CanaryView failedServices={failedServices} servicesContinuing={servicesContinuing} />;
     }
     if (taskType === "BUILD" || taskType === "GLOBAL_BUILD" || taskType === "ANDROID_BUILD" ||
         taskType === "DEPLOY" || taskType === "GLOBAL_DEPLOY" || taskType === "ANDROID_DEPLOY" ||
@@ -322,7 +326,7 @@ const ManageFailure = (props) => {
     const renderFooter = () => {
         if (!showTable) {
             return (
-                <div className='footer-right-panel d-flex align-center justify-end' style={{ gap: '12px' }}>
+                <div className='footer-right-panel d-flex align-center justify-end' style={{ gap: '12px', bottom: '16px', right: '20px' }}>
                     <button className='btn btn-outlined d-flex align-center justify-center btn-semi-bold' style={{ color: '#124D9B' }} onClick={backClicked}>BACK</button>
                     <button className='btn btn-primary d-flex align-center justify-center btn-semi-bold' onClick={postContinuePipelineData}>CONTINUE</button>
                 </div>
@@ -332,7 +336,7 @@ const ManageFailure = (props) => {
             return (
                 <div className='footer-right-panel d-flex align-center justify-end' style={{ gap: '12px' }}>
                     <button className='btn btn-secondary d-flex align-center justify-center btn-semi-bold' style={{ backgroundColor: '#FEA111' }} onClick={handleCompleteRollback}>COMPLETE ROLLBACK</button>
-                    {!(error && !loading) && <>
+                    {!(error && loading) && <>
                         {!isStageFailure && taskType !== "CANARY_ANALYSIS" && <button className='btn btn-outlined d-flex align-center justify-center btn-semi-bold' style={{ color: '#124D9B' }} onClick={continueClicked}>CONTINUE WITH FAILURE</button>}
                         {renderRerunOrApproval()}
                     </>}
@@ -341,7 +345,7 @@ const ManageFailure = (props) => {
         }
         return (
             <div className='footer-right-panel d-flex align-center justify-end' style={{ gap: '12px' }}>
-                {!(error && !loading) && <>
+                {!(error && loading) && <>
                     {!isStageFailure && taskType !== "CANARY_ANALYSIS" && <button className='btn btn-outlined d-flex align-center justify-center btn-semi-bold' style={{ color: '#124D9B' }} onClick={continueClicked}>CONTINUE WITH FAILURE</button>}
                     {renderRerunOrApproval()}
                 </>}
@@ -389,7 +393,7 @@ const ManageFailure = (props) => {
                 </div>
             );
         }
-        return <ConfirmationScreen data={data} complete_rollback={complete_rollback} failedServices={failedServices} servicesContinuing={servicesContinuing} formData={formData} formError={formError} onChangeHandler={onChangeHandler} />;
+        return <ConfirmationScreen data={data} complete_rollback={complete_rollback} failed_task_dep_type={failed_task_dep_type} failedServices={failedServices} servicesContinuing={servicesContinuing} formData={formData} formError={formError} onChangeHandler={onChangeHandler} />;
     };
 
     return (
@@ -421,7 +425,7 @@ const ManageFailure = (props) => {
                                     </div>
                                 </div>}
                             </div>
-                            <div style={{ padding: '0 0 16px 20px', flexShrink: 0 }}>
+                            <div style={{ padding: '0 16px 16px 0', flexShrink: 0 }}>
                                 {renderFooter()}
                             </div>
                         </div>
