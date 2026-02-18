@@ -494,7 +494,8 @@ const useStyles = makeStyles((theme) => ({
         '& .footer-right-panel': {
             paddingTop: '16px',
             '& .btn-semi-bold': { fontFamily: 'Montserrat, sans-serif', fontWeight: 600, fontSize: '12px', textTransform: 'uppercase', lineHeight: '1', height: '40px', padding: '8px 16px', border: 'none', borderRadius: '6px', textShadow: '0px 2px 1px rgba(0, 0, 0, 0.25)' },
-            '& .btn-outlined': { backgroundColor: '#ffffff', border: '1px solid #9DC0EE', textShadow: 'none' },
+            '& .btn-outlined': { backgroundColor: '#ffffff', border: '1px solid #9DC0EE', textShadow: 'none', transition: 'none !important', '&:hover': { backgroundColor: '#ffffff !important' }, '&:focus': { outline: 'none !important', boxShadow: 'none !important', backgroundColor: '#ffffff !important' }, '&:active': { backgroundColor: '#ffffff !important', boxShadow: 'none !important' } },
+            '& .btn-primary': { backgroundColor: '#0086ff', color: '#fff', transition: 'none !important', '&:hover': { backgroundColor: '#0086ff !important' }, '&:focus': { outline: 'none !important', boxShadow: 'none !important', backgroundColor: '#0086ff !important' }, '&:active': { backgroundColor: '#0086ff !important', boxShadow: 'none !important' } },
         }
     },
     tableContainer: { border: '1px solid #e0e0e0', borderRadius: '4px', overflow: 'hidden' },
