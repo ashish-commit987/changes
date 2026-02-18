@@ -9,6 +9,8 @@ import { Input } from '../../../../components/genericComponents/Input';
 import NewChip from "../../../../components/newChip/NewChip";
 import RerunAfterFailure from '../../listing/component/RerunAfterFailure';
 import FillApprovalQuestions from './FillApprovalQuestions';
+import BpOllyDialog from '../../../bpOlly';
+
 
 const getStatusChip = (status) => {
     if (!status) return "N/A";
@@ -22,7 +24,7 @@ const getTableConfig = (taskType, depType, status) => {
         return { columns: ["Service", "Status", "Reason"], title: "Execution Details for Deploy Job" };
     if (taskType === "BUILD" || taskType === "GLOBAL_BUILD" || taskType === "ANDROID_BUILD")
         return { columns: ["Service", "Env", "Branch", "Status", "Logs"], title: "Execution Details for Build Job" };
-    if (taskType === "DEPLOY" && depType === "canary")
+    if ((taskType === "DEPLOY" || taskType === "GLOBAL_DEPLOY") && depType === "canary")
         return { columns: [], title: "Canary Deploy", isCanary: true };
     if (taskType === "DEPLOY" || taskType === "GLOBAL_DEPLOY")
         return { columns: ["Service", "Env", "Status"], title: "Execution Details for Deploy Job" };
@@ -233,8 +235,7 @@ const ConfirmationScreen = ({ data, complete_rollback, failed_task_dep_type, fai
             </div>
         );
     }
-    console.log('[ConfirmationScreen]', { taskType, failed_task_dep_type, complete_rollback, dataLength: data?.length });
-    if (taskType === "DEPLOY" || (taskType === "GLOBAL_DEPLOY" && failed_task_dep_type === "canary")) {
+    if ((taskType === "DEPLOY" || taskType === "GLOBAL_DEPLOY") && failed_task_dep_type === "canary") {
         return <CanaryView failedServices={failedServices} servicesContinuing={servicesContinuing} />;
     }
     if (taskType === "BUILD" || taskType === "GLOBAL_BUILD" || taskType === "ANDROID_BUILD" ||
@@ -335,9 +336,19 @@ const ManageFailure = (props) => {
         if (failed_task_dep_type === "canary") {
             return (
                 <div className='footer-right-panel d-flex align-center justify-end' style={{ gap: '12px' }}>
-                    <button className='btn btn-secondary d-flex align-center justify-center btn-semi-bold' style={{ backgroundColor: '#FEA111' }} onClick={handleCompleteRollback}>COMPLETE ROLLBACK</button>
+                    <BpOllyDialog
+                        pipeline_id={pipeline_id}
+                        pipeline_instance_id={pipeline_instance_id}
+                        data={failed_stage_instance ? [failed_stage_instance] : []}
+                        autoOpenOnFailure={false}
+                    />
                     {!(error && loading) && <>
                         {!isStageFailure && taskType !== "CANARY_ANALYSIS" && <button className='btn btn-outlined d-flex align-center justify-center btn-semi-bold' style={{ color: '#124D9B' }} onClick={continueClicked}>CONTINUE WITH FAILURE</button>}
+                    </>}
+
+                    <button className='btn btn-secondary d-flex align-center justify-center btn-semi-bold' style={{ backgroundColor: '#FEA111' }} onClick={handleCompleteRollback}>COMPLETE ROLLBACK</button>
+
+                    {!(error && loading) && <>
                         {renderRerunOrApproval()}
                     </>}
                 </div>
@@ -346,7 +357,14 @@ const ManageFailure = (props) => {
         return (
             <div className='footer-right-panel d-flex align-center justify-end' style={{ gap: '12px' }}>
                 {!(error && loading) && <>
+                    <BpOllyDialog
+                        pipeline_id={pipeline_id}
+                        pipeline_instance_id={pipeline_instance_id}
+                        data={failed_stage_instance ? [failed_stage_instance] : []}
+                        autoOpenOnFailure={false}
+                    />
                     {!isStageFailure && taskType !== "CANARY_ANALYSIS" && <button className='btn btn-outlined d-flex align-center justify-center btn-semi-bold' style={{ color: '#124D9B' }} onClick={continueClicked}>CONTINUE WITH FAILURE</button>}
+
                     {renderRerunOrApproval()}
                 </>}
             </div>
