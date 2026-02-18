@@ -10,6 +10,7 @@ import NewChip from "../../../../components/newChip/NewChip";
 import RerunAfterFailure from '../../listing/component/RerunAfterFailure';
 import FillApprovalQuestions from './FillApprovalQuestions';
 import BpOllyDialog from '../../../bpOlly';
+import Button from '../../../../components/genericComponents/Button';
 
 
 const getStatusChip = (status) => {
@@ -302,7 +303,7 @@ const ManageFailure = (props) => {
         postContinuePipelineData, handleCompleteRollback, failed_task_dep_type,
         showTable, complete_rollback, backClicked, continueClicked,
         formData, formError, onChangeHandler, failed_stage_instance,
-        filterApprovalQuestionsStage, pipeline_id, pipeline_instance_id, postFinalData } = props;
+        filterApprovalQuestionsStage, pipeline_id, pipeline_instance_id, postFinalData, openOlly, ollyEnabled } = props;
 
     const taskType = data && data[0] ? data[0].task_type : null;
     const isStageFailure = failedStageData && Object.keys(failedStageData).length > 0;
@@ -314,9 +315,9 @@ const ManageFailure = (props) => {
         : <>Job has failed with following details : <b>{failedTask && failedTask.task_name ? failedTask.task_name : "N/A"}</b></>;
     const envBadge = data && data[0] ? data[0].env_name : null;
 
-    const renderRerunOrApproval = () => {
+    const renderRerunOrApproval = (buttonLabel = "RE-RUN FAILED JOB") => {
         if (data && data.length > 0) {
-            return <RerunAfterFailure pipeline={pipeline_data} data={data} rerunJob={rerunJob} />;
+            return <RerunAfterFailure pipeline={pipeline_data} data={data} rerunJob={rerunJob} buttonLabel={buttonLabel} />;
         }
         if (isStageFailure) {
             return <FillApprovalQuestions stage_instance_id={failed_stage_instance && failed_stage_instance.id} pipeline_id={pipeline_id || ""} pipeline_instance_id={pipeline_instance_id || ""} postFinalData={postFinalData} stage_name={failed_stage_instance.name} btnVariant="re_attempt" stage_instance_status={failed_stage_instance && failed_stage_instance.status} questionnaires={filterApprovalQuestionsStage && filterApprovalQuestionsStage.questionnaires} />;
@@ -336,20 +337,29 @@ const ManageFailure = (props) => {
         if (failed_task_dep_type === "canary") {
             return (
                 <div className='footer-right-panel d-flex align-center justify-end' style={{ gap: '12px' }}>
-                    <BpOllyDialog
-                        pipeline_id={pipeline_id}
-                        pipeline_instance_id={pipeline_instance_id}
-                        data={failed_stage_instance ? [failed_stage_instance] : []}
-                        autoOpenOnFailure={false}
-                    />
+
+                    {ollyEnabled === "true" && (
+                        <Tooltip title="BP Log Analyser">
+                            <span>
+                                <Button
+                                    variant="olly"
+                                    style={{ padding: "8px 11px" }}
+                                    onClick={() => {
+                                        handleClose();
+                                        if (openOlly) openOlly();
+                                    }}
+                                ></Button>
+                            </span>
+                        </Tooltip>
+                    )}
                     {!(error && loading) && <>
-                        {!isStageFailure && taskType !== "CANARY_ANALYSIS" && <button className='btn btn-outlined d-flex align-center justify-center btn-semi-bold' style={{ color: '#124D9B' }} onClick={continueClicked}>CONTINUE WITH FAILURE</button>}
+                        {!isStageFailure && taskType !== "CANARY_ANALYSIS" && <button className='btn btn-outlined d-flex align-center justify-center btn-semi-bold' style={{ color: '#124D9B' }} onClick={continueClicked}>CONTINUE WITH FAILED JOB</button>}
                     </>}
 
                     <button className='btn btn-secondary d-flex align-center justify-center btn-semi-bold' style={{ backgroundColor: '#FEA111' }} onClick={handleCompleteRollback}>COMPLETE ROLLBACK</button>
 
                     {!(error && loading) && <>
-                        {renderRerunOrApproval()}
+                        {renderRerunOrApproval("RE-RUN JOB")}
                     </>}
                 </div>
             );
@@ -357,13 +367,21 @@ const ManageFailure = (props) => {
         return (
             <div className='footer-right-panel d-flex align-center justify-end' style={{ gap: '12px' }}>
                 {!(error && loading) && <>
-                    <BpOllyDialog
-                        pipeline_id={pipeline_id}
-                        pipeline_instance_id={pipeline_instance_id}
-                        data={failed_stage_instance ? [failed_stage_instance] : []}
-                        autoOpenOnFailure={false}
-                    />
-                    {!isStageFailure && taskType !== "CANARY_ANALYSIS" && <button className='btn btn-outlined d-flex align-center justify-center btn-semi-bold' style={{ color: '#124D9B' }} onClick={continueClicked}>CONTINUE WITH FAILURE</button>}
+                    {ollyEnabled === "true" && (
+                        <Tooltip title="BP Log Analyser">
+                            <span>
+                                <Button
+                                    variant="olly"
+                                    style={{ padding: "8px 11px" }}
+                                    onClick={() => {
+                                        handleClose();
+                                        if (openOlly) openOlly();
+                                    }}
+                                ></Button>
+                            </span>
+                        </Tooltip>
+                    )}
+                    {!isStageFailure && taskType !== "CANARY_ANALYSIS" && <button className='btn btn-outlined d-flex align-center justify-center btn-semi-bold' style={{ color: '#124D9B' }} onClick={continueClicked}>CONTINUE WITH FAILED JOB</button>}
 
                     {renderRerunOrApproval()}
                 </>}
@@ -463,7 +481,7 @@ ManageFailure.propTypes = {
     backClicked: PropTypes.func, continueClicked: PropTypes.func, formData: PropTypes.object,
     formError: PropTypes.object, onChangeHandler: PropTypes.func, failed_stage_instance: PropTypes.object,
     filterApprovalQuestionsStage: PropTypes.object, pipeline_id: PropTypes.any,
-    pipeline_instance_id: PropTypes.any, postFinalData: PropTypes.func,
+    pipeline_instance_id: PropTypes.any, postFinalData: PropTypes.func, openOlly: PropTypes.func, ollyEnabled: PropTypes.any,
 };
 
 export default ManageFailure;
