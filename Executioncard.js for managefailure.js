@@ -740,7 +740,7 @@ const ExecutionSection = (props) => {
                         {
 
                             specificSetting === "true" &&
-                            specificSetting === "true" &&
+                            
 
                             <BpOllyDialog
                                 rcaData={rcaData}
