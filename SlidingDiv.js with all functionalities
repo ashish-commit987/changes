@@ -11,11 +11,14 @@ import RerunAfterFailure from '../../listing/component/RerunAfterFailure';
 import FillApprovalQuestions from './FillApprovalQuestions';
 import moment from 'moment';
 import GenericSkeleton from '../../../../components/genericComponents/Skeletons/GenericSkeleton';
-import MachineFailure from './MachineFailure';
+import ManageFailure from './ManageFailure';
+import BpOllyDialog from '../../../bpOlly';
 
 
 const SlidingDiv = (props) => {
   const [isOpen, setIsOpen] = useState(false);
+  const [ollyOpen, setOllyOpen] = useState(false);
+  const [openedFromManageFailure, setOpenedFromManageFailure] = useState(false);
   const [stripedRows] = useState(true);
   const [state, setState] = useState({ data: [], formData: {}, formError: {}, failed_stage_data: {}, deployment_type: "rolling", complete_rollback: false });
   const [servicesWillConitue, setServicesWillContinue] = useState([]);
@@ -44,7 +47,10 @@ const SlidingDiv = (props) => {
         ? current
         : latest;
     }, null);
-  const failed_task_dep_type = failed_task_instance?.task_type == "DEPLOY" ? failed_task_instance.deployment_type == "CANARY" ? "canary" : "rolling" : null
+  // Look up deployment_type from task definition since task_instance (runtime) doesn't have it
+  const failed_task_definition = failed_task_instance ? all_stages.flatMap(stage => stage.tasks || []).find(task => task.id === failed_task_instance.task_id) : null;
+  const failed_task_dep_type = (failed_task_instance?.task_type == "DEPLOY" || failed_task_instance?.task_type == "GLOBAL_DEPLOY") ? failed_task_definition?.deployment_type == "CANARY" ? "canary" : "rolling" : null;
+  console.log(failed_task_definition, failed_task_dep_type, "failed_task_dep_type_debug")
   console.log(failed_stage_instance, "pipeline_datapipeline_data", filterApprovalQuestionsStage)
   const continuePipelineFailure = props.continuePipelineFailure ? props.continuePipelineFailure : null;
   const rerunPipeline = props.rerunPipeline;
@@ -67,11 +73,11 @@ const SlidingDiv = (props) => {
     setTimeout(() => {
       setShowTable(true);
       setIsFlipped(false);
+      setState((new_state) => ({
+        ...new_state,
+        complete_rollback: false,
+      }))
     }, 500);
-    setState((new_state) => ({
-      ...new_state,
-      complete_rollback: false,
-    }))
   };
 
   const handleCompleteRollback = () => {
@@ -87,7 +93,7 @@ const SlidingDiv = (props) => {
   }
 
   function closeDialogAndApiHit(data) {
-   
+
     var post_data = {
       ...data,
       stage_instance_id: failed_stage_instance && failed_stage_instance.id,
@@ -96,7 +102,7 @@ const SlidingDiv = (props) => {
     rerunPipeline(post_data);
     setIsOpen(!isOpen);
   }
- 
+
 
   function getServiceDetails() {
     var requestInfo = {
@@ -159,7 +165,7 @@ const SlidingDiv = (props) => {
     }
 
   }
-  
+
 
   const renderTableComponent = (data) => {
     console.log(data, "Processing table data");
@@ -168,7 +174,7 @@ const SlidingDiv = (props) => {
       return [];
     }
 
-    
+
     const taskHandlers = {
       component_task_instance: handleComponentTasks,
       jira_integration_task_instance: handleJiraTasks,
@@ -182,7 +188,7 @@ const SlidingDiv = (props) => {
       global_promote_task_instance: handleGlobalProjectTasks
     };
 
-   
+
     for (const [taskType, handler] of Object.entries(taskHandlers)) {
       if (data[taskType] && data[taskType].length > 0) {
         return handler(data[taskType], data);
@@ -192,7 +198,7 @@ const SlidingDiv = (props) => {
     return [];
   };
 
- 
+
   function handleComponentTasks(taskInstances, data) {
     const failedTasks = taskInstances.filter(item =>
       item.activity_status?.status === "FAILED" ||
@@ -206,7 +212,7 @@ const SlidingDiv = (props) => {
     var filterFailedTask = data.component_task_instance.filter(item => item.activity_status?.status === "FAILED" || item.activity_status?.status === "DONT_RUN");
     var filterSuccessServices = data.component_task_instance.filter(item => item.activity_status?.status === "SUCCESS");
 
-    
+
     setServicesWillContinue(successTasks.map(item => item.component.name));
     setFailedServices(failedTasks.map(item => item.component.name));
     setFailedCanaryServices(filterFailedTask)
@@ -241,7 +247,7 @@ const SlidingDiv = (props) => {
     }, []);
   }
 
-  
+
   function handleJiraTasks(taskInstances) {
     const failedTasks = taskInstances.filter(item => item.status === "FAILED");
 
@@ -255,7 +261,7 @@ const SlidingDiv = (props) => {
     }));
   }
 
- 
+
   function handleRestApiTasks(taskInstances) {
     const failedTasks = taskInstances.filter(item => item.status === "FAILED");
 
@@ -269,7 +275,7 @@ const SlidingDiv = (props) => {
     }));
   }
 
-  
+
   function handleCanaryTasks(taskInstances) {
     const failedTasks = taskInstances.filter(item => item.status === "FAILED");
 
@@ -281,7 +287,7 @@ const SlidingDiv = (props) => {
     }));
   }
 
-  
+
   function handlePipelineTasks(taskInstances) {
     const failedTasks = taskInstances.filter(item => item.status === "FAILED");
     const failedServices = [];
@@ -430,6 +436,13 @@ const SlidingDiv = (props) => {
     }
     backClicked()
   };
+
+  // Register toggleDiv into the ref so parent (ExecutionCard) can trigger it
+  const openManageFailureRef = props.openManageFailureRef;
+  if (openManageFailureRef) {
+    openManageFailureRef.current = toggleDiv;
+  }
+
   function onChangeHandler(e) {
     var key = e.target.name;
     var value = e.target.value;
@@ -453,15 +466,7 @@ const SlidingDiv = (props) => {
     console.log(find_task_type, "find_task_type");
     console.log("hdsjhsjd", failed_task_instance);
     var post_data = {}
-    if (find_task_type == "BUILD" || find_task_type == "DEPLOY" || find_task_type == "PROMOTE"
-      || find_task_type == "GLOBAL_BUILD" || find_task_type == "GLOBAL_DEPLOY" || find_task_type == "GLOBAL_PROMOTE" || find_task_type == "ANDROID_BUILD" || find_task_type == "ANDROID_DEPLOY"
-    ) {
-      post_data = {
-        "stage_instance_id": failed_stage_instance && failed_stage_instance.id,
-        "task_instance_id": failed_task_instance && failed_task_instance.id,
-        "components": failedServices,
-      }
-    } else if (find_task_type == "DEPLOY" && failed_task_dep_type == "canary") {
+    if ((find_task_type == "DEPLOY" || find_task_type == "GLOBAL_DEPLOY") && failed_task_dep_type == "canary") {
       post_data = {
         "stage_instance_id": failed_stage_instance && failed_stage_instance.id,
         "task_instance_id": failed_task_instance && failed_task_instance.id,
@@ -470,13 +475,21 @@ const SlidingDiv = (props) => {
         "complete_rollback": state.complete_rollback,
         "deployment_type": "CANARY"
       }
-    } else if (find_task_type == "DEPLOY" && failed_task_dep_type != "canary") {
+    } else if ((find_task_type == "DEPLOY" || find_task_type == "GLOBAL_DEPLOY") && failed_task_dep_type != "canary") {
       post_data = {
         "stage_instance_id": failed_stage_instance && failed_stage_instance.id,
         "task_instance_id": failed_task_instance && failed_task_instance.id,
         "components": failedServices,
         "complete_rollback": state.complete_rollback,
         "deployment_type": "ROLLING"
+      }
+    } else if (find_task_type == "BUILD" || find_task_type == "DEPLOY" || find_task_type == "PROMOTE"
+      || find_task_type == "GLOBAL_BUILD" || find_task_type == "GLOBAL_DEPLOY" || find_task_type == "GLOBAL_PROMOTE" || find_task_type == "ANDROID_BUILD" || find_task_type == "ANDROID_DEPLOY"
+    ) {
+      post_data = {
+        "stage_instance_id": failed_stage_instance && failed_stage_instance.id,
+        "task_instance_id": failed_task_instance && failed_task_instance.id,
+        "components": failedServices,
       }
     }
     else {
@@ -488,7 +501,7 @@ const SlidingDiv = (props) => {
           ...state.formData,
           "stage_instance_id": failed_stage_instance && failed_stage_instance.id,
           "task_instance_id": failed_task_instance && failed_task_instance.id,
-          
+
         }
       } else {
         if (find_task_type == "REST_API") {
@@ -501,7 +514,7 @@ const SlidingDiv = (props) => {
             "stage_instance_id": failed_stage_instance && failed_stage_instance.id,
             "task_instance_id": failed_task_instance && failed_task_instance.id,
             "components": failedServices,
-            
+
           }
         } else if (find_task_type == "SNOW_INTEGRATION") {
           var ticket_key = state.data.map(item => { return item.issue_key });
@@ -511,13 +524,13 @@ const SlidingDiv = (props) => {
             ...state.formData,
             "stage_instance_id": failed_stage_instance && failed_stage_instance.id,
             "task_instance_id": failed_task_instance && failed_task_instance.id,
-            
+
           }
         } else {
           post_data = {
             "stage_instance_id": failed_stage_instance && failed_stage_instance.id,
             "task_instance_id": failed_task_instance && failed_task_instance.id,
-            
+
           }
         }
       }
@@ -683,7 +696,7 @@ const SlidingDiv = (props) => {
                                 state.data && state.data[0] ?
                                   state.data[0].task_type ?
                                     state.data[0].task_type == "BUILD" || state.data[0].task_type == "DEPLOY" ||
-                                      state.data[0].task_type == "PROMOTE" || state.data[0].task_type == "JIRA_INTEGRATION" || state.data[0].task_type == "REST_API" || state.data[0].task_type == "CANARY_ANALYSIS" || state.data[0].task_type == "indpedent_job" || state.data[0].task_type == "dependent_job" || state.data[0].task_type == "SNOW_INTEGRATION" || state.data[0].task_type == "ATTACH_DOCUMENTS" || state.data[0].task_type == "GLOBAL_DEPLOY" || state.data[0].task_type == "GLOBAL_BUILD" || state.data[0].task_type == "GLOBAL_PROMOTE" || state.data[0].task_type == "ANDROID_BUILD" || state.data[0].task_type == "ANDROID_DEPLOY" || state.data[0]?.task_type ==="CRONJOB" ?
+                                      state.data[0].task_type == "PROMOTE" || state.data[0].task_type == "JIRA_INTEGRATION" || state.data[0].task_type == "REST_API" || state.data[0].task_type == "CANARY_ANALYSIS" || state.data[0].task_type == "independent_job" || state.data[0].task_type == "dependent_job" || state.data[0].task_type == "SNOW_INTEGRATION" || state.data[0].task_type == "ATTACH_DOCUMENTS" || state.data[0].task_type == "GLOBAL_DEPLOY" || state.data[0].task_type == "GLOBAL_BUILD" || state.data[0].task_type == "GLOBAL_PROMOTE" || state.data[0].task_type == "ANDROID_BUILD" || state.data[0].task_type == "ANDROID_DEPLOY" || state.data[0]?.task_type ==="CRONJOB" ?
                                       <div className={`tableDivi ${showTable ? 'content-table' : 'hidden'}`}>
                                         <div className="tableDiv-container">
                                           <table className={`tableDiv `} >
@@ -861,7 +874,7 @@ const SlidingDiv = (props) => {
                                                                   <th>Logs</th>
                                                                 </tr>
                                                                 :
-                                                                state.data[0].task_type === "indpedent_job" ?
+                                                                state.data[0].task_type === "independent_job" ?
                                                                   <tr>
                                                                     <th>Task Type</th>
                                                                     <th>Duration</th>
@@ -1150,14 +1163,16 @@ const SlidingDiv = (props) => {
                                           {state.data.map((item, index) => (
                                             <span key={index} className='chip chip-failed'>
                                               {item.service_name}
-                                              </span>
+                                              
+                                            </span>
                                           ))}
                                         </p>
                                         <p><b>On continue:</b> pipeline will proceed with following microservices:&nbsp;
                                           {servicesWillConitue.map((item, index) => (
                                             <span key={index} className='chip chip-success'>
                                               {item}
-                                              </span>
+                                              
+                                            </span>
                                           ))}
                                         </p>
 
@@ -1269,14 +1284,16 @@ const SlidingDiv = (props) => {
                                               {state.data.map((item, index) => (
                                                 <span key={index} className='chip chip-failed'>
                                                   {item.service_name}
-                                                  </span>
+                                                  
+                                                </span>
                                               ))}
                                             </p>
                                             <p><b>On continue:</b> pipeline will proceed with following microservices:&nbsp;
                                               {servicesWillConitue.map((item, index) => (
                                                 <span key={index} className='chip chip-success'>
                                                   {item}
-                                                  </span>
+                                                  
+                                                </span>
                                               ))}
                                             </p>
 
@@ -1299,7 +1316,6 @@ const SlidingDiv = (props) => {
                                               </p>
 
                                               <p><b>On continue:</b> pipeline will proceed with following microservices:&nbsp;
-                                                
                                                 {servicesWillConitue.map((item, index) => (
                                                   <span key={index} className='chip chip-success'>
                                                     {item}
@@ -1598,7 +1614,7 @@ const SlidingDiv = (props) => {
           </div>
         </div> */}
 
-        <MachineFailure
+        <ManageFailure
           open={isOpen}
           handleClose={toggleDiv}
           data={state.data}
@@ -1625,6 +1641,29 @@ const SlidingDiv = (props) => {
           pipeline_id={pipeline_id}
           pipeline_instance_id={pipeline_instance_id}
           postFinalData={postFinalData}
+          ollyEnabled={ollyEnabled}
+          openOlly={() => {
+            setOllyOpen(true);
+            setOpenedFromManageFailure(true);
+          }}
+        />
+        <BpOllyDialog
+          open={ollyOpen}
+          onClose={() => {
+            setOllyOpen(false);
+            if (openedFromManageFailure) {
+              setIsOpen(true);
+              setOpenedFromManageFailure(false);
+            }
+          }}
+          onManageFailure={() => {
+            toggleDiv();
+          }}
+          hideButton={true}
+          pipeline_id={pipeline_id}
+          pipeline_instance_id={pipeline_instance_id}
+          data={failed_stage_instance ? [failed_stage_instance] : []}
+          autoOpenOnFailure={false}
         />
       </>
     }
