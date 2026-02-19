@@ -489,6 +489,7 @@ export default ManageFailure;
 const useStyles = makeStyles((theme) => ({
     root: {
         '&.dialog-align-corner': { '& .MuiPaper-root': { maxWidth: '1100px' } },
+        '& .MuiBackdrop-root': { backdropFilter: 'none !important', backgroundColor: 'transparent !important' },
         '& .left-panel-dialog-down': { width: '0px', overflow: 'hidden', transition: `'width 5s', 'overflow 1s'` },
         '& .body-panel-new-one': { padding: '10px 16px', height: 'calc(100vh - 120px)', overflowY: 'auto', position: 'relative' },
         '& .footer-right-panel': {
