@@ -1,0 +1,992 @@
+import React, { useState, useEffect } from 'react';
+import PropTypes from 'prop-types';
+import { makeStyles } from '@mui/styles';
+import { Input } from '../../../../components/genericComponents/Input';
+import Grid from '@mui/material/Grid';
+
+import { getCommonFunctions, ResetComponent } from '../ci_flow/SourceDetails';
+import { ValidateDataSet, VALIDATION_TYPE_REQUIRED, VALIDATION_TYPE_SAME_NAME } from '../../../../util/Validator';
+import FileUpload, { FileUploadDefaultState } from '../../../../components/genericComponents/Forms/FileUpload';
+import { Loading } from '../../../utils/Loading';
+
+import GitRepo from '../../../../components/genericComponents/Forms/GitRepo';
+import { GitRepoDefaultState } from '../../../../components/genericComponents/Forms/GitRepo';
+
+import ProtectedIngress from './components/ProtectedIngress';
+import PublicIngress from './components/PublicIngress';
+import PrivateIngress from './components/PrivateIngress';
+import MultiPort from './components/MultiPort';
+import properties from '../../../../properties/properties';
+import { useParams } from 'react-router-dom';
+import InputSkeleton from '../../../../components/genericComponents/Skeletons/InputSkeleton';
+import GenerateURL from '../../../../util/APIUrlProvider';
+import InvokeApi from '../../../../util/apiInvoker';
+
+const supportedImagePullPolicies = [
+  { id: "Always", label: "Always" },
+  { id: "IfNotPresent", label: "If Not Present" },
+  { id: "Never", label: "Never" },
+]
+const useStyles = makeStyles(theme => ({
+  root: {
+    padding: '0px',
+    '& > .card-add-service': {
+      borderRadius: '0px',
+      border: '0px'
+    },
+    '& > .card-add-service-head': {
+      borderTop: '1px solid #e7e7eb',
+      borderRadius: '0px',
+    },
+    '& > .card': {
+      backgroundColor: '#f6f8f8',
+      borderRadius: '0px',
+      '& .card-footer': {
+        backgroundColor: '#fff',
+        justifyContent: 'flex-end'
+      },
+      '& .card ': {
+        marginBottom: '15px',
+        boxShadow: 'none',
+        '& .input-component': {
+          marginBottom: '0px'
+        }
+      }
+    }
+  }
+}))
+
+const AccessLevel = (props) => {
+  const classes = useStyles();
+  const inherits = props.inherits ? props.inherits : {};
+  const prev_state = props.prev_state ? props.prev_state : null;
+  const type = props.type ? props.type : null;
+  const extraProps = props.extraProps ? props.extraProps : { service_name: "default", project_env_name: "default", environment_master_name: "default" };
+  const [state, setState] = useState(prev_state ? prev_state : type == "sidecars" ? getAccessLevelSidecarsDefaultState(extraProps) : getAccessLevelDefaultState(extraProps))
+  const commonFunctions = getCommonFunctions(state, setState, inherits);
+  const [showLoading, setShowLoading] = useState(false);
+  const { component_env_id } = useParams();
+  var data_new = getAccessLevelDefaultState();
+  console.log(extraProps, prev_state, "extraPropsextraProps")
+  useEffect(() => {
+    setShowLoading(true);
+    setState(new_state => ({ ...new_state, ...prev_state }))
+    setTimeout(() => {
+      setShowLoading(false)
+    }, 200);
+  }, [prev_state])
+
+  useEffect(() => {
+    if (extraProps.available_deployments && extraProps.available_deployments.length > 0) {
+      setState(new_state => ({
+        ...new_state,
+        existing_key_list: extraProps.available_deployments
+      }))
+    }
+  }, [extraProps.available_deployments])
+
+  useEffect(() => {
+    if (extraProps.multi_namespace) {
+      getNamespaceList();
+    }
+  }, [extraProps.multi_namespace])
+
+  function getNamespaceList() {
+    var requestInfo = {
+      endPoint: GenerateURL({ component_env_id: component_env_id }, properties.api.get_namespace_list_per_componentenv),
+      httpMethod: "GET",
+      httpHeaders: { "Content-Type": "application/json" }
+    }
+    setState((prev) => ({
+      ...prev,
+      namespaceListing: true,
+    }))
+    InvokeApi(requestInfo,
+      (response) => {
+        if (response.length > 0) {
+          setState((prev) => ({
+            ...prev,
+            validations: {
+              ...prev.validations,
+              selected_namespace_id: [VALIDATION_TYPE_REQUIRED],
+            },
+            namespace_list: response.map((ele) => ({ id: ele.id, label: ele.name })),
+            namespaceListing: false,
+          }))
+        }
+      },
+      (error) => {
+        setState((prev) => ({
+          ...prev,
+          namespace_list: [],
+          namespaceListing: false,
+        }))
+      }
+    );
+  }
+
+
+  const onChangeDeployName = (e) => {
+    commonFunctions.onChangeHandler(e)
+    let value = e.target.value;
+    let widget_deployment_names = state.data.deployment_names;
+    widget_deployment_names[0] = value;
+    setState((prev_state) => ({
+      ...prev_state,
+      data: {
+        ...prev_state.data,
+        deployment_names: widget_deployment_names,
+      }
+    }));
+  }
+
+  function onChangeHandlerForKeyValue(key, value) {
+    console.log("hudhsja", key, value);
+    if (key == "components") {
+      value.forEach((id, index) => {
+        value[index] = Number(id);
+      });
+    }
+    setState({
+      ...state,
+      data: {
+        ...state.data,
+        [key]: value
+      },
+      error: {
+        ...state.error,
+        [key]: null,
+      }
+    });
+  }
+
+  function onChangeNamespace(key, value) {
+    if (value) {
+      setState((prev) => {
+        let selectedNamespace = state.namespace_list.find((ele) => ele.id === value);
+        return {
+          ...prev,
+          data: {
+            ...prev.data,
+            [key]: value,
+            selected_namespace_name: selectedNamespace.label,
+            selected_namespace_istio: selectedNamespace?.istio_enabled
+          }
+        }
+      })
+    }
+  }
+
+  console.log(state, 'state_acd_pp')
+
+  return (
+    <>
+      {
+        type == "sidecar" ?
+          <div className={`${classes.root} ci-cd-edit-input-div`}>
+            <Grid container className="card-add-service">
+              <Grid item lg={12} direction="row" className="card-add-service-head" style={{ borderTop: '1px solid #e7e7eb' }}>
+                <div className="formTag">
+                  <h4 className='mainHeading'>Deployment Details</h4>
+                </div>
+              </Grid>
+              {showLoading ? <Loading varient="light" /> :
+                <>
+                  {/* <Grid item lg={6}>
+                    <div className='section'>
+                      <Input
+                        type="text"
+                        placeholder="Service Name in YAML"
+                        name="service_name"
+                        mandatorySign
+                        label="Service Name (in service yaml)"
+                        error={state.error}
+                        onChangeHandler={commonFunctions.onChangeHandler}
+                        data={state.data} />
+                    </div>
+                  </Grid> */}
+                  {/* <Grid item lg={6}>
+                    <div className='section'>
+                      <Input
+                        type="text"
+                        placeholder="Image Name"
+                        name="image_name"
+                        label="Image Name"
+                        mandatorySign
+                        error={state.error}
+                        onChangeHandler={commonFunctions.onChangeHandler}
+                        data={state.data} />
+                    </div>
+                  </Grid> */}
+
+                  <Grid item lg={6}>
+                    {/* <div className='section'>
+                      <Input
+                        type="text"
+                        placeholder="Deployment Name"
+                        name="deployment_name"
+                        mandatorySign
+                        label="Deployment Name"
+                        error={state.error}
+                        data={state.data}
+                        onChangeHandler={commonFunctions.onChangeHandler} />
+                    </div> */}
+                  </Grid>
+                  <Grid item lg={6}>
+                    {/* <div className="section" >
+                      <Input
+                        mandatorySign
+                        type="number"
+                        placeholder="desired replica count"
+                        label="Desired Replica Count"
+                        name="desired_replication"
+                        onChangeHandler={commonFunctions.onChangeHandlerNumber}
+                        data={state.data}
+                        error={state.error}
+                      />
+                    </div> */}
+                  </Grid>
+
+                </>}
+            </Grid>
+          </div>
+          :
+          <div className={`${classes.root} ci-cd-edit-input-div`}>
+            <Grid container className="card-add-service">
+              <Grid item lg={12} direction="row" className="card-add-service-head" style={{ borderTop: '1px solid #e7e7eb' }}>
+                <div className="formTag">
+                  <h4 className='mainHeading'>Deployment Details</h4>
+                </div>
+              </Grid>
+              {/* <Grid item lg={12}>
+        Deployment Information</Grid>  */}
+              {showLoading ? <Loading varient="light" /> :
+                <>
+                  <Grid item lg={6}>
+                    <div className='section'>
+                      <Input
+                        type="text"
+                        placeholder="Service Name in YAML"
+                        name="service_name"
+                        mandatorySign
+                        label="Service Name (in service yaml)"
+                        error={state.error}
+                        onChangeHandler={commonFunctions.onChangeHandler}
+                        data={state.data} />
+                    </div>
+                  </Grid>
+                  {/* <Grid item lg={6}>
+                    <div className='section'>
+                      <Input
+                        type="text"
+                        placeholder="Image Name"
+                        name="image_name"
+                        label="Image Name"
+                        mandatorySign
+                        error={state.error}
+                        onChangeHandler={commonFunctions.onChangeHandler}
+                        data={state.data} />
+                    </div>
+                  </Grid> */}
+
+                  <Grid item lg={6}>
+                    <div className='section'>
+                      <Input
+                        type="text"
+                        placeholder="Deployment Name"
+                        name="deployment_name"
+                        mandatorySign
+                        label="Deployment Name"
+                        error={state.error}
+                        data={state.data}
+                        onChangeHandler={onChangeDeployName} />
+
+
+                    </div>
+                  </Grid>
+                  <Grid item lg={6}>
+                    <div className='section'>
+                      <Input
+                        type="text"
+                        placeholder="Container Name"
+                        name="container_name"
+                        mandatorySign
+                        label="Container Name"
+                        error={state.error}
+                        data={state.data}
+                        onChangeHandler={commonFunctions.onChangeHandler} />
+                    </div>
+                  </Grid>
+                  <Grid item lg={6}>
+                    <div className="section" >
+                      <Input
+                        mandatorySign
+                        type="number"
+                        placeholder="desired replica count"
+                        label="Desired Replica Count"
+                        name="desired_replication"
+                        onChangeHandler={commonFunctions.onChangeHandlerNumber}
+                        data={state.data}
+                        error={state.error}
+                      />
+                    </div>
+                  </Grid>
+                  <Grid item lg={6}>
+                    <div className="section" >
+                      <Input
+                        mandatorySign
+                        type="select"
+                        placeholder="Image pull Policy"
+                        list={supportedImagePullPolicies}
+                        label="Image Pull Policy"
+                        name="image_pull_policy"
+                        onChangeHandler={commonFunctions.onChangeHandler}
+                        data={state.data}
+                        error={state.error}
+                      />
+                    </div>
+                  </Grid>
+                  {extraProps.multi_namespace &&
+
+                    (state.namespaceListing ?
+                      <InputSkeleton
+                        type={'text'}
+                      />
+                      :
+                      <Grid item lg={6}>
+                        <div className="section auto-complete-dropdown auto-complete-dropdown-42">
+                          <Input
+                            type="auto-complete-dropdown" // "select"
+                            name="selected_namespace_id"
+                            list={state?.namespace_list?.length > 0 ? state.namespace_list : []}
+                            label="Select Namespace"
+                            onChangeHandler={onChangeNamespace}
+                            data={state.data}
+                            mandatorySign
+                            error={state.error}
+                            getOptionLabel={(option) => option.label}
+                            info={"The namespaces listed here are only those that are associated with the registry selected in the service environment."}
+                          />
+                        </div>
+                      </Grid>
+                    )
+                  }
+                  <Grid item lg={12}>
+                    <div className='section'>
+                      <Input
+                        type="tagged-input"
+                        placeholder="Add additional deployment names"
+                        label="Deployment Analytics Widget"
+                        subHeading="(Deployment Analytics)"
+                        name="deployment_names"
+                        data={state.data}
+                        error={state.error}
+                        onChangeHandler={onChangeHandlerForKeyValue}
+                      />
+                    </div>
+                  </Grid>
+                  <Grid item lg={12}>
+                    <div className='card'>
+                      <Input
+                        type="switch"
+                        name="service_account"
+                        label="Do you want to give Custom Service Account Name"
+                        onChangeHandler={commonFunctions.toggleState}
+                        data={state.data}
+                        error={state.error}
+                        enabledComponent={<EnabledComponentServiceAcount
+                          extraProps={extraProps}
+                          prev_state={state.service_account}
+                          inherits={state.child_inherits.service_account}
+
+                        />}
+                        disabledComponent={<ResetComponent inherits={state.child_inherits.service_account} />}
+                      />
+                    </div>
+                  </Grid>
+                  <MultiPort
+                    extraProps={extraProps}
+                    inherits={state.child_inherits.multiple_port_support}
+                    prev_state={state.multiple_port_support} />
+                </>}
+            </Grid>
+          </div>
+      }
+    </>
+  )
+}
+
+AccessLevel.propTypes = {
+  ...PropTypes.objectOf(PropTypes.any),
+}
+
+export function getAccessLevelDefaultState(extraProps) {
+  const service_name = extraProps ? extraProps.service_name : "";
+  const env_master = extraProps ? extraProps.environment_master_name : "";
+  const project_env_name = extraProps ? extraProps.project_env_name : "";
+  const deploy_name = service_name ? (service_name + "-" + env_master + "-" + project_env_name) : null;
+  return {
+    data: {
+      service_name: service_name ? (service_name + "-" + env_master + "-" + project_env_name) : "",
+      // image_name: service_name ? (service_name + "/" + env_master + "/" + project_env_name) : "",
+      deployment_name: service_name ? (service_name + "-" + env_master + "-" + project_env_name) : "",
+      container_name: service_name ? (service_name + "-" + env_master + "-" + project_env_name) : "",
+      desired_replication: 1,
+      deployment_names: [deploy_name],
+      selected_namespace_id: null,
+    },
+    error: {},
+    validations: {
+      service_name: [VALIDATION_TYPE_REQUIRED],
+      // image_name: [VALIDATION_TYPE_REQUIRED],
+      deployment_name: [VALIDATION_TYPE_REQUIRED, VALIDATION_TYPE_SAME_NAME],
+      container_name: [VALIDATION_TYPE_REQUIRED],
+      image_pull_policy: [VALIDATION_TYPE_REQUIRED]
+    },
+    child_inherits: {
+      multiple_port_support: {
+        "validateForm": () => { return { valid: true } },
+        "getState": () => { return {} },
+        "getData": () => { return {} }
+      },
+      service_account: {
+        "validateForm": () => { return { valid: true } },
+        "getState": () => { return {} },
+        "getData": () => { return {} }
+      }
+    }
+  }
+}
+
+export function getAccessLevelSidecarsDefaultState(extraProps) {
+  const service_name = extraProps ? extraProps.service_name : "";
+  const env_master = extraProps ? extraProps.environment_master_name : "";
+  const project_env_name = extraProps ? extraProps.project_env_name : "";
+
+  console.log(service_name, env_master, project_env_name, "data ============>")
+
+  return {
+    data: {
+      // service_name: service_name ? (service_name + "-" + env_master + "-" + project_env_name) : "",
+      // image_name: service_name ? (service_name + "/" + env_master + "/" + project_env_name) : "",
+      // deployment_name: service_name ? (service_name + "-" + env_master + "-" + project_env_name) : "",
+      // desired_replication: 1,
+    },
+    error: {},
+    validations: {
+      // service_name: [VALIDATION_TYPE_REQUIRED],
+      // image_name: [VALIDATION_TYPE_REQUIRED],
+      // deployment_name: [VALIDATION_TYPE_REQUIRED],
+    },
+    child_inherits: {
+      // multiple_port_support: {
+      //   "validateForm": () => { return { valid: true } },
+      //   "getState": () => { return {} },
+      //   "getData": () => { return {} }
+      // },
+
+    }
+  }
+}
+
+export default AccessLevel;
+
+export function getCustomIngressDefaultState() {
+  return {
+    data: { custom_ingress_type: 1 },
+    error: {},
+    validations: {
+    },
+    child_inherits: {
+      file_component: {
+        "validateForm": () => { return { valid: true } },
+        "getState": () => { return {} },
+        "getData": () => { return {} }
+      },
+      git_component: {
+        "validateForm": () => { return { valid: true } },
+        "getState": () => { return {} },
+        "getData": () => { return {} }
+      }
+    }
+  }
+}
+
+
+const CustomIngress = (props) => {
+  const inherits = props.inherits ? props.inherits : {};
+  const prev_state = props.prev_state ? props.prev_state : null;
+  const publicPrivateServiceInherits = props.publicPrivateServiceInherits
+  const [state, setState] = useState(prev_state ? prev_state : getCustomIngressDefaultState())
+  useEffect(() => {
+    setState(new_state => ({ ...new_state, ...prev_state }))
+  }, [prev_state])
+  const commonFunctions = getCommonFunctions(state, setState, inherits);
+
+  return (
+    <>
+      <div className="card-body">
+        <Grid lg={12} direction="row">
+          <div className='section'>
+            <Input
+              type="radio"
+              name="custom_ingress_type"
+              label="Choose Option"
+              mandatorySign
+              onChangeHandler={commonFunctions.onChangeHandler}
+              data={state.data}
+              error={state.error}
+              list={[{ label: 'via File', value: 1 }, { label: 'via Git', value: 2 }]}
+            />
+          </div>
+        </Grid>
+        {
+          state.data.custom_ingress_type == 1 ?
+            <FileUploadComponent publicPrivateServiceInherits={publicPrivateServiceInherits} prev_state={state.file_component} inherits={state.child_inherits.file_component} /> :
+            <ResetComponent inherits={state.child_inherits.file_component} />
+        }
+        {state.data.custom_ingress_type == 2 ?
+          <GitRepoComponent prev_state={state.git_component} inherits={state.child_inherits.git_component} /> :
+          <ResetComponent inherits={state.child_inherits.git_component} />
+
+        }
+      </div>
+    </>
+  )
+}
+
+CustomIngress.propTypes = {
+  ...PropTypes.objectOf(PropTypes.any),
+}
+
+const FileUploadComponent = props => {
+  const inherits = props.inherits ? props.inherits : {};
+  const prev_state = props.prev_state ? props.prev_state : null;
+  const [state, setState] = useState(prev_state ? prev_state : getFileUploadDefaultState())
+  useEffect(() => {
+    setState(new_state => ({ ...new_state, ...prev_state }))
+  }, [prev_state])
+  const commonFunctions = getCommonFunctions(state, setState, inherits);
+  var publicPrivateServiceInherits = props.publicPrivateServiceInherits;
+
+  function getFileUploadState() {
+    var state_temp = FileUploadDefaultState();
+    if (state.fileUpload) {
+      state.fileUpload.files.forEach(file_name => {
+        if (typeof (file_name) == "string") {
+          state_temp.form_data.data.files.push({
+            name: file_name
+          });
+        } else {
+          state_temp.form_data.data.files.push(file_name);
+        }
+      });
+    }
+    return state_temp;
+  }
+
+  return (
+    <div className="card-body" >
+      <Grid lg={12} direction="row">
+        <div className='section'>
+          <Input
+            type="text"
+            name="default_port"
+            label="Port"
+            mandatorySign
+            placeholder="4001"
+            onChangeHandler={commonFunctions.onChangeHandler}
+            data={state.data}
+            error={state.error} />
+        </div>
+      </Grid>
+      <div>
+        <FileUpload inherits={state.child_inherits.fileUpload} state={state.fileUpload ? state.fileUpload.files ? getFileUploadState() : null : null}
+          varient="single" />
+      </div>
+      <ResetComponent inherits={publicPrivateServiceInherits} />
+    </div>
+  )
+}
+
+FileUploadComponent.propTypes = {
+  ...PropTypes.objectOf(PropTypes.any),
+}
+
+const GitRepoComponent = props => {
+  var publicPrivateServiceInherits = props.publicPrivateServiceInherits;
+  const inherits = props.inherits ? props.inherits : {};
+  const prev_state = props.prev_state ? props.prev_state : null;
+  const [state, setState] = useState(prev_state ? prev_state : getgitComponentDefaultState())
+  useEffect(() => {
+    setState(new_state => ({ ...new_state, ...prev_state }))
+  }, [prev_state])
+  const commonFunctions = getCommonFunctions(state, setState, inherits);
+
+  function getGitRepoState() {
+    var state_temp = GitRepoDefaultState();
+    if (state.gitRepo) {
+      state_temp.form_data.data = { ...state_temp.form_data.data, ...state.gitRepo };
+      state_temp.branch_data.branches = state.gitRepo.branches
+    }
+    return state_temp;
+  }
+
+  return (
+    <div>
+      <div className='section'>
+        <Input
+          type="text"
+          name="default_port"
+          label="Port"
+          mandatorySign
+          placeholder="4001"
+          onChangeHandler={commonFunctions.onChangeHandler}
+          data={state.data}
+          error={state.error} />
+      </div>
+      <div>
+        <GitRepo single_path={true} inherits={state.child_inherits.gitRepo} state={state.gitRepo ? getGitRepoState() : null} />
+      </div>
+      <ResetComponent inherits={publicPrivateServiceInherits} />
+    </div>
+  )
+}
+
+GitRepoComponent.propTypes = {
+  ...PropTypes.objectOf(PropTypes.any),
+}
+
+export function getFileUploadDefaultState() {
+  return {
+    data: {},
+    error: {},
+    validations: {
+
+    },
+    gitRepo: null,
+    child_inherits: {
+      fileUpload: {
+        "validateForm": () => { return { valid: true } },
+        "getState": () => { return {} },
+        "getData": () => { return {} }
+      }
+    }
+  }
+}
+
+export function getgitComponentDefaultState() {
+  return {
+    data: {},
+    error: {},
+    validations: {
+    },
+
+    child_inherits: {
+      gitRepo: {
+        "validateForm": () => { return { valid: true } },
+        "getState": () => { return {} },
+        "getData": () => { return {} }
+      },
+    }
+  }
+}
+
+export function getPublicPrivateDefaultState(extraProps) {
+  const service_name = extraProps ? extraProps.service_name : "";
+  const env_master = extraProps ? extraProps.environment_master_name : "";
+  const project_env_name = extraProps ? extraProps.project_env_name : "";
+  return {
+    data: {
+      access_level: 'PRIVATE',
+    },
+    error: {},
+    validations: {
+    },
+    child_inherits: {
+      private_access_level: {
+        "validateForm": () => { return { valid: true } },
+        "getState": () => { return {} },
+        "getData": () => { return {} }
+      },
+      protected_access_level: {
+        "validateForm": () => { return { valid: true } },
+        "getState": () => { return {} },
+        "getData": () => { return {} }
+      },
+      public_access_level: {
+        "validateForm": () => { return { valid: true } },
+        "getState": () => { return {} },
+        "getData": () => { return {} }
+      }
+    },
+    access_level_list: [
+      {
+        label: "Is It Public",
+        value: "PUBLIC"
+      },
+      {
+        label: "Is It Protected",
+        value: "PROTECTED"
+      },
+      {
+        label: "Is It Private",
+        value: "PRIVATE"
+      }
+    ]
+  }
+}
+const PublicPrivateService = (props) => {
+  const inherits = props.inherits ? props.inherits : {};
+  const prev_state = props.prev_state ? props.prev_state : null;
+  const customIngressInherits = props.customIngressInherits;
+  const extraProps = props.extraProps;
+  const [state, setState] = useState(prev_state ? prev_state : getPublicPrivateDefaultState(extraProps))
+  const commonFunctions = getCommonFunctions(state, setState, inherits);
+
+  useEffect(() => {
+    setState(new_state => ({ ...new_state, ...prev_state }));
+
+  }, [prev_state])
+
+
+  return (
+    <Grid container justify="left" style={{ marginBottom: '10px' }}>
+      <Grid item lg={12} className="card-add-service-head">
+        <div className="head-div">
+          <h4 className='mainHeading'>Choose Access Level</h4>
+          <Input
+            type="radio"
+            name="access_level"
+            list={state.access_level_list}
+            onChangeHandler={commonFunctions.onChangeHandler}
+            data={state.data}
+            error={state.error} />
+        </div>
+      </Grid>
+
+      {state.data.access_level == "PRIVATE" ?
+        <>
+          <PrivateIngress
+            inherits={state.child_inherits.private_access_level}
+            prev_state={state.private_access_level}
+            extraProps={extraProps} />
+          <ResetComponent inherits={state.child_inherits.protected_access_level} />
+          <ResetComponent inherits={state.child_inherits.public_access_level} />
+        </>
+        : null
+      }
+      {state.data.access_level == "PROTECTED" ?
+        <>
+          <ProtectedIngress
+            inherits={state.child_inherits.protected_access_level}
+            prev_state={state.protected_access_level}
+            extraProps={extraProps}
+          />
+          <ResetComponent inherits={state.child_inherits.private_access_level} />
+          <ResetComponent inherits={state.child_inherits.public_access_level} />
+        </>
+        : null
+      }
+      {
+        state.data.access_level == "PUBLIC" ?
+          <>
+            <PublicIngress
+              inherits={state.child_inherits.public_access_level}
+              prev_state={state.public_access_level}
+              extraProps={extraProps}
+            />
+            <ResetComponent inherits={state.child_inherits.protected_access_level} />
+            <ResetComponent inherits={state.child_inherits.private_access_level} />
+          </>
+          : null
+      }
+      <ResetComponent inherits={customIngressInherits} />
+    </Grid>
+
+  )
+}
+PublicPrivateService.propTypes = {
+  ...PropTypes.objectOf(PropTypes.any),
+}
+
+
+const EnabledComponentServiceAcount = props => {
+  const inherits = props.inherits ? props.inherits : {};
+  const prev_state = props.prev_state ? props.prev_state : null
+  const [state, setState] = useState(prev_state ? prev_state : getEnabledComponentServiceNameDefaultState())
+  const commonFunctions = getCommonFunctions(state, setState, inherits);
+
+  useEffect(() => {
+    setState(new_state => ({ ...new_state, ...prev_state }))
+  }, [prev_state])
+
+  inherits.validateForm = () => {
+    var result = ValidateDataSet(state.data, state.validations);
+    if (!result.valid) {
+      setState(new_state => ({
+        ...new_state,
+        error: { ...result.error }
+      }))
+    }
+    var child_valid = true;
+    if (state.data.custom_manifest_type == 1) {
+      child_valid = state.child_inherits.fileUpload.validateForm().valid;
+    } else if (state.data.custom_manifest_type == 2) {
+      child_valid = state.child_inherits.gitRepo.validateForm().valid;
+    }
+    return { valid: result.valid && child_valid };
+  }
+
+  inherits.getData = () => {
+    var data = {
+      manifest_name: state.data.manifest_name,
+    };
+    if (state.data.custom_manifest_type == 1) {
+      var file_data = state.child_inherits.fileUpload.getData();
+      data.manifest_meta_data = {
+        strategy: "UPLOADED_MANIFEST",
+        manifest_file_paths: file_data.files,
+      };
+    } else if (state.data.custom_manifest_type == 2) {
+      var git_data = state.child_inherits.gitRepo.getData();
+      data.manifest_meta_data = {
+        strategy: "GIT_MANIFEST",
+        manifest_file_paths: git_data.file_paths ? git_data.file_paths.split(",") : [],
+        manifest_git_repo_id: git_data.git_url ? git_data.git_url : null,
+        manifest_git_repo_branch: git_data.branch_name ? git_data.branch_name : null,
+      };
+    }
+    return data;
+  }
+
+  inherits.getState = () => {
+    var manifest_meta_data = null;
+    if (state.data.custom_manifest_type == 1) {
+      var file_data = state.child_inherits.fileUpload.getData();
+      manifest_meta_data = {
+        strategy: "UPLOADED_MANIFEST",
+        manifest_file_paths: file_data.files,
+      };
+    } else if (state.data.custom_manifest_type == 2) {
+      var git_data = state.child_inherits.gitRepo.getData();
+      manifest_meta_data = {
+        strategy: "GIT_MANIFEST",
+        manifest_file_paths: git_data.file_paths ? git_data.file_paths.split(",") : [],
+        manifest_git_repo_id: git_data.git_url ? git_data.git_url : null,
+        manifest_git_repo_branch: git_data.branch_name ? git_data.branch_name : null,
+      };
+    }
+    return {
+      ...state,
+      manifest_meta_data: manifest_meta_data,
+      fileUpload: state.data.custom_manifest_type == 1 ? state.child_inherits.fileUpload.getState() : null,
+      gitRepo: state.data.custom_manifest_type == 2 ? state.child_inherits.gitRepo.getState() : null,
+    };
+  }
+
+  function getFileUploadState() {
+    var state_temp = FileUploadDefaultState();
+    if (state.fileUpload) {
+      state.fileUpload.files.forEach(file_name => {
+        if (typeof (file_name) == "string") {
+          state_temp.form_data.data.files.push({
+            name: file_name
+          });
+        } else {
+          state_temp.form_data.data.files.push(file_name);
+        }
+      });
+    }
+    return state_temp;
+  }
+
+  function getGitRepoState() {
+    var state_temp = GitRepoDefaultState();
+    if (state.gitRepo) {
+      state_temp.form_data.data = { ...state_temp.form_data.data, ...state.gitRepo };
+      state_temp.branch_data.branches = state.gitRepo.branches
+    }
+    return state_temp;
+  }
+
+  return (
+    <>
+      <div className="card-body">
+        <Grid lg={6} direction="row">
+          <div className='section'>
+            <Input
+              type="text"
+              name="manifest_name"
+              label="Name"
+              mandatorySign
+              placeholder="Name"
+              onChangeHandler={commonFunctions.onChangeHandler}
+              data={state.data}
+              error={state.error}
+            />
+          </div>
+        </Grid>
+        <Grid lg={6} direction="row">
+          <div className='section'>
+            <Input
+              type="radio"
+              name="custom_manifest_type"
+              label="Choose Option"
+              mandatorySign
+              onChangeHandler={commonFunctions.onChangeHandler}
+              data={state.data}
+              error={state.error}
+              list={[{ label: 'via File', value: 1 }, { label: 'via Git', value: 2 }]}
+            />
+          </div>
+        </Grid>
+        {
+          state.data.custom_manifest_type == 1 ?
+            <>
+              <div>
+                <FileUpload inherits={state.child_inherits.fileUpload} state={state.fileUpload ? state.fileUpload.files ? getFileUploadState() : null : null}
+                  varient="single" />
+              </div>
+            </> :
+            <ResetComponent inherits={state.child_inherits.fileUpload} />
+        }
+        {state.data.custom_manifest_type == 2 ?
+          <>
+            <div>
+              <GitRepo single_path={true} inherits={state.child_inherits.gitRepo} state={state.gitRepo ? getGitRepoState() : null} />
+            </div>
+          </> :
+          <ResetComponent inherits={state.child_inherits.gitRepo} />
+        }
+      </div>
+    </>
+  )
+}
+
+export function getEnabledComponentServiceNameDefaultState() {
+  return {
+    data: { custom_manifest_type: 1 },
+    error: {},
+    validations: {
+      manifest_name: [VALIDATION_TYPE_REQUIRED],
+    },
+    child_inherits: {
+      fileUpload: {
+        "validateForm": () => { return { valid: true } },
+        "getState": () => { return {} },
+        "getData": () => { return {} }
+      },
+      gitRepo: {
+        "validateForm": () => { return { valid: true } },
+        "getState": () => { return {} },
+        "getData": () => { return {} }
+      }
+    }
+  };
+}
+
+
+
+
+
