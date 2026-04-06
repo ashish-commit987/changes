@@ -1,0 +1,841 @@
+import React, { useEffect, useState } from 'react';
+import Dialog from '@mui/material/Dialog';
+import Slide from '@mui/material/Slide';
+import Grid from '@mui/material/Grid';
+import { Input } from '../../../components/genericComponents/Input';
+import { getCommonFunctions } from '../../serviceRevamp/add/ci_flow/SourceDetails';
+import { Loading } from '../../utils/Loading';
+import { Link } from 'react-router-dom';
+import { ValidateDataSet, VALIDATION_TYPE_REQUIRED } from '../../../util/Validator';
+import GenerateURL from '../../../util/APIUrlProvider';
+import properties from '../../../properties/properties';
+import InvokeApi, { PostData } from '../../../util/apiInvoker';
+import { showErrorHandlerUpdated } from '../../../util/util';
+import PageHeader from '../../../components/PageHeader';
+import InputSkeleton from '../../../components/genericComponents/Skeletons/InputSkeleton';
+import AlertStrip from '../../../components/AlertStrips';
+import JiraTicketSkeleton from './JiraTicketSkeleton';
+import { makeStyles } from '@mui/styles';
+import useSystemSettings from '../../../hooks/useSystemSettings';
+import { useDebounce } from '../../../hooks/useDebounce';
+import { useCustomSnackbar } from '../../../contexts/SnackbarContext';
+import Button from '../../../components/genericComponents/Button';
+
+const INTEGRATION_TYPE_MAP = {
+    'jira': 'Jira',
+    'azure_devops': 'Azure DevOps',
+    'service_now': 'ServiceNow'
+};
+
+const Transition = React.forwardRef(function Transition(props, ref) {
+    return <Slide direction="left" ref={ref} {...props} />;
+});
+const useStyles = makeStyles(theme => ({
+    root_half_dialog: {
+        '& .MuiPaper-root': {
+            position: 'absolute',
+            right: 'var(--space-0)',
+            margin: 'var(--space-0)',
+            top: 'var(--space-0)',
+            height: '100vh',
+            maxHeight: '100%',
+            borderRadius: 'var(--radius-0)',
+            width: 'var(--space-704)',
+            maxWidth: 'var(--space-704)',
+            boxShadow: 'none',
+            backgroundColor: 'transparent',
+            '& .main_dialog_div': {
+                display: 'grid',
+                gridTemplateColumns: '323px 623px',
+                backgroundColor: 'transparent',
+                justifyContent: 'flex-end'
+            },
+            '& .main_dialog_hidded': {
+                display: 'grid',
+                justifyContent: 'flex-end',
+                gridTemplateColumns: 'var(--space-650)'
+            }
+        },
+        '& .three-forth-dialog__part_2': {
+            backgroundColor: 'var(--color-white)',
+            height: '100vh'
+        },
+        '& .three-forth-dialog__part_1': {
+            padding: 'var(--space-20)',
+            backgroundColor: 'var(--color-white)',
+            height: '100vh',
+            position: 'relative',
+            overflowY: 'scroll'
+        }
+    },
+    root: {
+        '& .MuiPaper-root': {
+            position: 'absolute',
+            right: 'var(--space-0)',
+            margin: 'var(--space-0)',
+            boxShadow: 'none',
+            top: 'var(--space-0)',
+            height: '100vh',
+            maxHeight: '100%',
+            borderRadius: 'var(--radius-0)',
+            width: 'var(--space-1054)',
+            maxWidth: 'var(--space-1054)',
+            backgroundColor: 'transparent',
+            '& .main_dialog_div': {
+                display: 'grid',
+                backgroundColor: 'transparent',
+                gridTemplateColumns: 'var(--space-350) var(--space-650)',
+                justifyContent: 'flex-end'
+            },
+            '& .main_dialog_hidded': {
+                display: 'grid',
+                gridTemplateColumns: '623px'
+            }
+        },
+        '& .three-forth-dialog__part_2': {
+            backgroundColor: 'var(--color-white)',
+            height: '100vh',
+            '& .checkbox-only-divi': {
+                bottom: 'var(--space-10)',
+                position: 'absolute',
+            }
+        },
+        '& .three-forth-dialog__part_1': {
+            padding: 'var(--space-20)',
+            backgroundColor: 'var(--color-white)',
+            height: '100vh',
+            position: 'relative',
+            overflowY: 'scroll'
+        }
+    }
+}))
+
+
+const AddTicketingSystemDialog = ({ open, handleOnClickClose, type, edit_id = null, refreshListingPage }) => {
+    const { showSnackbar } = useCustomSnackbar();
+    const classes = useStyles();
+    const ticketing_system_type = type ? type.toLowerCase() : null;
+    const [state, setState] = useState({
+        data: {},
+        error: {},
+        hide_left_div: false
+    })
+    const [data, setData] = useState({ data: {}, error: {} })
+    const commonFunctions = getCommonFunctions(state, setState, {});
+    const showInfoSection = JSON.parse(localStorage.getItem('ticketing_system_dialog_display_flag'));
+    const { settings, settingsLoading = true, error, specificSetting, refetch } = useSystemSettings({
+        settingKey: "URL_CONTROL_WHITELIST"
+    });
+    const debouncedValue = useDebounce(state.data?.server_url, 500);
+
+    useEffect(() => {
+        fetAllSecrets()
+    }, [])
+
+    useEffect(() => {
+        if (debouncedValue?.length > 0) {
+            setState((new_state) => ({
+                ...new_state,
+                validationLoading: false
+            }))
+            validateServerURL();
+        }
+    }, [debouncedValue])
+
+    useEffect(() => {
+        setState((new_state) => ({
+            ...new_state,
+            hide_left_div: showInfoSection
+        }))
+    }, [showInfoSection])
+
+    function fetAllSecrets() {
+        var requestInfo = {
+            endPoint: GenerateURL({}, properties.api.credential_all) + "?all=true",
+            httpMethod: "GET",
+            httpHeaders: { "Content-Type": "application/json" },
+        };
+
+        setState((new_state) => ({
+            ...new_state,
+            loading_secrets: true
+        }));
+
+        InvokeApi(
+            requestInfo,
+            handleSecretsDataSuccessApiHit,
+            handleSecretsDataFailedApiHit
+        );
+    }
+
+    const handleSecretsDataSuccessApiHit = data => {
+        fetchAllUserGroups();
+        if (data && data.results && data.results.length > 0) {
+            let secretList = data && data.results.map(item => {
+                return { label: item.name, id: item.id }
+            })
+
+            setState((new_state) => ({
+                ...new_state,
+                loading_secrets: false,
+                secret_list: secretList,
+                unable_to_load_secret: false,
+                error_in_loading_secrets: null
+            }));
+
+        } else {
+            setState((new_state) => ({
+                ...new_state,
+                loading_secrets: false,
+                unable_to_load_secret: true
+            }));
+        }
+    }
+
+    const handleSecretsDataFailedApiHit = error => {
+        let error_msg = showErrorHandlerUpdated(error)
+        setState((new_state) => ({
+            ...new_state,
+            loading_secrets: false,
+            unable_to_load_secret: true,
+            error_in_loading_secrets: error_msg
+        }));
+    }
+
+    function validateServerURL() {
+        let list = JSON.parse(specificSetting);
+
+        // Remove empty strings
+        list = list && list.length > 0 ? list.filter(item => item.trim() !== "") :[];
+
+        let parsedHost = "";
+        try {
+            const urlObj = new URL(debouncedValue);
+            parsedHost = urlObj.hostname; // e.g., "bitbucket.org"
+        } catch (err) {
+            setState(new_state => ({
+                ...new_state,
+                server_url_valid: false,
+                server_url_valid_message: "Invalid URL format",
+                validationLoading: false
+            }));
+            return;
+        }
+
+        console.log(list, parsedHost, "Parsed host check");
+
+        const isWildcard = list.includes("*");
+
+        const isValid = isWildcard || list.some(item => parsedHost.includes(item));
+
+        setState(new_state => ({
+            ...new_state,
+            server_url_valid: isValid,
+            server_url_valid_message: isValid ? "Valid URL" : "Invalid URL",
+            validationLoading: false
+        }));
+    }
+
+
+    const getIdsFromName = (arr) => {
+        const { all_user_groups } = state;
+
+        return arr.map(item => {
+            const foundGroup = all_user_groups.find(group => group.label === item);
+            return foundGroup ? foundGroup.id : null;
+        }).filter(id => id !== null);
+    };
+
+    function validateAndSave() {
+        console.log(state.data,"afvcdshgvcgdshvc")
+        var result = ValidateDataSet(state.data, state.validations);
+        var post_url = GenerateURL({}, properties.api.ticketing_system);
+        if (edit_id) {
+            post_url = GenerateURL({ id: edit_id }, properties.api.ticketing_system_update);
+        }
+        if (result.valid) {
+
+            let write_permission_group = state.data?.write_user_groups || [];
+            let read_permission_group = state.data?.read_user_groups || [];
+            var post_data = {
+                ...state.data,
+                "write_user_groups": write_permission_group,
+                "read_user_groups": read_permission_group,
+                "integration_type": ticketing_system_type && ticketing_system_type.toLowerCase(),
+                "credential": Number(state.data.credential_id),
+                "organisation_name": ticketing_system_type === "azure_devops" ? state.data.organization_name : null,
+                "integration_name": state.data.integration_name,
+                "status": "CONNECTED"
+            }
+            showSnackbar('info', "Ticketing configurations are being saved. Please wait...");
+            PostData(post_url, post_data, postSuccess, postFail);
+            setState(new_state => ({
+                ...new_state,
+                post_data_loading: true
+            }))
+        } else {
+            let error_msg = showErrorHandlerUpdated({ ...result.error })
+            showSnackbar('error', "Unable to save ticketing configurations.", error_msg);
+            setState(new_state => ({
+                ...new_state,
+                error: {
+                    ...new_state.error,
+                    ...result.error
+                }
+            }))
+        }
+    }
+    function postSuccess(response) {
+        showSnackbar('success', "Ticketing configurations are saved successfully.");
+        handleRefersh()
+        setState(new_state => ({
+            ...new_state,
+            post_data_loading: false
+        }))
+    }
+    const handleRefersh = () => {
+        handleOnClickClose();
+        refreshListingPage();
+    }
+    function postFail(response) {
+        let error_msg = showErrorHandlerUpdated(response)
+        showSnackbar('error', "Unable to save ticketing configurations.", error_msg);
+        setState(new_state => ({
+            ...new_state,
+            post_data_loading: false,
+            error_msg: error_msg,
+            error: {
+                ...response
+            }
+        }))
+    }
+
+    const testJiraConnection = (is_edit) => {
+        let result;
+        if (is_edit) {
+            result = ValidateDataSet({
+
+                credential_id: state.data.credential_id,
+                server_url: state.data.server_url,
+            },
+                {
+
+                    credential_id: [VALIDATION_TYPE_REQUIRED],
+                    server_url: [VALIDATION_TYPE_REQUIRED],
+                }
+            );
+        } else {
+            result = ValidateDataSet({
+                server_url: state.data.server_url,
+                credential_id: state.data.credential_id,
+            },
+                {
+                    server_url: [VALIDATION_TYPE_REQUIRED],
+                    credential_id: [VALIDATION_TYPE_REQUIRED],
+                }
+            );
+        }
+
+
+        if (result.valid) {
+            const post_data = {
+                server_url: state.data.server_url,
+                credential_id: Number(state.data.credential_id),
+                organization_name: ticketing_system_type === "azure_devops" ? state.data.organization_name : null,
+                integration_type: ticketing_system_type && ticketing_system_type.toLowerCase()
+            };
+            const integrationLabel = INTEGRATION_TYPE_MAP[ticketing_system_type] || "integration";
+            showSnackbar('info', `Testing connection with ${integrationLabel}...`);
+            PostData(GenerateURL({}, properties.api.integration_test), post_data, onFetchSuccess, onFetchFail);
+            setState(new_state => ({
+                ...new_state,
+                connection_test: true,
+                load_jira_users: "",
+                connection_test_failed: false,
+            }));
+
+        } else {
+            let error_msg = showErrorHandlerUpdated({ ...result.error })
+            showSnackbar('error', "Unable to test integration...", error_msg);
+            setState(new_state => ({
+                ...new_state,
+                error: {
+                    ...new_state.error,
+                    ...result.error,
+                }
+            }));
+        }
+    }
+
+    function onFetchSuccess(response) {
+        console.log(response, "fkdjfjasj")
+        const integrationLabel = INTEGRATION_TYPE_MAP[ticketing_system_type] || "integration";
+        showSnackbar('success', `Connection established with ${integrationLabel}.`);
+
+        setState(new_state => ({
+            ...new_state,
+            connection_test: false,
+            load_jira_users: 'success',
+            jira_users: [
+                ...response.users
+            ],
+            data: {
+                ...new_state.data,
+                is_last_connected: true
+            }
+
+        }));
+    }
+
+    function onFetchFail(error) {
+        const integrationLabel = INTEGRATION_TYPE_MAP[ticketing_system_type] || "integration";
+        var error_msg = showErrorHandlerUpdated(error);
+        console.log("sdjsdjhdsj", error_msg);
+        showSnackbar('error', `Unable to test connection with ${integrationLabel}.`, error_msg);
+        setState(new_state => ({
+            ...new_state,
+            connection_test: false,
+            load_jira_users: 'failed',
+            jira_users: [],
+            show_error_msg: error_msg,
+            connection_test_failed: true,
+            error: {
+                ...new_state.error,
+                ...error,
+            }
+        }));
+    }
+
+    const toggleError = () => {
+        setState(new_state => ({
+            ...new_state,
+            detailed_error: !new_state.detailed_error,
+        }));
+    }
+
+    const fetchCurrentTicketingSystemData = (id) => {
+        let requestInfo = {
+            endPoint: GenerateURL({ id: id }, properties.api.ticketing_system_update),
+            httpMethod: "GET",
+            httpHeaders: { "Content-Type": "application/json" }
+        }
+        InvokeApi(requestInfo, fetchCurrentTicketingSystemDataSuccessApiHit, fetchCurrentTicketingSystemDataFailedApiHit);
+        setState(new_state => ({
+            ...new_state,
+            post_data_loading: true,
+        }));
+    }
+
+    const fetchCurrentTicketingSystemDataSuccessApiHit = (response) => {
+        let read_user_groups = response.read_user_groups && response.read_user_groups.length > 0 ?
+            response.read_user_groups.map(item => {
+                return item.role_master.id
+            }) : [];
+        let write_user_groups = response.write_user_groups && response.write_user_groups.length > 0 ?
+            response.write_user_groups.map(item => {
+                return item.role_master.id
+            }) : []
+        setState(new_state => ({
+            ...new_state,
+            post_data_loading: false,
+            data: {
+                ...new_state.data,
+                integration_name: response.integration_name,
+                server_url: response.server_url,
+                credential_id: response.credential_id && response.credential_id.id ? response.credential_id.id : null,
+                read_user_groups: read_user_groups,
+                write_user_groups: write_user_groups,
+            }
+        }));
+    }
+    const fetchCurrentTicketingSystemDataFailedApiHit = (error) => {
+
+        setState(new_state => ({
+            ...new_state,
+            post_data_loading: false,
+        }));
+    }
+
+    const fetchAllUserGroups = (data, url) => {
+        var requestInfo = {
+            endPoint: GenerateURL({}, properties.api.save_user_group) + "?all=true&no_mapping=true",
+            httpMethod: "GET",
+            httpHeaders: { "Content-Type": "application/json" }
+        }
+        InvokeApi(requestInfo, handleSuccessApiHit, handleFailedApiHit);
+        setState(new_state => ({
+            ...new_state,
+            loading: true,
+        }));
+    }
+    function handleSuccessApiHit(data) {
+        if (edit_id) {
+            fetchCurrentTicketingSystemData(edit_id);
+        }
+        let list = data.results.map(item => { return { label: item.name, id: item.id } })
+        setState(new_state => ({
+            ...new_state,
+            all_user_groups: list,
+            loading: false,
+        }));
+    }
+    function handleFailedApiHit(error) {
+        setState(new_state => ({
+            ...new_state,
+            error: error,
+            loading: false
+        }))
+    }
+
+    const onKeyValueHandler = (e) => {
+        const k = e.target.name;
+        let v = e.target.value;
+
+        console.log("onKeyValueHandler Debugging:", { key: k, value: v });
+
+
+        if (Array.isArray(v) && v.length > 0 && typeof v[0] === "string") {
+            v[0] = v[0].replace(" (New Label)", "");
+        }
+
+        setState((new_state) => ({
+            ...new_state,
+            data: {
+                ...new_state.data,
+                [k]: v,
+            },
+            error: { ...new_state.error, [k]: "" },
+        }));
+    };
+
+    function onChangeDoNotshow(e) {
+        let key = e.target.name;
+        let value = e.target.value;
+        if (key == "dont_show_again") {
+            value = !data.data.dont_show_again;
+        }
+        setData((prevState) => ({
+            ...prevState,
+            data: {
+                ...prevState.data,
+                [key]: value,
+            },
+            error: {
+                ...prevState.error,
+                [key]: ''
+            },
+        }));
+    }
+
+    const hideInfoPanel = () => {
+        console.log(data, data.data, data.data.dont_show_again, "dont_show_again")
+        if (data?.data?.dont_show_again) {
+            setDataToLocalStorage()
+        }
+        setState(new_state => ({
+            ...new_state,
+            hide_left_div: true
+        }));
+    }
+
+    function setDataToLocalStorage() {
+        localStorage.setItem('ticketing_system_dialog_display_flag', data.data.dont_show_again);
+    }
+
+    const onChangeHandler = (e) => {
+        commonFunctions.onChangeHandler(e)
+    }
+    console.log(state.all_user_groups, "all_user_groups")
+    console.log("skdklslklslkldsk", state);
+    return (
+        <Dialog
+            open={open}
+            onClose={handleOnClickClose}
+            TransitionComponent={Transition}
+            className={state.hide_left_div ? classes.root_half_dialog : classes.root}
+        >
+
+            <div className={state.hide_left_div ? 'main_dialog_hidded' : 'main_dialog_div'}>
+                <button
+                    className='btn float-cancel-button'
+                    style={{ left: 'var(--space-0)', zIndex: 99 }}
+                    onClick={handleOnClickClose}
+                >
+                    <span className='ri-close-line'></span>
+                </button>
+                {
+                    !state.hide_left_div && <>
+                        <div className={"three-forth-dialog__part_2 position-relative"} style={{ boxShadow: 'calc(var(--space-20) * -1) var(--space-0) var(--space-35) var(--space-0) #0000000D inset' }}>
+                            <div className='d-flex align-center space-between left-panel-header ' style={{ borderBottom: 'var(--space-1) solid #f1f1f1', padding: 'var(--space-10) var(--space-20)' }}>
+                                <p>Information</p>
+                                <button
+                                    className='btn btn-icon-only'
+                                    onClick={hideInfoPanel}
+
+                                >
+                                    <span className='ri-close-line color-icon-secondary'></span>
+                                </button>
+                            </div>
+                            <div className='pd-10' style={{ padding: 'var(--space-10) var(--space-20)' }}>
+
+                                <div className='mb-10'>
+                                    <p className='font-16 font-weight-600 color-primary mb-10'>What is Ticketing System?</p>
+                                    <p className='font-12 color-icon-secondary' style={{ color: 'var(--color-grey-900)' }}>
+                                        BuildPiper supports integration with multiple ticketing systems, including Jira, Bitbucket, and Azure DevOps. These integrations enhance BuildPiper's capabilities in several ways:
+                                    </p>
+                                </div>
+                                <div className='mb-10'>
+                                    <span className='font-12 font-weight-600 color-primary mb-10'>Pipelines : </span>
+                                    <p className='font-12 color-icon-secondary ' style={{ color: 'var(--color-grey-900)', display: "inline" }}>
+                                        Comprehensive CI/CD pipelines can be constructed by incorporating detailed information directly from ticketing systems like Jira or ServiceNow.
+                                    </p>
+                                </div>
+                                <div className='mb-10'>
+                                    <span className='font-12 font-weight-600 color-primary mb-10'>Release Packages: </span>
+                                    <p className='font-12 color-icon-secondary ' style={{ color: 'var(--color-grey-900)', display: "inline" }}>
+                                        BuildPiper efficiently gathers and consolidates feature, bug, and story details from ticketing systems, creating a unified release package for deployment across various environments, etc.
+                                    </p>
+                                </div>
+
+                            </div>
+                            <div className='checkbox-only-divi' style={{ padding: 'var(--space-10) var(--space-20)' }}>
+                                <Input
+                                    type="simple-checkbox"
+                                    name="dont_show_again"
+                                    label="Dont show this again"
+                                    mandatorySign
+                                    data={data.data}
+                                    error={data.error}
+                                    onChangeHandler={onChangeDoNotshow}
+                                />
+                            </div>
+                        </div>
+                    </>
+                }
+
+                <div className={"three-forth-dialog__part_1"} style={state.hide_left_div ? {} : { boxShadow: 'var(--space-0) var(--space-8) var(--space-24) var(--space-0) var(--color-overlay-black-07)' }}>
+
+                    <PageHeader
+                        heading={`${ticketing_system_type === "jira" ? "Jira" : ticketing_system_type === "azure_devops" ? "Azure Devops" : ticketing_system_type === "service_now" ? "Service Now" : null} Ticketing System Integration`}
+                        icon={null}
+                        imgIcon={ticketing_system_type === "jira" ? '/images/logos/jira_icon.svg' : ticketing_system_type === "azure_devops" ? '/images/logos/azure_devops.svg' : ticketing_system_type === "service_now" ? '/images/logos/sevice_now.svg' : null}
+                        primaryButton={null}
+                        commonDivMargin={true}
+                    />
+                    {
+                        state.post_data_loading ?
+                            <JiraTicketSkeleton />
+                            :
+                            <>
+                                <div style={{}}>
+                                    <Grid container spacing={2} >
+                                        <>
+                                            <Grid item xs={12}>
+                                                <Input
+                                                    type="text"
+                                                    name="integration_name"
+                                                    label="Name"
+                                                    placeholder="Enter Name"
+                                                    mandatorySign
+                                                    info={"Name"}
+                                                    error={state.error}
+                                                    data={state.data}
+                                                    onChangeHandler={commonFunctions.onChangeHandler}
+                                                />
+                                            </Grid>
+                                            {/* <Grid item xs={12}>
+                                                <Input
+                                                    type="text"
+                                                    name="server_url"
+                                                    label="Server URL"
+                                                    placeholder="email address"
+                                                    mandatorySign
+                                                    info={"Offical JIRA URL"}
+                                                    error={state.error}
+                                                    data={state.data}
+                                                    onChangeHandler={onChangeHandler}
+                                                />
+                                            </Grid> */}
+                                            <Grid item lg={12}>
+                                                <Input
+                                                    type="text"
+                                                    label="Server URL"
+                                                    name="server_url"
+                                                    data={state.data}
+                                                    error={state.error}
+                                                    placeholder={"Enter URL"}
+                                                    mandatorySign
+                                                    onChangeHandler={onChangeHandler}
+                                                    // paramsHeading={
+                                                    //     <div className='d-flex align-center color-key-78 font-12'>
+                                                    //         <span className='ri-information-line font-16' style={{ lineHeight: 'var(--line-height-1-2)' }}></span>&nbsp;
+                                                    //         Enter a unique version number for this release with at least two parts
+                                                    //     </div>
+                                                    // }
+                                                    info={"Offical JIRA URL"}
+                                                    extraDiv={
+                                                        state.data?.server_url && !state?.validationLoading ?
+                                                            !state.server_url_valid ?
+                                                                <div className='d-flex align-center' style={{ gap: 'var(--space-4)' }}>
+                                                                    <span className="ri-close-circle-fill font-16 line-height-normal" style={{ color: 'var(--color-error-500)' }}></span>
+                                                                    <span style={{ color: 'var(--color-error-500)' }} className='font-12 font-weight-500'>{state.server_url_valid_message}</span>
+                                                                </div>
+                                                                :
+                                                                <div className='d-flex align-center' style={{ gap: 'var(--space-4)' }}>
+                                                                    <span className="ri-checkbox-circle-fill font-16 line-height-normal" style={{ color: 'var(--color-success-500)' }}></span>
+                                                                    <span style={{ color: 'var(--color-success-500)' }} className='font-12 font-weight-500'>{state.server_url_valid_message}</span>
+                                                                </div>
+                                                            : null
+
+                                                    }
+                                                />
+
+                                            </Grid>
+                                            {
+                                                ticketing_system_type == "azure_devops" &&
+                                                <Grid item xs={12}>
+                                                    <Input
+                                                        type="text"
+                                                        name="organization_name"
+                                                        label="Organization Name"
+                                                        placeholder="Organization Name"
+                                                        mandatorySign
+                                                        error={state.error}
+                                                        data={state.data}
+                                                        onChangeHandler={commonFunctions.onChangeHandler}
+                                                    />
+                                                </Grid>
+                                            }
+                                            <Grid item xs={9}>
+                                                {
+                                                    state.loading_secrets ?
+                                                        <InputSkeleton />
+                                                        :
+                                                        state.unable_to_load_secret ?
+                                                            <AlertStrip
+                                                                message={state.error_in_loading_secrets} />
+                                                            :
+                                                            <Input
+                                                                type="select"
+                                                                name="credential_id"
+                                                                label="Select Credential"
+                                                                list={state.secret_list}
+                                                                mandatorySign
+                                                                error={state.error}
+                                                                data={state.data}
+                                                                onChangeHandler={commonFunctions.onChangeHandler}
+                                                            />
+                                                }
+
+                                            </Grid>
+                                            <Grid item xs={3} style={{ alignContent: 'center' }}>
+                                                {
+                                                    // state.connection_test ?
+                                                    //     <div style={{}}>
+                                                    //         <InputSkeleton />
+                                                    //     </div>
+                                                    //     :
+                                                    state.server_url_valid ?
+                                                        <Button className="btn btn-primary mr-0" style={{ width: '100%', padding: 'var(--space-12) var(--space-8)' }} onClick={testJiraConnection} isLoading={state.connection_test}>Test Connection</Button>
+                                                        :
+                                                        state.server_url_valid ? 
+                                                        <button className="btn btn-primary mr-0" style={{ width: '100%', padding: 'var(--space-12) var(--space-8)' }} onClick={testJiraConnection}>Test Connection</button>
+                                                        :
+                                                        <button className="btn btn-grey mr-0" style={{ width: '100%', padding: 'var(--space-12) var(--space-8)' }} onClick={() => {}}>Test Connection</button>
+                                                }
+                                            </Grid>
+                                            {
+                                                state.data.server_url && (state.jira_users &&
+                                                    state.jira_users.length > 0) ?
+                                                    <Grid item xs={12}>
+                                                        <AlertStrip message={"Connection Established"} variant={"success"} />
+                                                    </Grid>
+                                                    : state.connection_test_failed || state.load_jira_users === "failed" ?
+                                                        <Grid item xs={12}>
+                                                            <AlertStrip
+                                                                message={
+                                                                    <>
+                                                                        <div className='d-flex align-center'><div>Unable to establish connection please validate server url or choose correct credentials </div>
+                                                                            <div>
+                                                                                <button className='btn btn-link mr-0' onClick={toggleError} style={{ color: 'var(--color-tertiary-500)', padding: 'var(--space-12) var(--space-8)' }}>View Detailed Error</button>
+                                                                            </div>
+                                                                        </div>
+                                                                        {state.detailed_error && state.show_error_msg}
+                                                                    </>
+                                                                }
+                                                                variant={"error"} />
+                                                        </Grid>
+                                                        : null
+                                            }
+
+                                            {state.loading ?
+                                                <Loading varient="light" />
+                                                :
+                                                <>
+                                                    <Grid item xs={12}>
+                                                        <div className="auto-complete-dropdown auto-complete-dropdown-42 auto-complete-dropdown-ticketing">
+                                                            <Input
+                                                                type="auto-complete-freesolo-v2"
+                                                                label="Share with user groups"
+                                                                id={"read_user_groups1"}
+                                                                name="read_user_groups"
+                                                                list={state.all_user_groups}
+                                                                freeSolo={true}
+                                                                count={10}
+                                                                mandatorySign
+                                                                allowNewItems={false}
+                                                                placeholder="Enter user group name and press enter"
+                                                                getOptionLabel={(option) => option.label}
+                                                                error={state.error}
+                                                                data={state.data}
+                                                                onChangeHandler={onKeyValueHandler}
+                                                            />
+
+                                                        </div>
+                                                    </Grid>
+                                                    <Grid item xs={12}>
+                                                        <div className="auto-complete-dropdown auto-complete-dropdown-42 auto-complete-dropdown-ticketing">
+                                                            <Input
+                                                                type="auto-complete-freesolo-v2"
+                                                                label="Allow edit for user groups"
+                                                                id={"write_user_groups1"}
+                                                                name="write_user_groups"
+                                                                list={state.all_user_groups}
+                                                                freeSolo={true}
+                                                                mandatorySign
+                                                                count={10}
+                                                                allowNewItems={false}
+                                                                placeholder="Enter user group name and press enter"
+                                                                getOptionLabel={(option) => option.label}
+                                                                error={state.error}
+                                                                data={state.data}
+                                                                onChangeHandler={onKeyValueHandler}
+                                                            />
+
+                                                        </div>
+
+                                                    </Grid>
+                                                </>
+                                            }
+                                        </>
+
+
+                                    </Grid>
+                                </div>
+                                {/*  style={{ width: '100%', position: 'absolute', bottom: 'var(--space-20)', right: 'var(--space-20)' }} */}
+                                <div className='d-flex align-center justify-end'>
+                                    
+                                    <button className='btn btn-transparent mr-5' onClick={() => handleOnClickClose()}>Cancel</button>
+                                    <Button onClick={state.load_jira_users == "success" && state.server_url_valid ? validateAndSave : () => { }} isLoading={state.post_data_loading} className={state.load_jira_users == "success" && state.server_url_valid ? 'btn btn-primary mr-0 d-flex align-center' : 'btn btn-disable mr-0 d-flex align-center cursor-not-allowed'}>Save</Button>
+                                </div>
+                            </>
+                    }
+
+                </div>
+            </div>
+        </Dialog>
+
+    )
+}
+
+export default AddTicketingSystemDialog; 
