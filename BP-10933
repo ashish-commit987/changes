@@ -1,0 +1,340 @@
+import React, { useEffect, useState } from 'react';
+import PropTypes from 'prop-types';
+import { makeStyles } from '@mui/styles';
+import Zoom from '@mui/material/Zoom';
+import { Tooltip } from '@mui/material';
+import RunningDotsComponent from './RunningDotsComponent';
+import { useDocumentTitle } from '../../../../../hooks/useDocumentTitle';
+
+
+const LogsTopBar = ({ isDeploymentPhaseTrackerActive, dptClick, onClose, variant, onUpdateToggleView, ...props }) => {
+  const { className, ...rest } = props;
+  const [state, setState] = useState({
+    selectedViewForBuild: 1
+  })
+
+  const classes = useStyles();
+  const activity_details = props.activity_details ? props.activity_details : { name: "N/A", activity_id: "N/A" };
+  console.log(activity_details, "start_datestart_date");
+  const [startDate, setStartDate] = useState(new Date(props.start_time))
+  const [endDate, setEndDate] = useState(new Date(props.end_time))
+  const back_url = props.back_url;
+  const serachbar = props.serachbar;
+  const pagination = props.pagination;
+  const buildLogs = props.buildLogs;
+  const time = '30m 34s';
+
+  let { pipeline_name,stage_name,app_name,pipeline_task } = activity_details;
+  console.log("kllkkllk",activity_details);
+  let page_title = (buildLogs || activity_details.name == 'Docker Image Build') ? 'Build ' : activity_details.name
+    useDocumentTitle(page_title? `${page_title} Logs` : 'Logs')
+  const onClickHandleToggleForEvent = (order) => {
+    setState(prevState => ({
+      ...prevState,
+      selectedViewForBuild: order
+    }))
+    onUpdateToggleView(order)
+  }
+
+
+
+  const calculateDuration = () => {
+    console.log('aaaaaaaaa', (endDate - startDate));
+    const durationInMillis = Math.max(0, endDate - startDate);
+    console.log(endDate, startDate, "fjkdsajfjksa")
+    const durationInSeconds = Math.floor(durationInMillis / 1000);
+    const hours = Math.floor(durationInSeconds / 3600);
+    const minutes = Math.floor((durationInSeconds % 3600) / 60);
+    const seconds = durationInSeconds % 60;
+
+    return { hours, minutes, seconds };
+  };
+
+  useEffect(() => {
+    setStartDate(new Date(props.start_time));
+    setEndDate(new Date(props.end_time))
+  }, [props.start_time, props.end_time]);
+
+  console.log("kdsldsld",activity_details)
+
+  activity_details.service_name && console.log(typeof activity_details.service_name, 'xc_00op');
+  return (
+    <div className={classes.root}>
+
+      {variant == 'deployment-phase-tracker' ?
+        <div className='d-flex align-center space-between' style={{ width: '100%' }}>
+          <p className="font-16">
+            Deployment Phase Tracker
+          </p>
+          <con onClick={() => onClose()} style={{ fontSize: 'var(--font-24)', cursor: 'pointer' }} />
+        </div>
+        :
+        <>
+          <div style={{ width: '90%' }} className='d-flex align-center'>
+            <div className='title-div text-ellipsis'>
+              <Tooltip title={(buildLogs || activity_details.name == 'Docker Image Build') ? 'Build logs' : activity_details.name} arrow>
+                <label className='content avtar '>
+                  {(buildLogs || activity_details.name == 'Docker Image Build') ? 'Build logs' : activity_details.name}
+                </label>
+              </Tooltip>
+            </div>
+            {/* Service , env & activity info shown only when they are present */}
+            {activity_details.service_name || activity_details.service_env || activity_details.activity_id ? <div style={{ height: "var(--space-30)", borderRight: 'var(--space-1) solid #DADADA', marginRight: "var(--space-10)" }}></div> : null}
+            {activity_details.service_name && activity_details.service_name != 'undefined' &&
+              <div className='capsule-tag d-flex align-center justify-center'>
+                <span className='key '>Service:</span>
+                <label className='value '>
+                  {activity_details.service_name ?
+                    activity_details.service_name.length > 20 ?
+                      <Tooltip title={activity_details.service_name} TransitionComponent={Zoom}>
+                        <span>{activity_details.service_name.substring(0, 20) + "..."}</span>
+                      </Tooltip>
+                      :
+
+                      activity_details.service_name
+
+                    : "N/A"}
+                </label>
+              </div>
+            }
+            {activity_details.service_env && activity_details.service_env != 'undefined' && activity_details.service_env != 'null' && 
+              <div className='capsule-tag d-flex align-center justify-center'>
+                <span className='key '>Env:</span>
+                <label className='value '>{activity_details.service_env ? activity_details.service_env : "N/A"}</label>
+              </div>
+            }
+            {activity_details.activity_id && activity_details.activity_id != 'undefined' && activity_details.activity_id && 
+              <div className='capsule-tag d-flex align-center justify-center'>
+                <label className='key '>
+
+
+                  {
+                    `${(buildLogs && activity_details.name == 'Docker Image Build') ? 'Build No:' : 'Activity No:'}`
+                  }
+                </label>
+                <label className='value '>{activity_details.activity_id != 'undefined' ? activity_details.activity_id : "N/A"}</label>
+              </div>
+            }
+            {(app_name && app_name != "null" && app_name != "undefined") && 
+              <div className='capsule-tag d-flex align-center justify-center'>
+                <span className='key '>Application:</span>
+                <label className='value '>{app_name}</label>
+              </div>
+            }
+            {(pipeline_name && pipeline_name != "null") && 
+              <div className='capsule-tag d-flex align-center justify-center'>
+                <span className='key '>Pipeline:</span>
+                <label className='value '>{pipeline_name}</label>
+              </div>
+            }
+            {(stage_name && stage_name != "null") && 
+              <div className='capsule-tag d-flex align-center justify-center'>
+                <span className='key '>Stage:</span>
+                <label className='value '>{stage_name}</label>
+              </div>
+            }
+            {(pipeline_task && pipeline_task != "null") && 
+              <div className='capsule-tag d-flex align-center justify-center'>
+                <span className='key '>Job:</span>
+                <label className='value '>{pipeline_task}</label>
+              </div>
+            }
+
+          </div>
+          <div className='rigt-container d-flex'>
+
+
+            {activity_details?.status == 'SUCCESS' ?
+              <div className='status-div success d-flex align-center'>
+                <span className='status-label  avtar '>Success</span>
+
+              </div> :
+              activity_details?.status == 'RUNNING' ?
+                <div className='status-div running d-flex align-center'>
+                  <span className='status-label  avtar '>RUNNING</span>
+                  <RunningDotsComponent />
+                </div> :
+
+                activity_details?.status == 'FAILED' ?
+                  <div className='status-div failed d-flex align-center'>
+                    <span className='status-label  avtar '>FAILED</span>
+
+                  </div> : 
+                  activity_details?.status == 'DISAPPROVED' ?
+                    <div className='status-div failed d-flex align-center'>
+                      <span className='status-label  avtar '>DISAPPROVED</span>
+
+                    </div>:
+                  activity_details?.status == "PENDING_APPROVAL" ? 
+                  <div className='status-div running d-flex align-center'>
+                    <span className='status-label  avtar '>PENDING_APPROVAL</span>
+                  </div>
+                  
+                  :null}
+
+
+            {
+              activity_details?.status != 'RUNNING' &&
+              
+                <div className='time-container d-flex align-center'>
+                  <i className="ri-timer-2-line" style={{
+                    fontSize: 'var(--font-17)', color: 'var(--color-grey-400)', marginRight: "var(--space-5)", marginBottom: 'var(--space-2)'
+                  }} ></i>
+                  <label className='time-label '>{calculateDuration().hours == 0 && calculateDuration().minutes == 0 && calculateDuration().seconds == 0 ? "Less than 1s" : `${calculateDuration().minutes}m ${calculateDuration().seconds}s`}</label>
+                </div>
+
+              
+            }
+
+            {
+              isDeploymentPhaseTrackerActive && activity_details.name == "Deploy stateless app" && activity_details.status != "REVOKED" &&
+              <div role='button' tabIndex={0} onKeyDown={()=>{}} onClick={dptClick} className='download-button d-flex justify-center align-center' style={{}}>
+                <span className=' icon-class-iconss ri-rocket-2-line 1 font-20' style={{ color: 'var(--color-primary-500)' }}></span>
+              </div>
+            }
+            <div role='button' tabIndex={0} onKeyDown={()=>{}} onClick={() => { props.downloadLogs() }} className='download-button d-flex justify-center align-center'>
+              <span className='ri-download-line icon-class-iconss font-20' style={{ color: 'var(--color-primary-500)' }}></span>
+            </div>
+
+            <div className='buildpiper-logo d-flex align-center'>
+              <img src="/images/clients_logos/new-buildpiper-logo.svg" alt='..' />
+            </div>
+
+          </div>
+        </>}
+    </div>
+  )
+}
+
+LogsTopBar.propTypes = {
+  ...PropTypes.objectOf(PropTypes.any),
+}
+
+export default LogsTopBar;
+
+const useStyles = makeStyles(() => ({
+  root: {
+    width: '100%',
+    height: 'var(--space-68)',
+    padding: 'var(--space-16) var(--space-24) var(--space-16) var(--space-24)',
+    background: 'var(--color-white)',
+    borderBottom: 'var(--space-1) solid #dedede',
+
+    display: 'flex',
+    '& .title-div': {
+      height: 'var(--space-34)',
+      padding: 'var(--space-6) var(--space-16) var(--space-6) var(--space-16)',
+      borderRadius: 'var(--radius-4)',
+      color: 'var(--color-tertiary-500)',
+      gap: 'var(--space-10)',
+      maxWidth: "40%",
+      marginRight: "var(--space-10)",
+      background: 'linear-gradient(0deg, var(--color-pastel-blue-2), transparent) ',
+      border: 'var(--space-1) solid var(--color-tertiary-200)',
+      '& .content': {
+        fontSize: 'var(--font-14)',
+        fontWeight: 'var(--font-weight-600)',
+        lineHeight: 'var(--line-height-22)',
+        letterSpacing: '0em'
+      }
+    },
+
+    '& .capsule-tag': {
+      height: 'var(--space-28)',
+      padding: 'var(--space-5) var(--space-14) var(--space-5) var(--space-14)',
+      borderRadius: 'var(--radius-40)',
+      gap: 'var(--space-4)',
+      background: 'var(--color-grey-100)',
+      marginRight: "var(--space-5)",
+      width: "fit-content",
+      '& .key': {
+        fontSize: 'var(--font-12)',
+        fontWeight: 'var(--font-weight-500)',
+        lineHeight: 'var(--line-height-18)',
+        letterSpacing: '0em',
+        color: 'var(--color-content-tertiary)',
+      }
+      ,
+      '& .value': {
+        fontSize: 'var(--font-12)',
+        fontWeight: 'var(--font-weight-600)',
+        lineHeight: 'var(--line-height-18)',
+        letterSpacing: '0em',
+        color: 'var(--color-content-primary)',
+        textWrap:'nowrap'
+      }
+
+    },
+    '& .status-div': {
+      height: 'var(--space-31)',
+      padding: 'var(--space-2) var(--space-10) var(--space-2) var(--space-10)',
+      borderRadius: 'var(--radius-6)',
+      gap: 'var(--space-10)',
+      color: 'var(--color-white)',
+      marginRight: "var(--space-25)",
+      width: 'fit-content',
+      '& .status-label': {
+        fontSize: 'var(--font-12)',
+        fontWeight: 'var(--font-weight-600)',
+        lineHeight: 'var(--line-height-15)',
+        letterSpacing: '0em',
+      }
+    },
+    '& .rigt-container': {
+      width: '50%',
+      display: 'flex',
+      justifyContent: 'flex-end',
+      alignContent: 'center'
+    },
+    '& .success': {
+      background: 'var(--color-success-600)',
+    },
+    '& .running': {
+      background: 'var(--color-tertiary-500)'
+    },
+    '& .failed': {
+      background: 'var(--color-warning-500)'
+    },
+    '& .time-label': {
+      fontSize: 'var(--font-12)',
+      fontWeight: 'var(--font-weight-600)',
+      lineHeight: 'var(--line-height-18)',
+      letterSpacing: '0em',
+      color: 'var(--color-content-tertiary)',
+      marginRight: 'var(--space-25)'
+    },
+    '& .download-button': {
+      width: 'var(--space-36)',
+      height: 'var(--space-36)',
+      padding: 'var(--space-8)',
+      borderRadius: 'var(--radius-6)',
+      // background: 'linear - gradient(0deg, #DBDBDB, #DBDBDB) linear- gradient(0deg, var(--color-white), var(--color-white))',
+      cursor: 'pointer',
+      border: 'var(--space-1) solid var(--color-border-grey)',
+      marginRight: 'var(--space-8)',
+      '&:hover': {
+        backgroundColor: 'var(--color-tertiary-500)',
+        color: 'var(--color-white)!important',
+        border: 'var(--space-1) solid var(--color-tertiary-500)!important',
+        '& .icon-class-iconss': {
+          color: 'var(--color-white)!important'
+        }
+      },
+      '& img': {
+        width: 'var(--space-20)',
+        height: 'var(--space-20)'
+      }
+    },
+    '& .buildpiper-logo': {
+      marginRight: 'var(--space-10)',
+      marginLeft: 'var(--space-15)',
+      '& img': {
+        width: 'var(--space-140)',
+        height: "auto"
+      }
+    },
+    '& .maring-gap': {
+      marginRight: "var(--space-25)"
+    }
+  }
+}));
