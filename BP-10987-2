@@ -1,0 +1,331 @@
+import React, { useState } from 'react'
+import PropTypes from 'prop-types';
+import { makeStyles } from '@mui/styles';
+import Menu from '@mui/material/Menu';
+import MenuItem from '@mui/material/MenuItem';
+import Delete from '../../../components/genericComponents/Delete';
+import GenerateURL from '../../../util/APIUrlProvider';
+import properties from '../../../properties/properties';
+import { Tooltip } from '@mui/material';
+import Chip from '../../../components/chip/Chip';
+import { PostData } from '../../../util/apiInvoker';
+import GenericSkeleton from '../../../components/genericComponents/Skeletons/GenericSkeleton';
+import GenericPopoverDropdown from '../../../components/genericComponents/GenericPopoverDropdown';
+import { showErrorHandlerUpdated } from '../../../util/util';
+import { useCustomSnackbar } from '../../../contexts/SnackbarContext';
+import Button from '../../../components/genericComponents/Button';
+
+const INTEGRATION_TYPE_MAP = {
+  'jira': 'Jira',
+  'azure_devops': 'Azure DevOps',
+  'service_now': 'ServiceNow'
+};
+
+const useStyles = makeStyles((theme) => ({
+  commonTable: {
+    border: 'var(--space-1) solid var(--color-badge-grey-bg)',
+    borderTop: 'var(--space-0)',
+    padding: 'var(--space-10)',
+    display: 'grid',
+    alignItems: 'center',
+    gap: 'var(--space-10)',
+    gridTemplateColumns: 'minmax(150px, 1fr) minmax(100px, 0.8fr) minmax(200px, 1.5fr) minmax(150px, 1fr) 80px',
+    '&:first-child': {
+      borderTop: 'var(--space-1) solid #e6e6e6',
+      borderRadius: 'var(--radius-6) var(--radius-6) var(--radius-0) var(--radius-0)'
+    },
+    '&:last-child': {
+      borderRadius: 'var(--radius-0) var(--radius-0) var(--radius-6) var(--radius-6)',
+    },
+    [theme.breakpoints.up('xl')]: {
+      gridTemplateColumns: 'minmax(180px, 1.2fr) minmax(120px, 0.9fr) minmax(250px, 1.8fr) minmax(180px, 1.2fr) 80px',
+    },
+    [theme.breakpoints.down('lg')]: {
+      gridTemplateColumns: 'minmax(130px, 1fr) minmax(90px, 0.7fr) minmax(180px, 1.3fr) minmax(130px, 0.9fr) 80px',
+    },
+    [theme.breakpoints.down('md')]: {
+      gridTemplateColumns: '1fr 1fr var(--space-80)',
+      '& > div:nth-child(2), & > div:nth-child(3)': {
+        display: 'none'
+      }
+    },
+    [theme.breakpoints.down('sm')]: {
+      gridTemplateColumns: '1fr var(--space-80)',
+      '& > div:nth-child(2), & > div:nth-child(3), & > div:nth-child(4)': {
+        display: 'none'
+      }
+    }
+  },
+  textEllipsis: {
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+    maxWidth: '100%',
+    fontSize: 'var(--font-12)'
+  },
+  iconContainer: {
+    display: 'flex',
+    alignItems: 'center',
+    minWidth: 0
+  },
+  iconWrapper: {
+    width: 'var(--space-48)',
+    height: 'var(--space-48)',
+    borderRadius: 'var(--radius-24)',
+    border: 'var(--space-1) solid var(--color-badge-grey-bg)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+    [theme.breakpoints.down('sm')]: {
+      width: 'var(--space-40)',
+      height: 'var(--space-40)'
+    }
+  },
+  statusContainer: {
+    display: 'flex',
+    alignItems: 'center',
+
+    gap: 'var(--space-10)',
+    maxWidth: '100%',
+    [theme.breakpoints.down('lg')]: {
+      flexDirection: 'column',
+      alignItems: 'flex-start',
+      gap: 'var(--space-4)'
+    }
+  },
+  statusChip: {
+    padding: 'var(--space-3) var(--space-6) !important',
+  },
+  testButton: {
+    flexShrink: 0,
+    [theme.breakpoints.down('sm')]: {
+      fontSize: 'var(--font-11)',
+      padding: 'var(--space-4) var(--space-8)'
+    }
+  },
+  actionsContainer: {
+    display: 'flex',
+    justifyContent: 'flex-end'
+  }
+}));
+
+const TicketList = (props) => {
+   const { showSnackbar } = useCustomSnackbar();
+  const classes = useStyles();
+  const data = props.data ? props.data : {};
+  const [state, setState] = useState({ loading_status: false });
+  const refreshFun = props.refreshFun ? props.refreshFun : () => { }
+  const refreshForDel = props.refreshForDel ? props.refreshForDel : () => {}
+  const handleClickOpenDialogEdit = props.handleClickOpenDialogEdit ? props.handleClickOpenDialogEdit : () => { };
+
+  const TestConnection = (id) => {
+    const post_data = {
+      integration_id: id
+    };
+    const integrationLabel = INTEGRATION_TYPE_MAP[data.integration_type] || "integration";
+    showSnackbar('info', `Testing connection with ${integrationLabel}...`);
+    PostData(GenerateURL({}, properties.api.integration_test), post_data, onFetchSuccess, onFetchFail);
+    setState(new_state => ({
+      ...new_state,
+      loading_status: true
+    }));
+  }
+
+  function onFetchSuccess(response) {
+    const integrationLabel = INTEGRATION_TYPE_MAP[data.integration_type] || "integration";
+    showSnackbar('success', `Connection established with ${integrationLabel}.`);
+    refreshFun()
+    setState(new_state => ({
+      ...new_state,
+      loading_status: false,
+      jira_users: [
+        ...response.users
+      ],
+    }));
+  }
+
+  function onFetchFail(error) {
+    const integrationLabel = INTEGRATION_TYPE_MAP[data.integration_type] || "integration";
+    var error_msg = showErrorHandlerUpdated(error);
+    showSnackbar('error', `Unable to test connection with ${integrationLabel}.`, error_msg);
+    console.log("Error:", error_msg);
+    refreshFun()
+    setState(new_state => ({
+      ...new_state,
+      loading_status: false
+    }));
+  }
+
+  return (
+    <div className={classes.commonTable}>
+      <div className={classes.iconContainer}>
+        <div className={classes.iconWrapper}>
+          {data.integration_type === "jira" ? (
+            <img src={"/images/logos/jira_icon.svg"} style={{ width: '80%' }} alt="Jira" />
+          ) : data.integration_type === "azure_devops" ? (
+            <img src={"/images/logos/azure_devops.svg"} style={{ width: '80%' }} alt="Azure DevOps" />
+          ) : data.integration_type === "service_now" ? (
+            <img src={"/images/logos/sevice_now.svg"} style={{ width: '80%' }} alt="ServiceNow" />
+          ) : null}
+        </div>
+        <Tooltip title={data.integration_name ? data.integration_name : "N/A"}>
+          <p className={classes.textEllipsis} style={{ marginLeft: 'var(--space-5)' }}>
+            {data.integration_name ? data.integration_name : "N/A"}
+          </p>
+        </Tooltip>
+      </div>
+
+      <div>
+        {data.credential_id && data.credential_id.name ? (
+          <Tooltip title={data.credential_id.name}>
+            <p className={classes.textEllipsis}>{data.credential_id.name}</p>
+          </Tooltip>
+        ) : (
+          <p className={classes.textEllipsis}>N/A</p>
+        )}
+      </div>
+
+      <div>
+        {data.server_url && data.server_url ? (
+          <Tooltip title={data.server_url}>
+            <p className={classes.textEllipsis}>{data.server_url}</p>
+          </Tooltip>
+        ) : (
+          <p className={classes.textEllipsis}>N/A</p>
+        )}
+      </div>
+
+      <div className={classes.statusContainer}>
+        <div style={{ width: 'var(--space-160)' }}>
+        {data.status && data.status === "CONNECTED" ? (
+          <Chip
+            label="Connected"
+            variant="connected"
+              className={classes.statusChip}
+            icon={<span style={{ lineHeight: '12px' }} className='ri-checkbox-circle-line font-16'></span>}
+          />
+        ) : (
+          <Chip
+            label="Not Connected"
+            variant="disconnected"
+              className={classes.statusChip}
+            icon={<span style={{ lineHeight: '12px' }} className='ri-close-circle-line font-16'></span>}
+          />
+        )}
+        </div>
+        <Button
+          variant='outline'
+          size='sm'
+          className={`btn btn-outline-primary btn-sm ${classes.testButton}`}
+          onClick={() => { TestConnection(data.id) }}
+          isLoading={state.loading_status}
+        >
+          Test
+        </Button>
+      </div>
+
+      <div className={classes.actionsContainer}>
+        <OptionList
+          data={{ id: data.id, integration_type: data.integration_type }}
+          handleClickOpenDialogEdit={handleClickOpenDialogEdit}
+          refreshFun={refreshFun}
+          refreshForDel={refreshForDel}
+        />
+      </div>
+    </div>
+  )
+}
+
+TicketList.propTypes = {
+  ...PropTypes.objectOf(PropTypes.any),
+};
+
+const ITEM_HEIGHT = 48;
+
+const useMenuStyles = makeStyles((theme) => ({
+  menuButton: {
+    border: 'none',
+    background: 'transparent',
+    cursor: 'pointer',
+    padding: 'var(--space-4) var(--space-8)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 'var(--radius-4)',
+    transition: 'background-color 0.2s',
+    '&:hover': {
+      backgroundColor: 'rgba(0, 150, 219, 0.08)'
+    }
+  },
+  menuIcon: {
+    fontSize: 'var(--font-18)',
+    color: 'var(--color-tertiary-500)',
+    [theme.breakpoints.down('sm')]: {
+      fontSize: 'var(--font-15)'
+    }
+  },
+  menuItem: {
+    display: "grid",
+    minWidth: 'var(--space-150)',
+    [theme.breakpoints.down('sm')]: {
+      minWidth: 'var(--space-120)'
+    }
+  }
+}));
+
+const OptionList = (props) => {
+  const menuClasses = useMenuStyles();
+  const [anchorEl, setAnchorEl] = useState(null);
+  const open = Boolean(anchorEl);
+  const data = props.data ? props.data : {};
+  const edit_id = data.id ? data.id : null;
+  const integration_type = data.integration_type ? data.integration_type : null;
+  const handleClickOpenDialogEdit = props.handleClickOpenDialogEdit ? props.handleClickOpenDialogEdit : () => { };
+  const refreshFun = props.refreshFun ? props.refreshFun : () => { }
+  const refreshForDel = props.refreshForDel ? props.refreshForDel : () => {}
+  const handleClick = (event) => {
+    setAnchorEl(event.currentTarget);
+  };
+
+  const handleClose = () => {
+    setAnchorEl(null);
+  };
+
+  return (
+    <>
+      <GenericPopoverDropdown
+        data={{ edit_id, integration_type }}
+        id={edit_id}
+        name=""
+        handleRefresh={refreshFun}
+        menuConfig={[
+          {
+            type: "click",
+            label: "Edit",
+            icon: "ri-edit-line",
+            onClick: () => {
+              handleClickOpenDialogEdit(edit_id, integration_type);
+            },
+          },
+          {
+            type: "delete",
+            entityName: "integration",
+            entityLabel: "ticketing integration",
+            api: properties.api.ticketing_system_update,
+            placeholders: { id: edit_id },
+            refresh: refreshFun,
+          },
+        ]}
+      />
+
+
+    </>
+  )
+}
+
+OptionList.propTypes = {
+  ...PropTypes.objectOf(PropTypes.any),
+};
+
+export default TicketList;
