@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import PropTypes from 'prop-types';
 import GenerateURL from '../../../../util/APIUrlProvider';
 import properties from '../../../../properties/properties';
-import InvokeApi, { SubscribeToApi, UnsubscribeToApi } from '../../../../util/apiInvoker';
+import InvokeApi from '../../../../util/apiInvoker';
 import { Link } from 'react-router-dom';
 import { Input } from '../../../../components/genericComponents/Input';
 import Tooltip from '@mui/material/Tooltip';
@@ -11,17 +11,21 @@ import RerunAfterFailure from '../../listing/component/RerunAfterFailure';
 import FillApprovalQuestions from './FillApprovalQuestions';
 import moment from 'moment';
 import GenericSkeleton from '../../../../components/genericComponents/Skeletons/GenericSkeleton';
-import MachineFailure from './MachineFailure';
+import ManageFailure from './ManageFailure';
+import BpOllyDialog from '../../../bpOlly';
 
 
 const SlidingDiv = (props) => {
   const [isOpen, setIsOpen] = useState(false);
+  const [ollyOpen, setOllyOpen] = useState(false);
+  const [openedFromManageFailure, setOpenedFromManageFailure] = useState(false);
   const [stripedRows] = useState(true);
   const [state, setState] = useState({ data: [], formData: {}, formError: {}, failed_stage_data: {}, deployment_type: "rolling", complete_rollback: false });
   const [servicesWillConitue, setServicesWillContinue] = useState([]);
   const [failedServices, setFailedServices] = useState([]);
   const [failedCanaryServices, setFailedCanaryServices] = useState([]);
   const [successCanaryServices, setSuccessCanaryServices] = useState([]);
+  const [rollingPercentage, setRollingPercentage] = useState(null);
   const pipeline_instance_id = props.pipeline_instance_id ? props.pipeline_instance_id : null;
   const pipeline_id = props.pipeline_id;
   const postFinalData = props.postFinalData ? props.postFinalData : () => { };
@@ -33,9 +37,9 @@ const SlidingDiv = (props) => {
   const pipeline_data = props.pipeline_data ? props.pipeline_data : null;
 
   const onHandleOpenFillQuestions = props.onHandleOpenFillQuestions ? props.onHandleOpenFillQuestions : () => { }
-  const failed_stage_instance = stage_instance[stage_instance.length - 1];
+  const failed_stage_instance = stage_instance && stage_instance.length > 0 ? stage_instance[stage_instance.length - 1] : null;
 
-  const filterApprovalQuestionsStage = all_stages.find(item => item.id === failed_stage_instance.stage_id)
+  const filterApprovalQuestionsStage = failed_stage_instance ? all_stages.find(item => item.id === failed_stage_instance.stage_id) : null;
 
   const failed_task_instance = failed_stage_instance && failed_stage_instance.task_instance
     .filter(item => item.status === "FAILED")
@@ -44,7 +48,45 @@ const SlidingDiv = (props) => {
         ? current
         : latest;
     }, null);
-  const failed_task_dep_type = failed_task_instance?.task_type == "DEPLOY" ? failed_task_instance.deployment_type == "CANARY" ? "canary" : "rolling" : null
+  // Look up deployment_type from task definition since task_instance (runtime) doesn't have it
+  const failed_task_definition = failed_task_instance ? all_stages.flatMap(stage => stage.tasks || []).find(task => task.id === failed_task_instance.task_id) : null;
+  const failed_task_dep_type = (failed_task_instance?.task_type === "DEPLOY" || failed_task_instance?.task_type === "GLOBAL_DEPLOY") ? (failed_task_definition?.deployment_type === "CANARY" ? "canary" : "rolling") : (failed_task_instance?.task_type === "CANARY_ANALYSIS" ? "canary" : null);
+  console.log(failed_task_definition, failed_task_dep_type, "failed_task_dep_type_debug");
+
+  //last job of last stage check
+  let isLastJobOfLastStage = false;
+  if (all_stages && all_stages.length > 0 && failed_stage_instance && failed_task_instance) {
+      const lastStageDefinition = all_stages[all_stages.length - 1];
+      
+      if (failed_stage_instance.stage_id === lastStageDefinition.id) {
+          const stageTasks = lastStageDefinition.tasks || [];
+          
+          if (stageTasks.length > 0) {
+              const lastTaskDefinition = stageTasks[stageTasks.length - 1];
+              isLastJobOfLastStage = failed_task_instance.task_id === lastTaskDefinition.id;
+          }
+      }
+  }
+  // Fetch rolling_percentage from full pipeline definition for ANDROID_DEPLOY tasks
+  useEffect(() => {
+    if (failed_task_instance?.task_type === "ANDROID_DEPLOY" && pipeline_id && failed_task_instance?.task_id) {
+      const requestInfo = {
+        endPoint: GenerateURL({ pipeline_id: pipeline_id }, properties.api.stages_get_url),
+        httpMethod: "GET",
+        httpHeaders: { "Content-Type": "application/json" }
+      };
+      InvokeApi(requestInfo, (stagesData) => {
+        const stages = Array.isArray(stagesData) ? stagesData : stagesData?.results || stagesData?.stages || [];
+        const allTasks = stages.flatMap(stage => stage.tasks || []);
+        const matchingTask = allTasks.find(task => task.id === failed_task_instance.task_id);
+        if (matchingTask?.rolling_percentage) {
+          setRollingPercentage(matchingTask.rolling_percentage);
+        }
+      }, (error) => {
+        console.log("Error fetching stages for rolling_percentage:", error);
+      });
+    }
+  }, [failed_task_instance?.task_type, failed_task_instance?.task_id, pipeline_id]);
   console.log(failed_stage_instance, "pipeline_datapipeline_data", filterApprovalQuestionsStage)
   const continuePipelineFailure = props.continuePipelineFailure ? props.continuePipelineFailure : null;
   const rerunPipeline = props.rerunPipeline;
@@ -67,11 +109,11 @@ const SlidingDiv = (props) => {
     setTimeout(() => {
       setShowTable(true);
       setIsFlipped(false);
+      setState((new_state) => ({
+        ...new_state,
+        complete_rollback: false,
+      }))
     }, 500);
-    setState((new_state) => ({
-      ...new_state,
-      complete_rollback: false,
-    }))
   };
 
   const handleCompleteRollback = () => {
@@ -87,7 +129,7 @@ const SlidingDiv = (props) => {
   }
 
   function closeDialogAndApiHit(data) {
-   
+
     var post_data = {
       ...data,
       stage_instance_id: failed_stage_instance && failed_stage_instance.id,
@@ -96,7 +138,7 @@ const SlidingDiv = (props) => {
     rerunPipeline(post_data);
     setIsOpen(!isOpen);
   }
- 
+
 
   function getServiceDetails() {
     var requestInfo = {
@@ -159,7 +201,7 @@ const SlidingDiv = (props) => {
     }
 
   }
-  
+
 
   const renderTableComponent = (data) => {
     console.log(data, "Processing table data");
@@ -168,9 +210,10 @@ const SlidingDiv = (props) => {
       return [];
     }
 
-    
+
     const taskHandlers = {
       component_task_instance: handleComponentTasks,
+      configmap_deploy_task_instance: handleConfigmapTasks,
       jira_integration_task_instance: handleJiraTasks,
       rest_api_task_instance: handleRestApiTasks,
       canary_analysis_task_instance: handleCanaryTasks,
@@ -182,7 +225,7 @@ const SlidingDiv = (props) => {
       global_promote_task_instance: handleGlobalProjectTasks
     };
 
-   
+
     for (const [taskType, handler] of Object.entries(taskHandlers)) {
       if (data[taskType] && data[taskType].length > 0) {
         return handler(data[taskType], data);
@@ -192,30 +235,34 @@ const SlidingDiv = (props) => {
     return [];
   };
 
- 
+
   function handleComponentTasks(taskInstances, data) {
     const failedTasks = taskInstances.filter(item =>
       item.activity_status?.status === "FAILED" ||
-      item.activity_status?.status === "DONT_RUN"
+      item.activity_status?.status === "DONT_RUN" ||
+      (!item.activity_status && item.status === "FAILED")
     );
 
     const successTasks = taskInstances.filter(item =>
-      item.activity_status?.status === "SUCCESS"
+      item.activity_status?.status === "SUCCESS" ||
+      (!item.activity_status && item.status === "SUCCESS")
     );
 
-    var filterFailedTask = data.component_task_instance.filter(item => item.activity_status?.status === "FAILED" || item.activity_status?.status === "DONT_RUN");
-    var filterSuccessServices = data.component_task_instance.filter(item => item.activity_status?.status === "SUCCESS");
+    var filterFailedTask = data.component_task_instance.filter(item => item.activity_status?.status === "FAILED" || item.activity_status?.status === "DONT_RUN" || (!item.activity_status && item.status === "FAILED"));
 
-    
-    setServicesWillContinue(successTasks.map(item => item.component.name));
-    setFailedServices(failedTasks.map(item => item.component.name));
+    var filterSuccessServices = data.component_task_instance.filter(item => item.activity_status?.status === "SUCCESS" || (!item.activity_status && item.status === "SUCCESS"));
+
+
+    setServicesWillContinue(successTasks.map(item => item.component?.name || "N/A"));
+    setFailedServices(failedTasks.map(item => item.component?.name || "N/A"));
     setFailedCanaryServices(filterFailedTask)
     setSuccessCanaryServices(filterSuccessServices)
 
     return failedTasks.reduce((uniqueTasks, item) => {
-      const component_name = item.component.name;
+      const component_name = item.component?.name || "N/A";
       const project_env = item?.project_env;
       const branch_name = item.activity_status?.payload_json?.filter_details?.branches?.[project_env]?.[component_name];
+
 
       const existingTask = uniqueTasks.find(task =>
         task.service_name === component_name &&
@@ -227,7 +274,8 @@ const SlidingDiv = (props) => {
       if (!existingTask || existingTask.task_type === item.task_type) {
         uniqueTasks.push({
           service_name: component_name || null,
-          env_name: project_env || null,
+          env_name: project_env || failed_task_definition?.project_env?.name || null,
+          target_env_name: failed_task_definition?.target_project_env?.name || null,
           branch_name: branch_name || null,
           status: item.status,
           logs_url: `${item.global_task_id}&service_name=${component_name}&service_env=${data.project_environment}&status=${item.status}&tab_id=${item.id}`,
@@ -241,7 +289,7 @@ const SlidingDiv = (props) => {
     }, []);
   }
 
-  
+
   function handleJiraTasks(taskInstances) {
     const failedTasks = taskInstances.filter(item => item.status === "FAILED");
 
@@ -255,7 +303,7 @@ const SlidingDiv = (props) => {
     }));
   }
 
- 
+
   function handleRestApiTasks(taskInstances) {
     const failedTasks = taskInstances.filter(item => item.status === "FAILED");
 
@@ -269,7 +317,7 @@ const SlidingDiv = (props) => {
     }));
   }
 
-  
+
   function handleCanaryTasks(taskInstances) {
     const failedTasks = taskInstances.filter(item => item.status === "FAILED");
 
@@ -281,7 +329,7 @@ const SlidingDiv = (props) => {
     }));
   }
 
-  
+
   function handlePipelineTasks(taskInstances) {
     const failedTasks = taskInstances.filter(item => item.status === "FAILED");
     const failedServices = [];
@@ -325,6 +373,20 @@ const SlidingDiv = (props) => {
       status: item.status,
       operation: item?.attach_task_details?.attach_operation,
       logs_url: `${item.global_task_id}&status=${item.status}&tab_id=${item.id}`,
+      task_type: failed_task_instance.task_type
+    }));
+  }
+
+  function handleConfigmapTasks(taskInstances) {
+    const failedTasks = taskInstances.filter(item =>
+      item.activity_status?.status === "FAILED" || item.status === "FAILED"
+    );
+
+    return failedTasks.map(item => ({
+      service_name: item.env_namespace_configmap?.name || "N/A",
+      env_name: failed_task_definition?.project_env?.name || "N/A",
+      status: item.activity_status?.status || item.status,
+      logs_url: `${item.global_task_id}&service_name=${item.env_namespace_configmap?.name || ""}&status=${item.activity_status?.status || item.status || ""}&tab_id=${item.id}`,
       task_type: failed_task_instance.task_type
     }));
   }
@@ -398,12 +460,6 @@ const SlidingDiv = (props) => {
     console.log(state, "usyguggsdv")
     if (isOpen) {
       setIsOpen(!isOpen);
-      UnsubscribeToApi(GenerateURL({
-        pipeline_id: pipeline_id,
-        pipeline_instance_id: pipeline_instance_id ? pipeline_instance_id : null,
-        stage_instance_id: failed_stage_instance && failed_stage_instance.id,
-        task_instance_id: failed_task_instance && failed_task_instance.id,
-      }, properties.api.task_service_details));
     } else {
       setIsOpen(!isOpen);
       if (!failed_task_instance && failed_stage_instance && (failed_stage_instance.stageinstanceapproval && failed_stage_instance.stageinstanceapproval != null)) {
@@ -416,12 +472,6 @@ const SlidingDiv = (props) => {
 
       } else {
         console.log(state, "usyguggsdv")
-        SubscribeToApi(GenerateURL({
-          pipeline_id: pipeline_id,
-          pipeline_instance_id: pipeline_instance_id ? pipeline_instance_id : null,
-          stage_instance_id: failed_stage_instance && failed_stage_instance.id,
-          task_instance_id: failed_task_instance && failed_task_instance.id,
-        }, properties.api.task_service_details));
         getServiceDetails();
         console.log(state, "usyguggsdv")
       }
@@ -430,6 +480,13 @@ const SlidingDiv = (props) => {
     }
     backClicked()
   };
+
+  // Register toggleDiv into the ref so parent (ExecutionCard) can trigger it
+  const openManageFailureRef = props.openManageFailureRef;
+  if (openManageFailureRef) {
+    openManageFailureRef.current = toggleDiv;
+  }
+
   function onChangeHandler(e) {
     var key = e.target.name;
     var value = e.target.value;
@@ -448,20 +505,16 @@ const SlidingDiv = (props) => {
   }
 
 
-  const postContinuePipelineData = () => {
+  const postContinuePipelineData = (exceptionalServices, exceptionalJustification) => {
     var find_task_type = state.data && state.data[0] && state.data[0].task_type;
     console.log(find_task_type, "find_task_type");
     console.log("hdsjhsjd", failed_task_instance);
     var post_data = {}
-    if (find_task_type == "BUILD" || find_task_type == "DEPLOY" || find_task_type == "PROMOTE"
-      || find_task_type == "GLOBAL_BUILD" || find_task_type == "GLOBAL_DEPLOY" || find_task_type == "GLOBAL_PROMOTE" || find_task_type == "ANDROID_BUILD" || find_task_type == "ANDROID_DEPLOY"
-    ) {
-      post_data = {
-        "stage_instance_id": failed_stage_instance && failed_stage_instance.id,
-        "task_instance_id": failed_task_instance && failed_task_instance.id,
-        "components": failedServices,
-      }
-    } else if (find_task_type == "DEPLOY" && failed_task_dep_type == "canary") {
+
+    let isExceptional = Array.isArray(exceptionalServices);
+    let selectedComponents = isExceptional ? exceptionalServices : failedServices;
+
+    if ((find_task_type === "DEPLOY" || find_task_type === "GLOBAL_DEPLOY" || find_task_type === "CANARY_ANALYSIS") && failed_task_dep_type === "canary") {
       post_data = {
         "stage_instance_id": failed_stage_instance && failed_stage_instance.id,
         "task_instance_id": failed_task_instance && failed_task_instance.id,
@@ -470,13 +523,21 @@ const SlidingDiv = (props) => {
         "complete_rollback": state.complete_rollback,
         "deployment_type": "CANARY"
       }
-    } else if (find_task_type == "DEPLOY" && failed_task_dep_type != "canary") {
+    } else if ((find_task_type == "DEPLOY" || find_task_type == "GLOBAL_DEPLOY") && failed_task_dep_type != "canary") {
       post_data = {
         "stage_instance_id": failed_stage_instance && failed_stage_instance.id,
         "task_instance_id": failed_task_instance && failed_task_instance.id,
-        "components": failedServices,
+        "components": selectedComponents,
         "complete_rollback": state.complete_rollback,
         "deployment_type": "ROLLING"
+      }
+    } else if (find_task_type == "BUILD" || find_task_type == "DEPLOY" || find_task_type == "PROMOTE"
+      || find_task_type == "GLOBAL_BUILD" || find_task_type == "GLOBAL_DEPLOY" || find_task_type == "GLOBAL_PROMOTE" || find_task_type == "ANDROID_BUILD" || find_task_type == "ANDROID_DEPLOY"
+    ) {
+      post_data = {
+        "stage_instance_id": failed_stage_instance && failed_stage_instance.id,
+        "task_instance_id": failed_task_instance && failed_task_instance.id,
+        "components": selectedComponents,
       }
     }
     else {
@@ -488,20 +549,23 @@ const SlidingDiv = (props) => {
           ...state.formData,
           "stage_instance_id": failed_stage_instance && failed_stage_instance.id,
           "task_instance_id": failed_task_instance && failed_task_instance.id,
-          
+
         }
       } else {
         if (find_task_type == "REST_API") {
           var ticket_key = state.data.map(item => { return item.issue_key });
           ticket_key = ticket_key && ticket_key[0];
           console.log(state.formData, "task_type")
-          post_data = {}
+          post_data = {
+            "stage_instance_id": failed_stage_instance && failed_stage_instance.id,
+            "task_instance_id": failed_task_instance && failed_task_instance.id,
+          }
         } else if (find_task_type == "dependent_job") {
           post_data = {
             "stage_instance_id": failed_stage_instance && failed_stage_instance.id,
             "task_instance_id": failed_task_instance && failed_task_instance.id,
             "components": failedServices,
-            
+
           }
         } else if (find_task_type == "SNOW_INTEGRATION") {
           var ticket_key = state.data.map(item => { return item.issue_key });
@@ -511,17 +575,40 @@ const SlidingDiv = (props) => {
             ...state.formData,
             "stage_instance_id": failed_stage_instance && failed_stage_instance.id,
             "task_instance_id": failed_task_instance && failed_task_instance.id,
-            
+
           }
         } else {
           post_data = {
             "stage_instance_id": failed_stage_instance && failed_stage_instance.id,
             "task_instance_id": failed_task_instance && failed_task_instance.id,
-            
+
           }
         }
       }
     }
+
+    if (find_task_type === "SNOW_INTEGRATION") {
+      var op = state.data && state.data[0] && state.data[0].operation;
+      if (op === "snow_create") {
+        var ticket_key = state.data && state.data[0] && state.data[0].issue_key;
+        if (ticket_key && (!state.formData[ticket_key] || state.formData[ticket_key].trim().length === 0)) {
+          setState({
+            ...state,
+            formError: {
+              ...state.formError,
+              [ticket_key]: "This is required",
+            }
+          });
+          return;
+        }
+      }
+    }
+
+    if (isExceptional) {
+      post_data.is_exception_approval = true;
+      post_data.exception_justification = exceptionalJustification;
+    }
+
     continuePipelineFailure(post_data)
     toggleDiv()
   }
@@ -558,17 +645,17 @@ const SlidingDiv = (props) => {
   }
 
   const chipStyle = {
-    borderRadius: '34px',
-    border: '1px solid #E6E6E6',
-    padding: '6px 12px',
-    backgroundColor: '#FAFAFA',
+    borderRadius: 'var(--radius-34)',
+    border: 'var(--space-1) solid var(--color-badge-grey-bg)',
+    padding: 'var(--space-6) var(--space-12)',
+    backgroundColor: 'var(--color-grey-000)',
     display: 'inline-block',
-    color: "#787878",
+    color: "var(--color-content-tertiary)",
     fontFamily: "Montserrat",
-    fontWeight: "600",
-    fontSize: "12px",
-    marginLeft: "9px",
-    marginTop: "12px"
+    fontWeight: "var(--font-weight-600)",
+    fontSize: "var(--font-12)",
+    marginLeft: "var(--space-9)",
+    marginTop: "var(--space-12)"
   };
 
   const ServiceChip = ({ key, label }) => (
@@ -590,13 +677,13 @@ const SlidingDiv = (props) => {
       <>
         {
           rerun_pipeline_status === "POST" ?
-            <GenericSkeleton width={213} height={40} variant="rect" style={{
-              borderRadius: '20px',
+            <GenericSkeleton width="var(--space-213)" height="var(--space-40)" variant="rect" style={{
+              borderRadius: 'var(--radius-20)',
               position: 'absolute',
-              bottom: '10px',
-              right: '50px'
+              bottom: 'var(--space-10)',
+              right: 'var(--space-50)'
             }} /> :
-            <button className='btn btn-danger-v2 btn-posi-bottom d-flex align-center' style={ollyEnabled && ollyEnabled === "true" ? { right: '115px' } : {}} onClick={toggleDiv}>
+            <button className='btn btn-danger-v2 btn-posi-bottom d-flex align-center' style={ollyEnabled && ollyEnabled === "true" ? { right: 'var(--space-115)' } : {}} onClick={toggleDiv}>
               <i className="ri-error-warning-line font-18"></i>&nbsp;<span>{"Manage Failures"} </span>
             </button>
         }
@@ -682,8 +769,8 @@ const SlidingDiv = (props) => {
                               {
                                 state.data && state.data[0] ?
                                   state.data[0].task_type ?
-                                    state.data[0].task_type == "BUILD" || state.data[0].task_type == "DEPLOY" ||
-                                      state.data[0].task_type == "PROMOTE" || state.data[0].task_type == "JIRA_INTEGRATION" || state.data[0].task_type == "REST_API" || state.data[0].task_type == "CANARY_ANALYSIS" || state.data[0].task_type == "indpedent_job" || state.data[0].task_type == "dependent_job" || state.data[0].task_type == "SNOW_INTEGRATION" || state.data[0].task_type == "ATTACH_DOCUMENTS" || state.data[0].task_type == "GLOBAL_DEPLOY" || state.data[0].task_type == "GLOBAL_BUILD" || state.data[0].task_type == "GLOBAL_PROMOTE" || state.data[0].task_type == "ANDROID_BUILD" || state.data[0].task_type == "ANDROID_DEPLOY" || state.data[0]?.task_type ==="CRONJOB" ?
+                                     state.data[0].task_type == "BUILD" || state.data[0].task_type == "DEPLOY" ||
+                                      state.data[0].task_type == "PROMOTE" || state.data[0].task_type == "JIRA_INTEGRATION" || state.data[0].task_type == "REST_API" || state.data[0].task_type == "CANARY_ANALYSIS" || state.data[0].task_type == "independent_job" || state.data[0].task_type == "dependent_job" || state.data[0].task_type == "SNOW_INTEGRATION" || state.data[0].task_type == "ATTACH_DOCUMENTS" || state.data[0].task_type == "GLOBAL_DEPLOY" || state.data[0].task_type == "GLOBAL_BUILD" || state.data[0].task_type == "GLOBAL_PROMOTE" || state.data[0].task_type == "ANDROID_BUILD" || state.data[0].task_type == "ANDROID_DEPLOY" || state.data[0]?.task_type ==="CRONJOB" || state.data[0]?.task_type === "CONFIGMAP_DEPLOYMENT" || state.data[0]?.task_type === "DB_UPGRADE" || state.data[0]?.task_type === "INTEGRATION" ?
                                       <div className={`tableDivi ${showTable ? 'content-table' : 'hidden'}`}>
                                         <div className="tableDiv-container">
                                           <table className={`tableDiv `} >
@@ -861,7 +948,7 @@ const SlidingDiv = (props) => {
                                                                   <th>Logs</th>
                                                                 </tr>
                                                                 :
-                                                                state.data[0].task_type === "indpedent_job" ?
+                                                                state.data[0].task_type === "independent_job" ?
                                                                   <tr>
                                                                     <th>Task Type</th>
                                                                     <th>Duration</th>
@@ -1420,7 +1507,7 @@ const SlidingDiv = (props) => {
                                                                       <><b>Please Note:</b> Your ServiceNow ticket creation has failed, if you want to continue please create the ServiceNow ticket manually and enter the details after clicking the continue.</>
                                                                       :
                                                                       state.data[0].operation && state.data[0].operation == "snow_add_notes" ?
-                                                                        <><b>Please Note:</b> Your ServiceNow Add notes has failed, if you want to continue please add them manually and click continue.</>
+                                                                        <><b>Please Note:</b> The ServiceNow 'Add Notes' task was unsuccessful. To proceed, please add the required notes manually in ServiceNow and click Continue.</>
                                                                         :
                                                                         state.data[0].operation && state.data[0].operation == "snow_update_status" ?
                                                                           <><b>Please Note:</b> Your ServiceNow ticket status update has failed, if you want to continue please update the ServiceNow ticket status manually and click continue.</>
@@ -1601,7 +1688,7 @@ const SlidingDiv = (props) => {
           </div>
         </div> */}
 
-        <MachineFailure
+        <ManageFailure
           open={isOpen}
           handleClose={toggleDiv}
           data={state.data}
@@ -1609,6 +1696,7 @@ const SlidingDiv = (props) => {
           error={state.error}
           failedStageData={state.failed_stage_data}
           failedTask={failed_task_instance}
+          failedTaskDefinition={failed_task_definition}
           failedServices={failedServices}
           servicesContinuing={servicesWillConitue}
           pipeline_data={pipeline_data}
@@ -1616,6 +1704,7 @@ const SlidingDiv = (props) => {
           postContinuePipelineData={postContinuePipelineData}
           handleCompleteRollback={handleCompleteRollback}
           failed_task_dep_type={failed_task_dep_type}
+          rollingPercentage={rollingPercentage}
           showTable={showTable}
           complete_rollback={state.complete_rollback}
           backClicked={backClicked}
@@ -1628,6 +1717,30 @@ const SlidingDiv = (props) => {
           pipeline_id={pipeline_id}
           pipeline_instance_id={pipeline_instance_id}
           postFinalData={postFinalData}
+          ollyEnabled={ollyEnabled}
+          openOlly={() => {
+            setOllyOpen(true);
+            setOpenedFromManageFailure(true);
+          }}
+          isLastJobOfLastStage={isLastJobOfLastStage}
+        />
+        <BpOllyDialog
+          open={ollyOpen}
+          onClose={() => {
+            setOllyOpen(false);
+            if (openedFromManageFailure) {
+              setIsOpen(true);
+              setOpenedFromManageFailure(false);
+            }
+          }}
+          onManageFailure={() => {
+            toggleDiv();
+          }}
+          hideButton={true}
+          pipeline_id={pipeline_id}
+          pipeline_instance_id={pipeline_instance_id}
+          data={failed_stage_instance ? [failed_stage_instance] : []}
+          autoOpenOnFailure={false}
         />
       </>
     }
