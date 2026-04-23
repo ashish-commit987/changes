@@ -4,37 +4,43 @@ import Dialog from '@mui/material/Dialog';
 import { makeStyles } from '@mui/styles';
 import { Link } from 'react-router-dom';
 import Tooltip from '@mui/material/Tooltip';
-import { Loading } from '../../../utils/Loading';
+import GenericSkeleton from '../../../../components/genericComponents/Skeletons/GenericSkeleton';
 import { Input } from '../../../../components/genericComponents/Input';
 import NewChip from "../../../../components/newChip/NewChip";
 import RerunAfterFailure from '../../listing/component/RerunAfterFailure';
 import FillApprovalQuestions from './FillApprovalQuestions';
 import BpOllyDialog from '../../../bpOlly';
 import Button from '../../../../components/genericComponents/Button';
+import { name } from "file-loader";
 
 
 const getStatusChip = (status) => {
     if (!status) return "N/A";
-    const variant = status === "FAILED" ? "error" : status === "SUCCESS" ? "success" : "light";
-    return <NewChip label={status} variant={variant} shape="standard" />;
+    const isFailed = status === "FAILED";
+    const isSuccess = status === "SUCCESS";
+    const variant = isFailed ? "error" : isSuccess ? "success" : "light";
+    const icon = isFailed ? <i className="ri-close-circle-line"></i> : (isSuccess ? <i className="ri-checkbox-circle-line"></i> : null);
+    return <NewChip label={status.toLowerCase()} variant={variant} shape="standard" icon={icon} />;
 };
 
 const getTableConfig = (taskType, depType, status) => {
     if (!taskType) return { columns: [], title: "Execution details for Failed Job" };
     if ((taskType === "DEPLOY" || taskType === "ANDROID_DEPLOY") && status === "DONT_RUN")
         return { columns: ["Service", "Status", "Reason"], title: "Execution Details for Deploy Job" };
-    if (taskType === "BUILD" || taskType === "GLOBAL_BUILD" || taskType === "ANDROID_BUILD")
+    if (taskType === "BUILD" || taskType === "GLOBAL_BUILD")
         return { columns: ["Service", "Env", "Branch", "Status", "Logs"], title: "Execution Details for Build Job" };
+    if (taskType === "ANDROID_BUILD")
+        return { columns: ["Service", "Env", "Status"], title: "Execution Details for Android Build Job" };
     if ((taskType === "DEPLOY" || taskType === "GLOBAL_DEPLOY") && depType === "canary")
-        return { columns: [], title: "Canary Deploy", isCanary: true };
+        return { columns: ["Service", "Env", "Status"], title: "Execution Details for Canary Deploy" };
     if (taskType === "DEPLOY" || taskType === "GLOBAL_DEPLOY")
         return { columns: ["Service", "Env", "Status"], title: "Execution Details for Deploy Job" };
     if (taskType === "ANDROID_DEPLOY")
-        return { columns: ["Service", "Env", "Status"], title: "Execution Details for Deploy Job" };
+        return { columns: ["Service", "Env", "Status"], title: "Execution Details for Deploy to Playstore" };
     if (taskType === "CRONJOB")
         return { columns: ["Service", "Env", "Status"], title: "Execution Details for Cronjob" };
     if (taskType === "PROMOTE" || taskType === "GLOBAL_PROMOTE")
-        return { columns: ["Service", "Source Env", "Target Env", "Status", "Logs"], title: "Execution Details for Promote Job" };
+        return { columns: ["Service", "Source Env", "Target Env", "Status"], title: "Execution Details for Promote Job" };
     if (taskType === "JIRA_INTEGRATION")
         return { columns: ["Operation", "Issue Type", "Issue Key", "Status", "Logs"], title: "Execution Details for Jira Integration" };
     if (taskType === "REST_API")
@@ -47,11 +53,153 @@ const getTableConfig = (taskType, depType, status) => {
         return { columns: ["Operation", "Issue Key", "Status", "Logs"], title: "Execution Details for ServiceNow" };
     if (taskType === "ATTACH_DOCUMENTS")
         return { columns: ["Operation", "Status", "Logs"], title: "Execution Details for Documents" };
+    if (taskType === "CONFIGMAP_DEPLOYMENT")
+        return { columns: ["Config Map", "Env", "Status"], title: "Execution Details for Config Map" };
+    if (taskType === "DB_UPGRADE")
+        return { columns: ["Service", "Env", "Status"], title: "Execution Details for Database Upgrade" };
+    if (taskType === "INTEGRATION")
+        return { columns: ["Service", "Env", "Status"], title: "Execution Details for Integration Testing" };
     if (taskType === "ROLLBACK")
-        return { columns: ["Service", "Status"], title: "Execution details for Rollback Job" };
+        return { columns: ["Service", "Env", "Status"], title: "Execution details for Rollback Job" };
     return { columns: ["Service", "Status"], title: "Execution details for Failed Job" };
 };
 
+
+const getJobDisplayName = (taskType) => {
+    const names = {
+        BUILD: "Build", GLOBAL_BUILD: "Build", ANDROID_BUILD: "Build",
+        DEPLOY: "Deploy", GLOBAL_DEPLOY: "Deploy", ANDROID_DEPLOY: "Deploy to Playstore",
+        CRONJOB: "Cronjob",
+        PROMOTE: "Promote", GLOBAL_PROMOTE: "Promote",
+        JIRA_INTEGRATION: "Jira Integration",
+        REST_API: "REST API",
+        CANARY_ANALYSIS: "Canary Analysis",
+        SNOW_INTEGRATION: "ServiceNow Integration",
+        ATTACH_DOCUMENTS: "Attach Document",
+        CONFIGMAP_DEPLOYMENT: "Config Map",
+        DB_UPGRADE: "Database Upgrade",
+        ROLLBACK: "Rollback",
+        INTEGRATION: "Integration",
+        independent_job: "Job",
+        dependent_job: "Job",
+    };
+    return names[taskType] || "Job";
+};
+
+const getSubJobName = (data) => {
+    if (!data || data.length === 0) return null;
+    const item = data[0];
+    if (item.operation) {
+        return item.operation.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+    }
+    if (item.service_name) return item.service_name;
+    if (item.task_name) return item.task_name;
+    return null;
+};
+
+const getNoteContent = (taskType, data, failed_task_dep_type, isStageFailure, failedTask, failedTaskDefinition, rollingPercentage, isLastJobOfLastStage) => {
+    const jobName = getJobDisplayName(taskType);
+    const subJobName = getSubJobName(data);
+
+    let description;
+
+    if (taskType === "REST_API" && data && data.length > 0) {
+        const method = data[0].method || "API";
+        const url = data[0].url || "";
+        description = (
+            <p>A pipeline failure has occurred in the <b>{method}</b> operation{url ? <> for the URL: <b>{url}</b></> : null}, impacting the execution of the &quot;<b>API Call</b>&quot; job.</p>
+        );
+    } else if ((taskType === "DEPLOY" || taskType === "GLOBAL_DEPLOY") && failed_task_dep_type === "canary") {
+        const podShift = failedTaskDefinition?.pod_shift_percentage || failedTask?.pod_shift_percentage;
+        description = (
+            <p>A pipeline failure has occurred in the &quot;<b>Deploy</b>&quot; job during the <b>canary</b> execution{podShift ? <> for pod shift percentage <b>{podShift}%</b></> : null}.</p>
+        );
+    } else if (taskType === "ANDROID_DEPLOY") {
+        const envName = data && data[0] ? data[0].env_name : null;
+        description = (
+            <p>A pipeline failure has occurred in the &quot;<b>Deploy to Play Store</b>&quot; job{envName ? <> for environment <b>{envName}</b></> : null} during the deployment execution{rollingPercentage ? <> for release rollout percentage <b>{rollingPercentage}%</b></> : null}.</p>
+        );
+    } else if ((taskType === "DEPLOY" || taskType === "GLOBAL_DEPLOY") && failed_task_dep_type !== "canary") {
+        description = (
+            <p>A pipeline failure has occurred in the &quot;<b>Deploy</b>&quot; job during the <b>Rolling</b> execution.</p>
+        );
+    } else if (taskType === "CONFIGMAP_DEPLOYMENT") {
+        const envName = data && data[0] ? data[0].env_name : null;
+        description = (
+            <p>A pipeline failure has occurred in the &quot;<b>Config Map</b>&quot; job{envName ? <> for <b>{envName}</b> environment</> : null}.</p>
+        );
+
+    }
+    else if (taskType === "CRONJOB") {
+        const envName = data && data[0] ? data[0].env_name : null;
+        description = (
+            <p>A pipeline failure has occurred in the &quot;<b>Cron</b>&quot; job{envName ? <> for environment <b>{envName}</b></> : null}.</p>
+        );
+
+    }
+    else if (taskType === "DB_UPGRADE") {
+        const envName = data && data[0] ? data[0].env_name : null;
+        description = (
+            <p>A pipeline failure has occurred in the &quot;<b>Database Upgrade</b>&quot; job{envName ? <> for <b>{envName}</b> environment </> : null}.</p>
+        );
+
+    }
+    else if (taskType === "ROLLBACK") {
+        const envName = data && data[0] ? data[0].env_name : null;
+        description = (
+            <p>A pipeline failure has occurred in the &quot;<b>Rollback</b>&quot; job{envName ? <> for <b>{envName}</b> environment</> : null}.</p>
+        );
+
+    }
+    else if (taskType === "INTEGRATION") {
+        const envName = data && data[0] ? data[0].env_name : null;
+        description = (
+            <p>A pipeline failure has occurred in the &quot;<b>Integration Testing</b>&quot; job{envName ? <> for <b>{envName}</b> environment </> : null}.</p>
+        );
+
+    }
+    else if (taskType === "BUILD" || taskType === "GLOBAL_BUILD") {
+        const envName = data && data[0] ? data[0].env_name : null;
+        description = (
+            <p>A pipeline failure has occurred in the &quot;<b>Build</b>&quot; job{envName ? <> for <b>{envName}</b> environment</> : null}.</p>
+        );
+    }
+
+    else if (taskType === "ANDROID_BUILD") {
+        const envName = data && data[0] ? data[0].env_name : null;
+        description = (
+            <p>A pipeline failure has occurred in the &quot;<b>Android Build</b>&quot; job{envName ? <> for <b>{envName}</b> environment</> : null}.</p>
+        );
+    }
+    else if (taskType === "PROMOTE" || taskType === "GLOBAL_PROMOTE") {
+        const sourceEnv = data && data[0] ? data[0].env_name : null;
+        const targetEnv = data && data[0] ? data[0].target_env_name : null;
+        description = (
+            <p>A pipeline failure has occurred in the &quot;<b>Promote</b>&quot; job{sourceEnv ? <> from source environment <b>{sourceEnv}</b></> : null}{targetEnv ? <> to target environment <b>{targetEnv}</b></> : null}.</p>
+        );
+    }
+    else {
+        description = subJobName
+            ? (
+                <p>A pipeline failure occurred in the &quot;<b>{subJobName}</b>&quot; operation, impacting the execution of the &quot;<b>{jobName}</b>&quot; job.</p>
+            )
+            : (
+                <p>A pipeline failure occurred in the &quot;<b>{jobName}</b>&quot; job.</p>
+            );
+    }
+
+    // Determine which recovery options are available
+    const hasRerun = true;
+    const hasContinue = taskType !== "CANARY_ANALYSIS" && !isStageFailure && !isLastJobOfLastStage;
+    const hasRollback = failed_task_dep_type === "canary" || taskType === "CANARY_ANALYSIS";
+
+    const options = [];
+    if (hasRerun) options.push("Re-run the failed job");
+    if (hasContinue) options.push("Skip failed jobs and continue");
+    if (hasRollback) options.push("Complete Rollback to baseline");
+
+    return { description, options };
+};
 
 const truncateService = (name) => {
     if (!name) return "N/A";
@@ -82,7 +230,7 @@ const renderRowCells = (item) => {
             </>
         );
     }
-    if (tt === "BUILD" || tt === "GLOBAL_BUILD" || tt === "ANDROID_BUILD") {
+    if (tt === "BUILD" || tt === "GLOBAL_BUILD") {
         return (
             <>
                 <td>{truncateService(item.service_name)}</td>
@@ -90,6 +238,15 @@ const renderRowCells = (item) => {
                 <td>{item.branch_name || "N/A"}</td>
                 <td>{getStatusChip(item.status)}</td>
                 <td><Link to={`/logs?global_task_id=${item.logs_url}`} target="_blank" className='text-anchor-blue' >View Logs</Link></td>
+            </>
+        );
+    }
+    if (tt === "ANDROID_BUILD") {
+        return (
+            <>
+                <td>{truncateService(item.service_name)}</td>
+                <td>{item.env_name || "N/A"}</td>
+                <td>{getStatusChip(item.status)}</td>
             </>
         );
     }
@@ -107,9 +264,9 @@ const renderRowCells = (item) => {
             <>
                 <td>{truncateService(item.service_name)}</td>
                 <td>{item.env_name || "N/A"}</td>
-                <td>{item.branch_name || "N/A"}</td>
+                <td>{item.target_env_name || "N/A"}</td>
                 <td>{getStatusChip(item.status)}</td>
-                <td><Link to={`/logs?global_task_id=${item.logs_url}`} target="_blank" className='text-anchor-blue' >View Logs</Link></td>
+                {/* <td><Link to={`/logs?global_task_id=${item.logs_url}`} target="_blank" className='text-anchor-blue' >View Logs</Link></td> */}
             </>
         );
     }
@@ -174,6 +331,43 @@ const renderRowCells = (item) => {
             </>
         );
     }
+    if (tt === "CONFIGMAP_DEPLOYMENT") {
+        return (
+            <>
+                <td>{truncateService(item.service_name)}</td>
+                <td>{item.env_name || "N/A"}</td>
+                <td>{getStatusChip(item.status)}</td>
+                {/* <td><Link to={`/logs?global_task_id=${item.logs_url}`} target="_blank" className='text-anchor-blue' >View Logs</Link></td> */}
+            </>
+        );
+    }
+    if (tt === "DB_UPGRADE") {
+        return (
+            <>
+                <td>{truncateService(item.service_name)}</td>
+                <td>{item.env_name || "N/A"}</td>
+                <td>{getStatusChip(item.status)}</td>
+            </>
+        );
+    }
+    if (tt === "INTEGRATION") {
+        return (
+            <>
+                <td>{truncateService(item.service_name)}</td>
+                <td>{item.env_name || "N/A"}</td>
+                <td>{getStatusChip(item.status)}</td>
+            </>
+        );
+    }
+    if (tt === "ROLLBACK") {
+        return (
+            <>
+                <td>{truncateService(item.service_name)}</td>
+                <td>{item.env_name || "N/A"}</td>
+                <td>{getStatusChip(item.status)}</td>
+            </>
+        );
+    }
     return (
         <>
             <td>{truncateService(item.service_name)}</td>
@@ -183,17 +377,17 @@ const renderRowCells = (item) => {
 };
 
 const ServiceListSection = ({ title, services, color, icon, badge }) => (
-    <div style={{ marginBottom: "10px", marginTop: "12px", border: "1px solid #E6E6E6", borderRadius: "6px" }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px", borderBottom: "1px solid #E6E6E6" }}>
+    <div style={{ marginBottom: "var(--space-10)", marginTop: "var(--space-12)", border: "var(--space-1) solid var(--color-grey-200)", borderRadius: "var(--radius-6)" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "var(--space-16)", borderBottom: "var(--space-1) solid var(--color-grey-200)" }}>
             <div style={{ display: "flex", alignItems: "center" }}>
-                <div style={{ width: "20px", height: "20px", borderRadius: "50%", backgroundColor: color, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                    <span className={icon} style={{ color: "#FFFFFF" }}></span>
+                <div style={{ width: "var(--space-20)", height: "var(--space-20)", borderRadius: "var(--radius-full)", backgroundColor: color, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    <span className={icon} style={{ color: "var(--color-white)" }}></span>
                 </div>
-                <span style={{ marginLeft: "8px", fontFamily: "Montserrat", fontWeight: '600', fontSize: "14px", color: '#2F2F2F' }}>{title}</span>
+                <span style={{ marginLeft: "var(--space-8)", fontFamily: "Montserrat", fontWeight: 'var(--font-weight-600)', fontSize: "var(--font-14)", color: 'var(--color-content-primary)' }}>{title}</span>
             </div>
-            {badge && <div style={{ padding: "6px", backgroundColor: badge.bg, color: badge.color, fontFamily: "Montserrat", fontWeight: '700', fontSize: "12px", borderRadius: "5px" }}>{badge.text}</div>}
+            {badge && <div style={{ padding: "var(--space-6)", backgroundColor: badge.bg, color: badge.color, fontFamily: "Montserrat", fontWeight: 'var(--font-weight-700)', fontSize: "var(--font-12)", borderRadius: "var(--radius-5)" }}>{badge.text}</div>}
         </div>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '9px', padding: "12px 16px" }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--space-9)', padding: "var(--space-12) var(--space-16)" }}>
             {services.map((svc, i) => <NewChip key={i} label={svc} variant="light" shape="standard" />)}
         </div>
     </div>
@@ -201,38 +395,39 @@ const ServiceListSection = ({ title, services, color, icon, badge }) => (
 
 const CanaryView = ({ failedServices, servicesContinuing }) => (
     <div>
-        <div style={{ display: 'flex', alignItems: 'center', marginBottom: "24px", marginTop: "10px" }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", width: "56px", height: "56px", borderRadius: "8px", backgroundColor: "#FFEBEB" }}>
-                <span className='ri-alert-line' style={{ fontSize: "24px" }}></span>
+        <div style={{ display: 'flex', alignItems: 'center', marginBottom: "var(--space-24)", marginTop: "var(--space-10)" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", width: "var(--space-56)", height: "var(--space-56)", borderRadius: "var(--radius-8)", backgroundColor: "var(--color-pastel-red)" }}>
+                <span className='ri-alert-line' style={{ fontSize: "var(--font-24)" }}></span>
             </div>
-            <span style={{ fontFamily: "Montserrat", fontWeight: '600', fontSize: "16px", color: '#2F2F2F', marginLeft: "16px" }}>Continue with Failure to next Job</span>
+            <span style={{ fontFamily: "Montserrat", fontWeight: 'var(--font-weight-600)', fontSize: "var(--font-16)", color: 'var(--color-content-primary)', marginLeft: "var(--space-16)" }}>Continue with Failure to next Job</span>
         </div>
-        <div style={{ backgroundColor: '#F5FAFF', padding: "6px", borderRadius: "6px", display: 'flex', alignItems: 'center', marginBottom: "16px" }}>
-            <span className='ri-information-line' style={{ fontSize: "16px", color: "#0086FF" }}></span>
-            <span style={{ color: "#2F2F2F", fontFamily: "Montserrat", fontWeight: "600", fontSize: "12px", marginLeft: "9px" }}>Failed Services will be rolled back to baseline version</span>
+        <div style={{ backgroundColor: 'var(--color-pastel-blue-3)', padding: "var(--space-6)", borderRadius: "var(--radius-6)", display: 'flex', alignItems: 'center', marginBottom: "var(--space-16)" }}>
+            <span className='ri-information-line' style={{ fontSize: "var(--font-16)", color: "var(--color-tertiary-500)" }}></span>
+            <span style={{ color: "var(--color-content-primary)", fontFamily: "Montserrat", fontWeight: "var(--font-weight-600)", fontSize: "var(--font-12)", marginLeft: "var(--space-9)" }}>Failed Services will be rolled back to baseline version</span>
         </div>
-        {failedServices && failedServices.length > 0 && <ServiceListSection title="Failed Services" services={failedServices} color="#E53737" icon="ri-close-fill" badge={{ bg: "#FFEBEB", color: "#E53737", text: "Rolling back to baseline" }} />}
-        {servicesContinuing && servicesContinuing.length > 0 && <ServiceListSection title="Passed Services" services={servicesContinuing} color="#2EBE79" icon="ri-check-fill" badge={{ bg: "#E6FBEA", color: "#2EBE79", text: "Continuing with" }} />}
+        {failedServices && failedServices.length > 0 && <ServiceListSection title="Failed Services" services={failedServices} color="var(--color-error-600)" icon="ri-close-fill" badge={{ bg: "var(--color-pastel-red)", color: "var(--color-error-600)", text: "Rolling back to baseline" }} />}
+        {servicesContinuing && servicesContinuing.length > 0 && <ServiceListSection title="Passed Services" services={servicesContinuing} color="var(--color-success-500)" icon="ri-check-fill" badge={{ bg: "var(--color-pastel-green)", color: "var(--color-success-500)", text: "Continuing with" }} />}
     </div>
 );
 
 const ConfirmationScreen = ({ data, complete_rollback, failed_task_dep_type, failedServices, servicesContinuing, formData, formError, onChangeHandler }) => {
     const taskType = data && data[0] ? data[0].task_type : null;
+    const hidePleaseNoteForServiceJobs = ["BUILD", "GLOBAL_BUILD", "DEPLOY", "GLOBAL_DEPLOY"].includes(taskType);
     if (complete_rollback) {
         return (
             <div>
-                <div style={{ display: 'flex', alignItems: 'center', marginBottom: "24px" }}>
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", width: "56px", height: "56px", borderRadius: "8px", backgroundColor: "#0086FF14" }}>
-                        <span className='ri-arrow-go-back-line' style={{ fontSize: "32px", color: "#0086FF" }}></span>
+                <div style={{ display: 'flex', alignItems: 'center', marginBottom: "var(--space-24)" }}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", width: "var(--space-56)", height: "var(--space-56)", borderRadius: "var(--radius-8)", backgroundColor: "var(--color-tertiary-200)" }}>
+                        <span className='ri-arrow-go-back-line' style={{ fontSize: "var(--font-32)", color: "var(--color-tertiary-500)" }}></span>
                     </div>
-                    <span style={{ fontFamily: "Montserrat", fontWeight: '600', fontSize: "16px", color: '#2F2F2F', marginLeft: "16px" }}>Complete Rollback to baseline version</span>
+                    <span style={{ fontFamily: "Montserrat", fontWeight: 'var(--font-weight-600)', fontSize: "var(--font-16)", color: 'var(--color-content-primary)', marginLeft: "var(--space-16)" }}>Complete Rollback to baseline version</span>
                 </div>
-                <div style={{ backgroundColor: '#F5FAFF', padding: "6px", borderRadius: "6px", display: 'flex', alignItems: 'center', marginBottom: "16px" }}>
-                    <span className='ri-information-line' style={{ fontSize: "16px", color: "#0086FF" }}></span>
-                    <span style={{ color: "#2F2F2F", fontFamily: "Montserrat", fontWeight: "600", fontSize: "12px", marginLeft: "9px" }}>Rolling back all services to baseline</span>
+                <div style={{ backgroundColor: 'var(--color-pastel-blue-3)', padding: "var(--space-6)", borderRadius: "var(--radius-6)", display: 'flex', alignItems: 'center', marginBottom: "var(--space-16)" }}>
+                    <span className='ri-information-line' style={{ fontSize: "var(--font-16)", color: "var(--color-tertiary-500)" }}></span>
+                    <span style={{ color: "var(--color-content-primary)", fontFamily: "Montserrat", fontWeight: "var(--font-weight-600)", fontSize: "var(--font-12)", marginLeft: "var(--space-9)" }}>Rolling back all services to baseline</span>
                 </div>
-                {failedServices && failedServices.length > 0 && <ServiceListSection title="Failed Services" services={failedServices} color="#E53737" icon="ri-close-fill" />}
-                {servicesContinuing && servicesContinuing.length > 0 && <ServiceListSection title="Passed Services" services={servicesContinuing} color="#2EBE79" icon="ri-check-fill" />}
+                {failedServices && failedServices.length > 0 && <ServiceListSection title="Failed Services" services={failedServices} color="var(--color-error-600)" icon="ri-close-fill" />}
+                {servicesContinuing && servicesContinuing.length > 0 && <ServiceListSection title="Passed Services" services={servicesContinuing} color="var(--color-success-500)" icon="ri-check-fill" />}
             </div>
         );
     }
@@ -245,156 +440,552 @@ const ConfirmationScreen = ({ data, complete_rollback, failed_task_dep_type, fai
         return (
             <div className='div-structure'>
                 <p>Continue with Failure to next Job</p>
-                <p><b>Please note:</b> pipeline will skip execution for following microservices:&nbsp;
+                <p>{hidePleaseNoteForServiceJobs ? null : <b>Please note:</b>} pipeline will skip execution for following microservices:&nbsp;
                     {data.map((item, i) => <span key={i} className='chip chip-failed'>{item.service_name}</span>)}
                 </p>
-                <p><b>On continue:</b> pipeline will proceed with following microservices:&nbsp;
-                    {servicesContinuing.map((item, i) => <span key={i} className='chip chip-success'>{item}</span>)}
-                </p>
+                {servicesContinuing && servicesContinuing.length > 0 && (
+                    <p><b>On continue:</b> pipeline will proceed with following microservices:&nbsp;
+                        {servicesContinuing.map((item, i) => <span key={i} className='chip chip-success'>{item}</span>)}
+                    </p>
+                )}
             </div>
         );
     }
     if (taskType === "JIRA_INTEGRATION") {
         const op = data[0].operation;
-        const msgs = { create: "Your Jira ticket creation has failed, if you want to continue please create the Jira ticket manually and enter the details after clicking the continue.", update: "Your Jira ticket comment update has failed, if you want to continue please update the comment manually on the jira ticket and click continue.", check_conflicts: "Your Merge conflicts check has failed, Please verify and resolve the merge conflicts manually before proceeding.", create_pr: "Your PR Creation has failed, if you want to continue please create and merge pull request manually and click continue.", add_comment: "Your Jira ticket comment addition has failed, if you want to continue please update the comment on Jira ticket manually and click continue." };
+        const msgs = {
+            create: "Your Jira ticket creation has failed. If you want to continue, please create the ticket manually and enter the details before clicking Continue.",
+            update: "The Jira ticket update failed. Please update the ticket manually if needed, then click Continue.",
+            check_conflicts: "The Merge conflicts check has failed. Please verify and resolve the merge conflicts manually before proceeding.",
+            create_pr: "The pull request from source to destination could not be created. Please review the logs for source and destination details. Verify that the PR exists before proceeding by clicking Continue.",
+            add_comment: "The Jira 'Add Comment' task was unsuccessful. To proceed, please add the required comment manually in Jira and click Continue."
+        };
         return (
             <div className='jira-integration-flow'>
-                <div className='pd-20 text-center mt-20 mb-20' style={{ backgroundColor: '#F8F8F8', borderRadius: '8px' }}>
-                    <p className="font-12 text-center mb-20"><b>Please Note:</b> {msgs[op] || "Your Jira ticket status transition has failed, if you want to continue please update the Jira ticket status manually and click continue."}</p>
-                    {op === "create" && <Input type="text" data={formData} error={formError} onChangeHandler={onChangeHandler} placeholder="ot-961" mandatorySign label="Enter Jira Ticket" name={data[0].issue_key} />}
+                <div className='pd-20 text-center mt-20 mb-20' style={{ backgroundColor: 'var(--color-grey-100)', borderRadius: 'var(--radius-8)' }}>
+                    <p className="font-12 text-center mb-20"><b>Please Note:</b> {msgs[op] || "Your Jira ticket status transition has failed. Please handle it manually and click Continue."}</p>
+                    {op === "create" && <Input type="text" data={formData} error={formError} onChangeHandler={onChangeHandler} placeholder="ot-961" label="Enter Jira Ticket" name={data[0].issue_key} />}
+                    {op === "check_conflicts" && (
+                        <div className="auto-complete-dropdown auto-complete-dropdown-42 auto-complete-dropdown-ticketing" style={{ maxHeight: 'var(--space-120)', overflowY: 'auto' }}>
+                            <Input
+                                type="auto-complete-freesolo"
+                                label="Enter Merged Branch"
+                                id={"branchInput"}
+                                name="check_merge_confilcts_branches"
+                                list={[]}
+                                freeSolo={true}
+                                placeholder={
+                                    formData.check_merge_confilcts_branches &&
+                                        formData.check_merge_confilcts_branches.length > 0
+                                        ? ''
+                                        : 'Enter branch name and press enter'
+                                }
+                                getOptionLabel={(option) => option.label || option}
+                                error={formError}
+                                data={formData}
+                                onChangeHandler={onChangeHandler}
+                            />
+                        </div>
+                    )}
                 </div>
             </div>
         );
     }
     if (taskType === "SNOW_INTEGRATION") {
         const op = data[0].operation;
-        const msgs = { snow_create: "Your ServiceNow ticket creation has failed, if you want to continue please create the ServiceNow ticket manually and enter the details after clicking the continue.", snow_add_notes: "Your ServiceNow Add notes has failed, if you want to continue please add them manually and click continue.", snow_update_status: "Your ServiceNow ticket status update has failed, if you want to continue please update the ServiceNow ticket status manually and click continue.", snow_update: "Your ServiceNow ticket update has failed, if you want to continue please update the fields manually on the ServiceNow ticket and click continue." };
+        const msgs = { snow_create: "Your SNOW ticket creation has failed. If you want to continue, please create the ticket manually and enter the details before clicking Continue.", snow_add_notes: "The ServiceNow 'Add Notes' task was unsuccessful. To proceed, please add the required notes manually in ServiceNow and click Continue.", snow_update_status: "Your ServiceNow ticket status update has failed, if you want to continue please update the ServiceNow ticket status manually and click continue.", snow_update: "The ServiceNow ticket update was unsuccessful. To proceed, please update your ticket manually in ServiceNow and click Continue." };
         return (
             <div className='jira-integration-flow'>
-                <div className='pd-20 text-center mt-20 mb-20' style={{ backgroundColor: '#F8F8F8', borderRadius: '8px' }}>
+                <div className='pd-20 text-center mt-20 mb-20' style={{ backgroundColor: 'var(--color-grey-100)', borderRadius: 'var(--radius-8)' }}>
                     <p className="font-12 text-center mb-20"><b>Please Note:</b> {msgs[op] || null}</p>
-                    {op === "snow_create" && <Input type="text" data={formData} error={formError} onChangeHandler={onChangeHandler} placeholder="ot-961" mandatorySign label="Enter ServiceNow Ticket" name={data[0].issue_key} />}
+                    {op === "snow_create" && (
+                        <div style={{ textAlign: 'left' }}>
+                            <Input type="text" data={formData} error={formError} onChangeHandler={onChangeHandler} placeholder="ot-961" label="Enter ServiceNow Ticket" mandatorySign name={data[0].issue_key} />
+                        </div>
+                    )}
                 </div>
             </div>
         );
     }
     if (taskType === "ATTACH_DOCUMENTS") {
         const op = data[0].operation;
-        const msgs = { download_documents: "Your Download Documents job has failed", upload_documents: "Your Upload Documents job has failed" };
-        return (<div className='pd-20 text-center mt-20 mb-20' style={{ backgroundColor: '#F8F8F8', borderRadius: '8px' }}><p className="font-12 text-center"><b>Please Note:</b> {msgs[op] || "Release notes upload has failed"}, if you want to continue please click continue.</p></div>);
+        const msg = op === "download_documents"
+            ? "The document download operation could not be completed. You may choose to skip this step and proceed; however, this may cause the subsequent document upload job to fail. Please proceed with caution."
+            : op === "upload_documents"
+                ? "The document upload operation has failed. Manually upload the documents and click continue."
+                : "The release notes upload has failed. You can manually upload the release notes and click on continue.";
+        return (
+            <div className='pd-20 text-center mt-20 mb-20' style={{ backgroundColor: 'var(--color-grey-100)', borderRadius: 'var(--radius-8)' }}>
+                <p className="font-12 text-center"><b>Please Note:</b> {msg}</p>
+            </div>
+        );
     }
     if (taskType === "dependent_job") {
         return (<div className='div-structure'><p>Continue with failures:</p><p><b>Please note:</b> pipeline will skip execution for following microservices:&nbsp;{failedServices.map((item, i) => <span key={i} className='chip chip-failed'>{item}</span>)}</p></div>);
     }
-    const simpleMessages = { INTEGRATION: "Your Integration testing response has failed, do you still want to continue?", REST_API: "Your API call has failed, do you want to still continue?", ROLLBACK: "Rollback is failed. please re trigger the pipeline.", CANARY_ANALYSIS: "Currently we do not support retrigger for the canary analysis failed job in manage failure." };
+    if (taskType === "REST_API") {
+        const method = data[0]?.method || "API CALL";
+        return (
+            <div className='pd-20 text-center mt-20 mb-20' style={{ backgroundColor: 'var(--color-grey-100)', borderRadius: 'var(--radius-8)' }}>
+                <i className="ri-error-warning-line text-center" style={{ color: 'var(--color-error-300)', textAlign: 'center', fontSize: 'var(--font-40)' }}></i>
+                <p className="font-12 text-center">
+                    <b>Please Note:</b> The <b>{method}</b> request for your <b>API CALL</b> has failed. Continuing will skip this failure. Do you still want to continue?
+                </p>
+            </div>
+        );
+    }
+    if (taskType === "CONFIGMAP_DEPLOYMENT") {
+        return (
+            <div className='pd-20 text-center mt-20 mb-20' style={{ backgroundColor: 'var(--color-grey-100)', borderRadius: 'var(--radius-8)' }}>
+                <i className="ri-error-warning-line text-center" style={{ color: 'var(--color-error-300)', textAlign: 'center', fontSize: 'var(--font-40)' }}></i>
+                <p className="font-12 text-center">
+                    <b>Please Note:</b> The <b>Config Map</b> deployment has failed. If you choose to continue, the latest configuration updates will not be reflected in your environment.
+                </p>
+                <p className="font-12 text-center">Do you still want to continue?</p>
+            </div>
+        );
+    }
+    if (taskType === "DB_UPGRADE") {
+        return (
+            <div className='pd-20 text-center mt-20 mb-20' style={{ backgroundColor: 'var(--color-grey-100)', borderRadius: 'var(--radius-8)' }}>
+                <i className="ri-error-warning-line text-center" style={{ color: 'var(--color-error-300)', textAlign: 'center', fontSize: 'var(--font-40)' }}></i>
+                <p className="font-12 text-center">
+                    <b>Please Note:</b> The <b>Database Upgrade</b> job has failed. Continuing without a successful migration may cause application errors or data inconsistency.
+                </p>
+                <p className="font-12 text-center">Do you still want to continue?</p>
+            </div>
+        );
+    }
+    if (taskType === "CRONJOB") {
+        return (
+            <div className='pd-20 text-center mt-20 mb-20' style={{ backgroundColor: 'var(--color-grey-100)', borderRadius: 'var(--radius-8)' }}>
+                <i className="ri-error-warning-line text-center" style={{ color: 'var(--color-error-300)', textAlign: 'center', fontSize: 'var(--font-40)' }}></i>
+                <p className="font-12 text-center">
+                    <b>Please Note:</b> The <b>Cron Job</b> deployment has failed. If you choose to continue, the scheduled tasks may not be correctly registered or updated in your environment.
+                </p>
+                <p className="font-12 text-center">Do you still want to continue?</p>
+            </div>
+        );
+    }
+
+    const simpleMessages = {
+        INTEGRATION: "The Integration Testing job has failed. Continuing will bypass these failures. Do you still want to continue?",
+        ROLLBACK: "The Rollback operation has encountered a failure. Continuing may leave your environment in an inconsistent state. We recommend that rollback for all services be handled manually. In the meantime, you can continue to the next phase of the pipeline.",
+        CANARY_ANALYSIS: "You are about to skip the failed services and proceed to next stage."
+    };
     if (simpleMessages[taskType]) {
-        return (<div className='pd-20 text-center mt-20 mb-20' style={{ backgroundColor: '#F8F8F8', borderRadius: '8px' }}><i className="ri-error-warning-line text-center" style={{ color: '#e9797e', textAlign: 'center', fontSize: '40px' }}></i><p className="font-12 text-center"><b>Please Note:</b> {simpleMessages[taskType]}</p></div>);
+        return (<div className='pd-20 text-center mt-20 mb-20' style={{ backgroundColor: 'var(--color-grey-100)', borderRadius: 'var(--radius-8)' }}><i className="ri-error-warning-line text-center" style={{ color: 'var(--color-error-300)', textAlign: 'center', fontSize: 'var(--font-40)' }}></i><p className="font-12 text-center"><b>Please Note:</b> {simpleMessages[taskType]}</p></div>);
     }
     if (taskType && data[0]?.dynamic_job) {
-        return (<div className='pd-20 text-center mt-20 mb-20' style={{ backgroundColor: '#F8F8F8', borderRadius: '8px' }}><i className="ri-error-warning-line text-center" style={{ color: '#e9797e', textAlign: 'center', fontSize: '40px' }}></i><p className="font-12 text-center"><b>Please Note:</b> Current job is failed, You are about to continue the pipeline.</p></div>);
+        return (<div className='pd-20 text-center mt-20 mb-20' style={{ backgroundColor: 'var(--color-grey-100)', borderRadius: 'var(--radius-8)' }}><i className="ri-error-warning-line text-center" style={{ color: 'var(--color-error-300)', textAlign: 'center', fontSize: 'var(--font-40)' }}></i><p className="font-12 text-center"><b>Please Note:</b> Current job is failed, You are about to continue the pipeline.</p></div>);
     }
     return null;
 };
 
 const ManageFailure = (props) => {
     const classes = useStyles();
-    const { open, handleClose, data, loading, error, failedStageData, failedTask,
+    const [exceptionalView, setExceptionalView] = React.useState(false);
+    const [exceptionalStep, setExceptionalStep] = React.useState(1);
+    const [exceptionalJustification, setExceptionalJustification] = React.useState('');
+
+    const { open, handleClose, data, loading, error, failedStageData, failedTask, failedTaskDefinition,
         failedServices, servicesContinuing, pipeline_data, rerunJob,
         postContinuePipelineData, handleCompleteRollback, failed_task_dep_type,
         showTable, complete_rollback, backClicked, continueClicked,
         formData, formError, onChangeHandler, failed_stage_instance,
-        filterApprovalQuestionsStage, pipeline_id, pipeline_instance_id, postFinalData, openOlly, ollyEnabled } = props;
+        filterApprovalQuestionsStage, pipeline_id, pipeline_instance_id, postFinalData, openOlly, ollyEnabled, rollingPercentage, isLastJobOfLastStage } = props;
+
+    const [exceptionalServices, setExceptionalServices] = React.useState([]);
+
+    React.useEffect(() => {
+        if (exceptionalView && data && data.length > 0) {
+            setExceptionalServices(data.map(item => item.service_name));
+        }
+        if (!exceptionalView) {
+            setExceptionalStep(1);
+            setExceptionalJustification('');
+        }
+    }, [exceptionalView, data]);
 
     const taskType = data && data[0] ? data[0].task_type : null;
+    const taskName = failedTask && failedTask.task_name ? failedTask.task_name : (data && data[0]?.task_name ? data[0].task_name : "N/A");
+    const isBuildJobType = ["BUILD", "GLOBAL_BUILD", "ANDROID_BUILD"].includes(taskType);
+    const isPromoteJobType = ["PROMOTE", "GLOBAL_PROMOTE"].includes(taskType);
+    const isApiJobType = taskType === "REST_API";
+    const isConfigMapJobType = taskType === "CONFIGMAP_DEPLOYMENT";
+    const isDbUpgradeJobType = taskType === "DB_UPGRADE";
+    const isCronJobType = taskType === "CRONJOB";
+    const isJiraJobType = taskType === "JIRA_INTEGRATION";
+    const isRollbackJobType = ["ROLLBACK", "GLOBAL_ROLLBACK", "ANDROID_ROLLBACK"].includes(taskType);
+    const isIntegrationJobType = taskType === "IND_INTEGRATION" || taskType === "INTEGRATION";
+    const jiraOperation = data && data[0] ? data[0].operation : null;
+    const isJiraPR = isJiraJobType && (jiraOperation?.toLowerCase()?.includes("pr") || taskName?.toLowerCase()?.includes("pr"));
+    const isJiraCreate = isJiraJobType && !isJiraPR && (jiraOperation?.toLowerCase()?.includes("create"));
+    const isJiraComment = isJiraJobType && (jiraOperation?.toLowerCase()?.includes("comment"));
+    const isJiraConflict = isJiraJobType && (jiraOperation?.toLowerCase()?.includes("merge") || jiraOperation?.toLowerCase()?.includes("conflict") || taskName?.toLowerCase()?.includes("merge") || taskName?.toLowerCase()?.includes("conflict"));
+    const isSnowJobType = taskType === "SNOW_INTEGRATION";
+    const isSnowNote = isSnowJobType && (jiraOperation?.toLowerCase()?.includes("note") || jiraOperation?.toLowerCase()?.includes("comment") || taskName?.toLowerCase()?.includes("note") || taskName?.toLowerCase()?.includes("comment"));
+    const isSnowUpdate = isSnowJobType && !isSnowNote && (jiraOperation?.toLowerCase()?.includes("update") || taskName?.toLowerCase()?.includes("update"));
+    const isSnowCreate = isSnowJobType && !isSnowNote && !isSnowUpdate && (jiraOperation?.toLowerCase()?.includes("create") || taskName?.toLowerCase()?.includes("create"));
+    const isAttachJobType = taskType === "ATTACH_DOCUMENTS";
+    const attachOperation = data && data[0] ? data[0].operation : null;
+    const isAttachUpload = isAttachJobType && attachOperation === "upload_documents";
+    const isAttachDownload = isAttachJobType && attachOperation === "download_documents";
+    const isAttachRelease = isAttachJobType && attachOperation === "upload_release";
+    const hidePleaseNoteSectionForTask = true;
     const isStageFailure = failedStageData && Object.keys(failedStageData).length > 0;
     const tableConfig = isStageFailure
         ? { columns: ["Stage", "Status", "Logs"], title: "Execution Details for failed stage" }
         : getTableConfig(taskType, failed_task_dep_type, data && data[0] ? data[0].status : null);
+    const jiraOperationLabels = {
+        create: 'Create Ticket', update: 'Update Ticket', check_conflicts: 'Check Merge Conflicts',
+        create_pr: 'Create Pull Request', add_comment: 'Add Comment'
+    };
+    const snowOperationLabels = {
+        snow_create: 'Create Ticket', snow_add_notes: 'Add Notes',
+        snow_update_status: 'Update Status', snow_update: 'Update Ticket'
+    };
+    const getOperationLabel = () => {
+        if (isJiraJobType && jiraOperation) return jiraOperationLabels[jiraOperation] || jiraOperation.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+        if (isSnowJobType && jiraOperation) return snowOperationLabels[jiraOperation] || jiraOperation.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+        return null;
+    };
+    const operationLabel = getOperationLabel();
     const headerText = isStageFailure
         ? <>Stage has failed with following details : <b>{failedStageData?.name}</b></>
-        : <>Job has failed with following details : <b>{failedTask && failedTask.task_name ? failedTask.task_name : "N/A"}</b></>;
+        : operationLabel
+            ? <>Stage{" "}<b>{failed_stage_instance?.name || taskName}</b>{"  "}failed due to issues in the{" "}<b>{operationLabel}</b>{" "}operation. Review the details below.</>
+            : <>Stage{" "}<b>{failed_stage_instance?.name || taskName}</b>{"  "}failed due to issues in the{" "}<b>{taskType?.replace(/_/g, ' ')}</b>{" "}job. Review the details below.</>;
+
     const envBadge = data && data[0] ? data[0].env_name : null;
 
-    const renderRerunOrApproval = (buttonLabel = "RE-RUN FAILED JOB") => {
+    const renderExceptionalApprovalContent = () => {
+        if (exceptionalStep === 2) {
+            return (
+                <div style={{ padding: 'var(--space-0)' }}>
+                    <div style={{ marginBottom: 'var(--space-24)' }}>
+                        <div
+                            style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', color: '#2F2F2F', fontSize: '12px', fontWeight: 'var(--font-weight-600)', marginBottom: 'var(--space-16)', gap: 'var(--space-4)' }}
+                            onClick={() => setExceptionalStep(1)}
+                        >
+                            <span className="ri-arrow-left-s-line" style={{ fontSize: 'var(--font-18)', marginTop: 'var(--space-20)' }}></span>
+                            <span style={{ marginTop: 'var(--space-20)' }}>BACK</span>
+                        </div>
+                        <div style={{ color: '#505050', fontSize: '14px', fontWeight: 'var(--font-weight-500)', marginTop: 'var(--space-24)', marginBottom: 'var(--space-4)', textTransform: 'lowercase' }}>exceptional approval</div>
+                        <div style={{ color: '#2F2F2F', fontSize: '16px', fontWeight: 'var(--font-weight-600)' }}>Justify your approval</div>
+                    </div>
+
+                    <div style={{ backgroundColor: 'var(--color-pastel-yellow)', padding: 'var(--space-16)', borderRadius: 'var(--radius-6)', marginBottom: 'var(--space-24)' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-8)', marginBottom: 'var(--space-8)' }}>
+                            <span className="ri-information-line" style={{ color: '#784900', fontSize: 'var(--font-16)', fontWeight: 'var(--font-weight-700)' }}></span>
+                            <div style={{ color: '#784900', fontSize: '12px', fontWeight: '700', textTransform: 'uppercase' }}>CONTINUING THE PIPELINE WITH EXCEPTION FOR FOLLOWING services</div>
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)', marginLeft: 'var(--space-24)' }}>
+                            {exceptionalServices.map((serviceName, i) => (
+                                <div key={i} style={{ color: '#784900', fontSize: '12px', fontWeight: 'var(--font-weight-500)' }}>{serviceName}</div>
+                            ))}
+                        </div>
+                    </div>
+
+                    <div style={{ marginBottom: 'var(--space-8)', fontWeight: 'var(--font-weight-600)', fontSize: '14px', color: '#2F2F2F' }}>
+                        Why are you approving this {isBuildJobType ? "build" : (isPromoteJobType ? "promotion" : "deployment")}?<span style={{ color: 'var(--color-error-500)' }}>*</span>
+                    </div>
+                    <textarea
+                        className="form-control"
+                        placeholder="Descriptions"
+                        rows={5}
+                        style={{ width: '100%', resize: 'none', borderRadius: 'var(--radius-4)', padding: 'var(--space-12)', fontSize: '14px', color: '#2F2F2F', border: 'var(--space-1) solid var(--color-border-grey)', fontFamily: 'Montserrat, sans-serif' }}
+                        value={exceptionalJustification}
+                        onChange={(e) => setExceptionalJustification(e.target.value)}
+                    ></textarea>
+                </div>
+            );
+        }
+
+        return (
+            <div style={{ padding: 'var(--space-0)' }}>
+                <div style={{ marginBottom: 'var(--space-24)' }}>
+                    <div
+                        style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', color: '#2F2F2F', fontSize: '12px', fontWeight: 'var(--font-weight-600)', marginBottom: 'var(--space-16)', gap: 'var(--space-4)' }}
+                        onClick={() => setExceptionalView(false)}
+                    >
+                        <span className="ri-arrow-left-s-line" style={{ fontSize: 'var(--font-18)', marginTop: 'var(--space-20)' }}></span>
+                        <span style={{ marginTop: 'var(--space-20)' }}>BACK</span>
+                    </div>
+                    <div style={{ color: '#505050', fontSize: '14px', marginTop: 'var(--space-24)', marginBottom: 'var(--space-4)', textTransform: 'lowercase' }}>exceptional approval</div>
+                    <div style={{ color: '#2F2F2F', fontSize: '16px', fontWeight: 'var(--font-weight-600)' }}>{isBuildJobType ? "Select services to build" : (isPromoteJobType ? "Select services to promote" : "Select services to deploy")}</div>
+                </div>
+
+                <div style={{ backgroundColor: 'var(--color-pastel-blue-1)', border: 'var(--space-1) solid var(--color-tertiary-200)', padding: 'var(--space-10) var(--space-16)', borderRadius: 'var(--radius-6)', display: 'flex', alignItems: 'center', marginBottom: 'var(--space-24)', gap: 'var(--space-12)' }}>
+                    <span className="ri-information-line" style={{ color: '#0086FF', fontSize: 'var(--font-20)', fontWeight: 'var(--font-weight-700)' }}></span>
+                    <span style={{ color: '#0086FF', fontSize: '12px', fontWeight: '700' }}>
+                        {taskType === "ANDROID_BUILD"
+                            ? "The services listed below have failed. Please select the services you want to force continue to the next pipeline phase. Please note if build has failed then subsequent push may fail. Provide approval with caution."
+                            : taskType === "ANDROID_DEPLOY"
+                                ? "The services listed below have failed. Please select the services you want to force continue to the next pipeline phase. Please note if Deploy to Playstore has failed then the app may not be available in the target track. Provide approval with caution."
+                                : isPromoteJobType
+                                    ? "Promote for the services listed below have failed. Please select the services you want to force continue to the next pipeline phase. Please note if promote has failed then the artifacts will be unavailable in the target environment and subsequent deployments may fail. Provide approval with caution."
+                                    : (taskType === "DEPLOY" || taskType === "GLOBAL_DEPLOY")
+                                        ? "The services listed below have failed. Please select the services you want to force continue to the next pipeline phase."
+                                        : "The services listed below have failed. Please select the services you want to force continue to the next pipeline phase. Please note if build has failed then subsequent deployments may fail. Provide approval with caution."
+                        }
+                    </span>
+                </div>
+
+                <div style={{ marginBottom: 'var(--space-16)', fontWeight: 'var(--font-weight-600)', fontSize: '12px', color: '#2F2F2F' }}>Services</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-12)' }}>
+                    {data.map((item, index) => (
+                        <div key={index} style={{ border: 'var(--space-1) solid var(--color-grey-200)', borderRadius: 'var(--radius-8)', padding: 'var(--space-14) var(--space-16)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', boxShadow: 'var(--space-0) var(--space-4) var(--space-12) rgba(0, 0, 0, 0.12)' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-16)' }}>
+                                <input
+                                    type="checkbox"
+                                    checked={exceptionalServices.includes(item.service_name)}
+                                    onChange={(e) => {
+                                        if (e.target.checked) {
+                                            setExceptionalServices([...exceptionalServices, item.service_name]);
+                                        } else {
+                                            setExceptionalServices(exceptionalServices.filter(s => s !== item.service_name));
+                                        }
+                                    }}
+                                    style={{ width: 'var(--space-18)', height: 'var(--space-18)', cursor: 'pointer', accentColor: 'var(--color-tertiary-500)' }}
+                                />
+                                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                    <span style={{ fontWeight: 'var(--font-weight-600)', fontSize: '12px', color: '#2F2F2F' }}>{item.service_name}</span>
+                                    <span style={{ fontSize: '12px', fontWeight: 'var(--font-weight-400)', color: '#2F2F2F' }}>{item.env_name}</span>
+                                </div>
+                            </div>
+                            <NewChip label="failed" variant="error" shape="standard" icon={<i className="ri-close-circle-line"></i>} />
+                        </div>
+                    ))}
+                </div>
+            </div>
+        );
+    };
+
+    const renderRerunOrApproval = (buttonLabel = "RE-RUN FAILED JOB", isBuild = false) => {
         if (data && data.length > 0) {
-            return <RerunAfterFailure pipeline={pipeline_data} data={data} rerunJob={rerunJob} buttonLabel={buttonLabel} />;
+            return <RerunAfterFailure pipeline={pipeline_data} data={data} rerunJob={rerunJob} buttonLabel={buttonLabel} btnClassName={`btn-primary btn-semi-bold ${isBuild ? 'flex-grow-1' : ''}`} />;
         }
         if (isStageFailure) {
             return <FillApprovalQuestions stage_instance_id={failed_stage_instance && failed_stage_instance.id} pipeline_id={pipeline_id || ""} pipeline_instance_id={pipeline_instance_id || ""} postFinalData={postFinalData} stage_name={failed_stage_instance.name} btnVariant="re_attempt" stage_instance_status={failed_stage_instance && failed_stage_instance.status} questionnaires={filterApprovalQuestionsStage && filterApprovalQuestionsStage.questionnaires} />;
         }
         return null;
     };
+    const renderRecoveryCards = () => {
+        const showActionButtons = !(error && loading);
+        const hasExceptionFlow = ["BUILD", "GLOBAL_BUILD", "DEPLOY", "GLOBAL_DEPLOY", "PROMOTE", "GLOBAL_PROMOTE", "ANDROID_BUILD", "ANDROID_DEPLOY"].includes(taskType);
+        const showRecoveryCards = !exceptionalView && showTable && showActionButtons;
+
+        if (showRecoveryCards) {
+            const hasSingleFailedService = data && data.length === 1 && data[0]?.service_name;
+            const allServicesFailed = (!servicesContinuing || servicesContinuing.length === 0) && data && data.length > 0 && data.every(item => item.status === "FAILED");
+            const skipDescription = hasSingleFailedService
+                ? "Skip failed service and proceed to next job"
+                : "Skip failed services and proceed to next job";
+
+            const skipSubtitle = isApiJobType ? "Skip the failed API job and proceed to the next job"
+                : isJiraCreate ? "Skip automated Jira ticket creation."
+                    : isJiraComment ? "Skip automated Jira comments addition."
+                        : isJiraConflict ? "Skip merge conflict checks for the failed services"
+                            : isJiraPR ? "Skip automated Pull Requests creation."
+                                : isSnowCreate ? "Skip automated ServiceNow ticket creation."
+                                    : isSnowNote ? "Skip automated Snow notes addition."
+                                        : isSnowUpdate ? "Skip the automated ticket Updates"
+                                            : isAttachUpload ? "Skip the automated document upload."
+                                                : isAttachDownload ? "Skip the automated document download."
+                                                    : isAttachRelease ? "Skip the automated Release Notes upload."
+                                                        : isConfigMapJobType ? "Skip failed configmap job and proceed to next job"
+                                                            : isDbUpgradeJobType ? "Skip the automated database upgrade"
+                                                            : isCronJobType ? "Skip the Cron Job deployment for failed services"
+                                                                : isJiraJobType || isSnowJobType ? "Skip the integration for failed services"
+                                                                    : isRollbackJobType ? "Skip failed rollback service and proceed to next job"
+                                                                        : isIntegrationJobType ? "Skip the failed job and proceed to the next job"
+                                                                            : skipDescription;
+
+            const rerunSubtitle = isBuildJobType ? "Retry the build for failed services"
+                : isPromoteJobType ? "Re-promote failed services to the target environment"
+                    : isApiJobType ? "Retry the failed API call to continue the pipeline"
+                        : isConfigMapJobType ? "Retry the deployment of failed Configmaps."
+                            : isRollbackJobType ? "Retry the rollback for failed services"
+                                : isDbUpgradeJobType ? "Retry the database migration"
+                                    : isCronJobType ? "Retry the Cron Job deployment for failed services"
+                                        : isIntegrationJobType ? "Retry the integration for failed job"
+                                            : isJiraCreate ? "Re-run failed job for Jira ticket creation"
+                                                : isJiraComment ? "Retry adding Jira comments for the failed job."
+                                                    : isJiraConflict ? "Re-run merge conflict checks for the failed services"
+                                                        : isJiraPR ? "Re-run automated Pull Request creation."
+                                                            : isSnowCreate ? "Retry creating ServiceNow tickets."
+                                                                : isSnowNote ? "Retry adding the ServiceNow notes."
+                                                                    : isSnowUpdate ? "Retry the ServiceNow ticket update job"
+                                                                        : isAttachUpload ? "Retry uploading the documents."
+                                                                            : isAttachDownload ? "Retry downloading the documents."
+                                                                                : isAttachRelease ? "Retry uploading the Release Notes."
+                                                                                    : isJiraJobType || isSnowJobType ? "Re-run the integration for failed services"
+                                                                                        : "Retry the deployment for failed services";
+
+            return (
+                <div className='recovery-options-section' style={{ paddingTop: 'var(--space-16)' }}>
+                    <p className='recovery-options-title'>how do you want to recover?</p>
+                    <div className='recovery-options-list'>
+                        {!isJiraConflict && !isLastJobOfLastStage && (
+                            <button type='button' className='manage-failure-option-card' onClick={continueClicked}>
+                                <span className='recovery-option-title'>Skip Failed & Continue</span>
+                                <span className='recovery-option-subtitle'>{skipSubtitle}</span>
+                            </button>
+                        )}
+                        {data && data.length > 0 && (
+                            <RerunAfterFailure
+                                pipeline={pipeline_data}
+                                data={data}
+                                rerunJob={rerunJob}
+                                buttonLabel={
+                                    <div className='recovery-option-content'>
+                                        <span className='recovery-option-title'>Re-Run failed Job</span>
+                                        <span className='recovery-option-subtitle'>{rerunSubtitle}</span>
+                                    </div>
+                                }
+                                btnClassName='manage-failure-option-card manage-failure-option-card-rerun'
+                            />
+                        )}
+                        {hasExceptionFlow && !allServicesFailed && (
+                            <button type='button' className='manage-failure-option-card' onClick={() => setExceptionalView(true)}>
+                                <span className='recovery-option-title'>Continue with exception</span>
+                                <span className='recovery-option-subtitle'>{isBuildJobType ? "Grant Exceptional Approval to Continue With Failed Services" : (isPromoteJobType ? "Grant Exceptional Approval to Continue With Failed Services" : "Grant Exceptional Approval to Continue With Failed Services")}</span>
+                            </button>
+                        )}
+                    </div>
+                </div>
+            );
+        }
+        return null;
+    };
 
     const renderFooter = () => {
-        if (!showTable) {
-            return (
-                <div className='footer-right-panel d-flex align-center justify-end' style={{ gap: '12px', bottom: '16px', right: '20px' }}>
-                    <button className='btn btn-outlined d-flex align-center justify-center btn-semi-bold' style={{ color: '#124D9B' }} onClick={backClicked}>BACK</button>
-                    <button className='btn btn-primary d-flex align-center justify-center btn-semi-bold' onClick={postContinuePipelineData}>CONTINUE</button>
-                </div>
-            );
-        }
-        if (failed_task_dep_type === "canary") {
-            return (
-                <div className='footer-right-panel d-flex align-center justify-end' style={{ gap: '12px' }}>
+        const footerClass = 'justify-end';
+        const showActionButtons = !(error && loading);
+        const isCanary = failed_task_dep_type === "canary" || taskType === "CANARY_ANALYSIS";
+        const showRecoveryCards = !exceptionalView && showTable && showActionButtons;
+        let footerButtons = null;
 
-                    {ollyEnabled === "true" && (
-                        <Tooltip title="BP Log Analyser">
-                            <span>
-                                <Button
-                                    variant="olly"
-                                    style={{ padding: "8px 11px" }}
-                                    onClick={() => {
-                                        handleClose();
-                                        if (openOlly) openOlly();
-                                    }}
-                                ></Button>
-                            </span>
-                        </Tooltip>
+        if (exceptionalView) {
+            if (exceptionalStep === 1) {
+                footerButtons = (
+                    <>
+                        <button className='btn btn-semi-bold' style={{ backgroundColor: 'transparent', color: 'var(--color-content-primary)', border: 'none', boxShadow: 'none', textShadow: 'none' }} onClick={() => setExceptionalView(false)}>CANCEL</button>
+                        <button className='btn btn-outlined d-flex align-center justify-center btn-semi-bold' style={{ color: 'var(--color-primary-500)' }} onClick={() => setExceptionalView(false)}>BACK</button>
+                        <button
+                            className={`btn btn-primary d-flex align-center justify-center btn-semi-bold ${exceptionalServices.length === 0 ? 'disabled' : ''}`}
+                            disabled={exceptionalServices.length === 0}
+                            onClick={() => setExceptionalStep(2)}
+                        >
+                            NEXT
+                        </button>
+                    </>
+                );
+            } else {
+                footerButtons = (
+                    <>
+                        <button className='btn btn-semi-bold' style={{ backgroundColor: 'transparent', color: 'var(--color-content-primary)', border: 'none', boxShadow: 'none', textShadow: 'none' }} onClick={() => setExceptionalView(false)}>CANCEL</button>
+                        <button className='btn btn-outlined d-flex align-center justify-center btn-semi-bold' style={{ color: 'var(--color-primary-500)' }} onClick={() => setExceptionalStep(1)}>BACK</button>
+                        <button
+                            className={`btn btn-primary d-flex align-center justify-center btn-semi-bold ${exceptionalJustification.trim().length === 0 ? 'disabled' : ''}`}
+                            disabled={exceptionalJustification.trim().length === 0}
+                            onClick={() => postContinuePipelineData([], exceptionalJustification)}
+                        >
+                            APPROVE & PROCEED
+                        </button>
+                    </>
+                );
+            }
+        } else if (!showTable) {
+            footerButtons = (
+                <>
+                    <button className='btn btn-semi-bold' style={{ backgroundColor: 'transparent', color: 'var(--color-content-primary)', border: 'none', boxShadow: 'none', textShadow: 'none' }} onClick={handleClose}>CANCEL</button>
+                    <button className='btn btn-outlined d-flex align-center justify-center btn-semi-bold' style={{ color: 'var(--color-primary-500)' }} onClick={backClicked}>BACK</button>
+                    <button className='btn btn-primary d-flex align-center justify-center btn-semi-bold' onClick={() => postContinuePipelineData()}>CONTINUE</button>
+                </>
+            );
+        } else if (showActionButtons && !showRecoveryCards) {
+            footerButtons = (
+                <>
+                    {!isStageFailure && taskType !== "CANARY_ANALYSIS" && !isLastJobOfLastStage && (
+                        <button className='btn btn-outlined d-flex align-center justify-center btn-semi-bold' style={{ color: 'var(--color-primary-500)' }} onClick={continueClicked}>
+                            SKIP FAILED JOBS AND CONTINUE
+                        </button>
                     )}
-                    {!(error && loading) && <>
-                        {!isStageFailure && taskType !== "CANARY_ANALYSIS" && <button className='btn btn-outlined d-flex align-center justify-center btn-semi-bold' style={{ color: '#124D9B' }} onClick={continueClicked}>CONTINUE WITH FAILED JOB</button>}
-                    </>}
-
-                    <button className='btn btn-secondary d-flex align-center justify-center btn-semi-bold' style={{ backgroundColor: '#FEA111' }} onClick={handleCompleteRollback}>COMPLETE ROLLBACK</button>
-
-                    {!(error && loading) && <>
-                        {renderRerunOrApproval("RE-RUN JOB")}
-                    </>}
-                </div>
+                    {isCanary && (
+                        <button className='btn btn-secondary d-flex align-center justify-center btn-semi-bold' style={{ backgroundColor: 'var(--color-secondary-500)' }} onClick={handleCompleteRollback}>COMPLETE ROLLBACK</button>
+                    )}
+                    {renderRerunOrApproval(
+                        isCanary ? "RE-RUN JOB" : "RE-RUN FAILED JOB",
+                        false
+                    )}
+                </>
             );
         }
+
+
+
         return (
-            <div className='footer-right-panel d-flex align-center justify-end' style={{ gap: '12px' }}>
-                {!(error && loading) && <>
-                    {ollyEnabled === "true" && (
-                        <Tooltip title="BP Log Analyser">
-                            <span>
-                                <Button
-                                    variant="olly"
-                                    style={{ padding: "8px 11px" }}
-                                    onClick={() => {
-                                        handleClose();
-                                        if (openOlly) openOlly();
-                                    }}
-                                ></Button>
-                            </span>
-                        </Tooltip>
-                    )}
-                    {!isStageFailure && taskType !== "CANARY_ANALYSIS" && <button className='btn btn-outlined d-flex align-center justify-center btn-semi-bold' style={{ color: '#124D9B' }} onClick={continueClicked}>CONTINUE WITH FAILED JOB</button>}
-
-                    {renderRerunOrApproval()}
-                </>}
+            <div style={{ display: 'flex', flexDirection: 'column', width: '100%' }}>
+                <div className={`footer-right-panel d-flex align-center ${footerClass}`} style={{ gap: 'var(--space-12)' }}>
+                    {footerButtons}
+                </div>
             </div>
         );
     };
 
+    const renderManageFailureSkeleton = () => (
+        <div>
+            {/* Table skeleton */}
+            <div style={{ border: 'var(--space-1) solid var(--color-grey-200)', borderRadius: 'var(--radius-4)', overflow: 'hidden' }}>
+                {/* Table header */}
+                <div style={{ padding: 'var(--space-12) var(--space-16)', borderBottom: 'var(--space-1) solid var(--color-grey-200)', backgroundColor: 'var(--color-grey-000)' }}>
+                    <GenericSkeleton variant="text" width="40%" height="var(--space-20)" />
+                </div>
+                {/* Column headers */}
+                <div style={{ display: 'flex', gap: 'var(--space-12)', padding: 'var(--space-12) var(--space-16)', borderBottom: 'var(--space-1) solid var(--color-grey-200)', backgroundColor: 'var(--color-grey-000)' }}>
+                    <GenericSkeleton variant="text" width="100%" height="var(--space-16)" />
+                    <GenericSkeleton variant="text" width="100%" height="var(--space-16)" />
+                    <GenericSkeleton variant="text" width="100%" height="var(--space-16)" />
+                    <GenericSkeleton variant="text" width="100%" height="var(--space-16)" />
+                </div>
+                {/* Data rows */}
+                {[1, 2, 3].map((row) => (
+                    <div key={row} style={{ display: 'flex', gap: 'var(--space-12)', padding: 'var(--space-14) var(--space-16)', borderBottom: row < 3 ? 'var(--space-1) solid var(--color-grey-200)' : 'none' }}>
+                        <GenericSkeleton variant="rect" width="100%" height="var(--space-24)" style={{ borderRadius: 'var(--radius-4)' }} />
+                        <GenericSkeleton variant="rect" width="100%" height="var(--space-24)" style={{ borderRadius: 'var(--radius-4)' }} />
+                        <GenericSkeleton variant="rect" width="100%" height="var(--space-24)" style={{ borderRadius: 'var(--radius-4)' }} />
+                        <GenericSkeleton variant="rect" width="100%" height="var(--space-24)" style={{ borderRadius: 'var(--radius-4)' }} />
+                    </div>
+                ))}
+            </div>
+            {/* PLEASE NOTE skeleton */}
+            <div style={{ border: 'var(--space-1) solid var(--color-grey-200)', borderRadius: 'var(--radius-4)', overflow: 'hidden', marginTop: 'var(--space-24)', background: 'var(--color-pastel-blue-1)' }}>
+                {/* Note header */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-12)', padding: 'var(--space-12) var(--space-12) var(--space-0) var(--space-12)' }}>
+                    <GenericSkeleton variant="circle" width="var(--space-24)" height="var(--space-24)" rootStyle={{ flex: '0 0 auto' }} />
+                    <GenericSkeleton variant="text" width="100%" height="var(--space-20)" rootStyle={{ maxWidth: '30%' }} />
+                </div>
+                {/* Note body lines */}
+                <div style={{ padding: 'var(--space-12) var(--space-16) var(--space-16) var(--space-41)' }}>
+                    <GenericSkeleton variant="text" width="90%" height="var(--space-16)" style={{ marginBottom: 'var(--space-8)' }} />
+                    <GenericSkeleton variant="text" width="70%" height="var(--space-16)" style={{ marginBottom: 'var(--space-16)' }} />
+                    <GenericSkeleton variant="text" width="80%" height="var(--space-16)" style={{ marginBottom: 'var(--space-6)' }} />
+                    <GenericSkeleton variant="text" width="65%" height="var(--space-16)" style={{ marginBottom: 'var(--space-6)' }} />
+                    <GenericSkeleton variant="text" width="55%" height="var(--space-16)" />
+                </div>
+            </div>
+        </div>
+    );
+
     const renderContent = () => {
-        if (loading) return <Loading varient="light" />;
+        if (loading) return renderManageFailureSkeleton();
+        if (exceptionalView) return renderExceptionalApprovalContent();
         if (error) {
             return (
-                <div className='pd-20 text-center mt-20 mb-20' style={{ backgroundColor: '#F8F8F8', borderRadius: '8px' }}>
-                    <i className="ri-error-warning-line text-center" style={{ color: '#e9797e', textAlign: 'center', fontSize: '40px' }}></i>
+                <div className='pd-20 text-center mt-20 mb-20' style={{ backgroundColor: 'var(--color-grey-100)', borderRadius: 'var(--radius-8)' }}>
+                    <i className="ri-error-warning-line text-center" style={{ color: 'var(--color-error-300)', textAlign: 'center', fontSize: 'var(--font-40)' }}></i>
                     <p className="font-12 text-center">{typeof error === "string" ? error : error.toString()}</p>
                     <p className="font-12 text-center">Something went wrong. please contact to the Super Admin</p>
                 </div>
@@ -415,12 +1006,11 @@ const ManageFailure = (props) => {
             return <span className='d-flex align-center justify-center'><span className='mt-12 font-16 mr-auto font-weight-500 color-icon-secondary'>No Data Found</span></span>;
         }
         if (showTable) {
-            if (tableConfig.isCanary) return <CanaryView failedServices={failedServices} servicesContinuing={servicesContinuing} />;
             return (
                 <div className={classes.tableContainer}>
                     <div className={classes.tableHeader}>
                         <span className={classes.headerTitle}>{tableConfig.title}</span>
-                        {envBadge && <span className={classes.stagingBadge}><NewChip label={envBadge} variant={"highlight2"} shape="standard" /></span>}
+                        {envBadge && <span className={classes.stagingBadge}><NewChip label={envBadge.toLowerCase()} variant={"highlight2"} shape="standard" /></span>}
                     </div>
                     <table className={classes.table}>
                         <thead><tr>{tableConfig.columns.map((col, i) => <th key={i}>{col}</th>)}</tr></thead>
@@ -434,35 +1024,59 @@ const ManageFailure = (props) => {
 
     return (
         <Dialog fullWidth={true} maxWidth={'md'} open={open} onClose={handleClose} className={`${classes.root} dialog-align-corner`} aria-labelledby="max-width-dialog-title">
-            <div className='d-grid ml-auto dialog-sub-component' style={{ gridTemplateColumns: '396px 650px' }}>
+            <div className='d-grid ml-auto dialog-sub-component' style={{ gridTemplateColumns: 'var(--space-396) var(--space-650)' }}>
                 <div className={'left-panel-dialog-down'}></div>
-                <div className='right-panel-dialog bg-white'>
+                <div className='right-panel-dialog bg-white' style={{ display: 'flex', flexDirection: 'column' }}>
                     <>
-                        <div className='font-18 font-weight-600 color-white d-flex align-center space-between' style={{ backgroundColor: '#0086ff', padding: '13.5px 20px' }}>
+                        <div className='font-18 font-weight-600 color-white d-flex align-center' style={{ backgroundColor: 'var(--color-tertiary-500)', padding: 'var(--space-16) var(--space-60) var(--space-16) var(--space-20)', position: 'relative' }}>
+                            <button className=' float-cancel-button' style={{ backgroundColor: 'var(--color-error-600)', color: 'var(--color-white)', borderRadius: 'var(--radius-10) var(--space-0) var(--space-0) var(--radius-10)', width: 'var(--space-60)', height: '100%', position: 'absolute', top: 'var(--space-0)', left: 'calc(var(--space-60) * -1)', display: 'flex', alignItems: 'center', justifyContent: 'center', border: 'none', boxShadow: 'none', zIndex: 1000 }} onClick={handleClose}>
+                                <span className='ri-close-line' style={{ fontSize: 'var(--font-24)' }}></span>
+                            </button>
                             <p>Manage Failure</p>
-                            <button className='btn float-cancel-button' style={{ left: '396px' }} onClick={handleClose}><span className='ri-close-line'></span></button>
                         </div>
-                        <div className='d-flex align-center space-between' style={{ padding: '20px 20px' }}>
-                            <p>{headerText}</p>
-                        </div>
-                        <div className="body-panel-wrapper" style={{ height: 'calc(100vh - 120px)', display: 'flex', flexDirection: 'column' }}>
-                            <div className="body-panel-new-one" style={{ padding: '0 20px 16px 20px', flex: 1, overflowY: 'auto', height: 'auto' }}>
+                        {!exceptionalView && (
+                            <div className='d-flex align-center space-between' style={{ padding: 'var(--space-20) var(--space-20)' }}>
+                                <p>{headerText}</p>
+                            </div>
+                        )}
+                        <div className="body-panel-wrapper" style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+                            <div className="body-panel-new-one" style={{ padding: 'var(--space-0) var(--space-20) var(--space-16) var(--space-20)', flex: 1, overflowY: 'auto', height: 'auto' }}>
                                 {renderContent()}
-                                {showTable && <div>
+                                {!loading && !exceptionalView && showTable && !hidePleaseNoteSectionForTask && <div>
                                     <div className={classes.noteContainer}>
                                         <div className={classes.noteHeader}>
                                             <span className="ri-information-line font-24"></span>
                                             <span className={classes.noteTitle}>PLEASE NOTE</span>
                                         </div>
                                         <div className={classes.noteBody}>
-                                            <p>On pipeline failure, there are three ways of recovering from failure.</p>
-                                            <ol><li>Re-run the failed job</li><li>Continue to next job with failure</li><li>Complete Rollback to baseline</li></ol>
+                                            {(() => {
+                                                const noteContent = getNoteContent(taskType, data, failed_task_dep_type, isStageFailure, failedTask, failedTaskDefinition, rollingPercentage, isLastJobOfLastStage);
+                                                return (
+                                                    <>
+                                                        {noteContent.description}
+                                                        {noteContent.options.length > 0 && (
+                                                            <>
+                                                                <p>You may use one of the following options to recover from this failure:</p>
+                                                                <ol>{noteContent.options.map((opt, i) => <li key={i}>{opt}</li>)}</ol>
+                                                            </>
+                                                        )}
+                                                    </>
+                                                );
+                                            })()}
                                         </div>
                                     </div>
                                 </div>}
+
                             </div>
-                            <div style={{ padding: '0 16px 16px 0', flexShrink: 0 }}>
-                                {renderFooter()}
+                            <div style={{ padding: 'var(--space-0) var(--space-20) var(--space-16) var(--space-20)', flexShrink: 0, marginTop: 'auto', borderTop: 'var(--space-1) solid var(--color-grey-200)' }}>
+                                {!loading && renderRecoveryCards()}
+                                {loading ? (
+                                    <div className='footer-right-panel d-flex align-center justify-end' style={{ gap: 'var(--space-12)', paddingTop: 'var(--space-16)' }}>
+                                        <GenericSkeleton variant="rect" width="var(--space-180)" height="var(--space-40)" style={{ borderRadius: 'var(--radius-6)' }} rootStyle={{ flex: '0 0 auto' }} />
+                                        <GenericSkeleton variant="rect" width="var(--space-150)" height="var(--space-40)" style={{ borderRadius: 'var(--radius-6)' }} rootStyle={{ flex: '0 0 auto' }} />
+                                        <GenericSkeleton variant="rect" width="var(--space-120)" height="var(--space-40)" style={{ borderRadius: 'var(--radius-6)' }} rootStyle={{ flex: '0 0 auto' }} />
+                                    </div>
+                                ) : renderFooter()}
                             </div>
                         </div>
                     </>
@@ -488,29 +1102,198 @@ export default ManageFailure;
 
 const useStyles = makeStyles((theme) => ({
     root: {
-        '&.dialog-align-corner': { '& .MuiPaper-root': { maxWidth: '1100px' } },
+        '&.dialog-align-corner': { '& .MuiPaper-root': { maxWidth: 'var(--space-1100)' } },
+        '& .newchip': {
+            borderWidth: '1px !important',
+            textTransform: 'capitalize !important',
+            fontSize: 'var(--font-12) !important',
+            fontWeight: 'var(--font-weight-600) !important',
+            height: 'var(--space-22) !important',
+            padding: 'var(--space-0) var(--space-8) !important',
+            display: 'inline-flex !important',
+            alignItems: 'center !important',
+            justifyContent: 'center !important'
+        },
         '& .MuiBackdrop-root': { backdropFilter: 'none !important', backgroundColor: 'transparent !important' },
-        '& .left-panel-dialog-down': { width: '0px', overflow: 'hidden', transition: `'width 5s', 'overflow 1s'` },
-        '& .body-panel-new-one': { padding: '10px 16px', height: 'calc(100vh - 120px)', overflowY: 'auto', position: 'relative' },
+        '& .left-panel-dialog-down': { width: 'var(--space-0)', overflow: 'hidden', transition: `'width 5s', 'overflow 1s'` },
+        '& textarea::placeholder': { color: '#787878', opacity: 1 },
+        '& .body-panel-new-one': { padding: 'var(--space-10) var(--space-16)', height: 'calc(100vh - var(--space-120))', overflowY: 'auto', position: 'relative' },
         '& .footer-right-panel': {
-            paddingTop: '16px',
-            '& .btn-semi-bold': { fontFamily: 'Montserrat, sans-serif', fontWeight: 600, fontSize: '12px', textTransform: 'uppercase', lineHeight: '1', height: '40px', padding: '8px 16px', border: 'none', borderRadius: '6px', textShadow: '0px 2px 1px rgba(0, 0, 0, 0.25)' },
-            '& .btn-outlined': { backgroundColor: '#ffffff', border: '1px solid #9DC0EE', textShadow: 'none', transition: 'none !important', '&:hover': { backgroundColor: '#ffffff !important' }, '&:focus': { outline: 'none !important', boxShadow: 'none !important', backgroundColor: '#ffffff !important' }, '&:active': { backgroundColor: '#ffffff !important', boxShadow: 'none !important' } },
-            '& .btn-primary': { backgroundColor: '#0086ff', color: '#fff', transition: 'none !important', '&:hover': { backgroundColor: '#0086ff !important' }, '&:focus': { outline: 'none !important', boxShadow: 'none !important', backgroundColor: '#0086ff !important' }, '&:active': { backgroundColor: '#0086ff !important', boxShadow: 'none !important' } },
+            paddingTop: 'var(--space-16)',
+            '& .btn-semi-bold': {
+                fontFamily: 'Montserrat, sans-serif',
+                fontWeight: 'var(--font-weight-600)',
+                fontSize: 'var(--font-12)',
+                textTransform: 'uppercase',
+                lineHeight: '1',
+                height: 'var(--space-40)',
+                padding: 'var(--space-8) var(--space-16)',
+                border: 'none',
+                borderRadius: 'var(--radius-6)',
+                textShadow: 'var(--space-0) var(--space-2) var(--space-1) rgba(0, 0, 0, 0.25)',
+                whiteSpace: 'nowrap'
+            },
+            '& .btn-outlined': {
+                backgroundColor: 'var(--color-white)',
+                border: 'var(--space-1) solid var(--color-primary-200)',
+                textShadow: 'none',
+                transition: 'none !important',
+                '&:hover': { backgroundColor: 'var(--color-white) !important' },
+                '&:focus': { outline: 'none !important', boxShadow: 'none !important', backgroundColor: 'var(--color-white) !important' },
+                '&:active': { backgroundColor: 'var(--color-white) !important', boxShadow: 'none !important' }
+            },
+            '& .btn-primary-v2': {
+                height: 'var(--space-40) !important',
+                borderRadius: 'var(--radius-6) !important',
+                padding: 'var(--space-8) var(--space-16) !important',
+                fontFamily: 'Montserrat, sans-serif !important',
+                fontSize: 'var(--font-12) !important',
+                lineHeight: '1 !important',
+                display: 'flex !important',
+                alignItems: 'center !important',
+                justifyContent: 'center !important',
+                boxShadow: 'none !important',
+                whiteSpace: 'nowrap'
+            },
+            '&.build-footer': {
+                width: '100%',
+                '& > span': {
+                    flex: '0 0 auto'
+                },
+                '& .btn, & button, & .flex-grow-1': {
+                    flex: '1 1 0%',
+                    minWidth: '0',
+                    height: 'var(--space-40) !important',
+                    borderRadius: 'var(--radius-6) !important',
+                    padding: 'var(--space-4) var(--space-16) !important',
+                    fontSize: 'var(--font-11) !important',
+                    fontWeight: 'var(--font-weight-600) !important',
+                    fontFamily: 'Montserrat, sans-serif !important',
+                    textTransform: 'uppercase !important',
+                    lineHeight: '1.1 !important',
+                    boxShadow: 'none !important',
+                    display: 'flex !important',
+                    alignItems: 'center !important',
+                    justifyContent: 'center !important',
+                    textAlign: 'center !important',
+                    border: 'none',
+                    whiteSpace: 'normal'
+                },
+                '& .btn-outlined': {
+                    border: 'var(--space-1) solid var(--color-primary-200) !important'
+                }
+            },
+            '& .btn-primary': {
+                backgroundColor: 'var(--color-tertiary-500)',
+                color: 'var(--color-white)',
+                transition: 'none !important',
+                '&:hover': { backgroundColor: 'var(--color-tertiary-500) !important' },
+                '&:focus': { outline: 'none !important', boxShadow: 'none !important', backgroundColor: 'var(--color-tertiary-500) !important' },
+                '&:active': { backgroundColor: 'var(--color-tertiary-500) !important', boxShadow: 'none !important' }
+            },
+        },
+        '& .recovery-options-section': {
+            width: '100%',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '10px'
+        },
+        '& .recovery-options-title': {
+            margin: 0,
+            marginBottom: '10px',
+            fontSize: 'var(--font-12)',
+            fontWeight: 'var(--font-weight-600)',
+            color: '#000000',
+            fontFamily: 'Montserrat, sans-serif',
+            textTransform: 'none'
+        },
+        '& .recovery-options-list': {
+            width: '100%',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '8px'
+        },
+        '& .manage-failure-option-card': {
+            width: '100%',
+            minHeight: 'var(--space-64)',
+            borderRadius: 'var(--radius-8) !important',
+            border: 'var(--space-1) solid var(--color-grey-300) !important',
+            backgroundColor: 'var(--color-white) !important',
+            color: 'var(--color-content-primary) !important',
+            boxShadow: 'none !important',
+            textShadow: 'none !important',
+            padding: '10px 16px !important',
+            margin: 0,
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'flex-start !important',
+            justifyContent: 'center !important',
+            flexDirection: 'column',
+            gap: 'var(--space-2)',
+            textAlign: 'left',
+            textTransform: 'none !important',
+            whiteSpace: 'normal !important',
+            transition: 'background-color 120ms ease, border-color 120ms ease',
+            '&:hover': {
+                borderColor: 'var(--color-grey-400) !important',
+                backgroundColor: 'var(--color-grey-000) !important'
+            },
+            '&:focus-visible': {
+                outline: 'none',
+                borderColor: 'var(--color-primary-300) !important',
+                boxShadow: '0 0 0 var(--space-2) var(--color-primary-200) !important'
+            },
+            '&:active': {
+                backgroundColor: 'var(--color-grey-100) !important',
+                borderColor: 'var(--color-primary-500) !important'
+            }
+        },
+        '& .manage-failure-option-card-rerun': {
+            lineHeight: '1.2 !important',
+            fontFamily: 'Montserrat, sans-serif !important'
+        },
+        '& .manage-failure-option-card-exception': {
+            // Replaced yellowish styling with standard to match Image 1
+        },
+        '& .recovery-option-content': {
+            width: '100%',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'flex-start',
+            gap: 'var(--space-2)'
+        },
+        '& .recovery-option-title': {
+            fontSize: 'var(--font-12)',
+            fontWeight: 'var(--font-weight-700)',
+            lineHeight: 1.25,
+            color: '#2F2F2F',
+            fontFamily: 'Montserrat, sans-serif'
+        },
+        '& .recovery-option-subtitle': {
+            fontSize: 'var(--font-11)',
+            fontWeight: 'var(--font-weight-400)',
+            lineHeight: 1.35,
+            color: 'var(--color-content-secondary)',
+            fontFamily: 'Montserrat, sans-serif'
+        },
+        '& .recovery-options-olly': {
+            display: 'flex',
+            justifyContent: 'flex-end',
+            paddingTop: 'var(--space-4)'
         }
     },
-    tableContainer: { border: '1px solid #e0e0e0', borderRadius: '4px', overflow: 'hidden' },
-    noteContainer: { border: '1px solid #e0e0e0', borderRadius: '4px', overflow: 'hidden', marginTop: '24px', background: '#DFEDFF', marginBottom: '232px' },
-    tableHeader: { display: 'flex', alignItems: 'center', padding: '12px 16px', borderBottom: '1px solid #e0e0e0', fontSize: '14px', fontWeight: 600 },
-    noteHeader: { display: 'flex', alignItems: 'center', color: '#0086FF', padding: '12px 6px 0 12px', fontSize: '14px', fontWeight: 700 },
-    headerTitle: { fontSize: '14px', fontWeight: 600, color: '#333' },
-    noteTitle: { fontSize: '14px', fontWeight: 600, color: '#0086FF', marginLeft: '12px' },
-    noteBody: { padding: '0 16px 16px 41px', fontSize: '13px', color: '#0086FF', marginLeft: '10px', '& p': { margin: '0 0 18px 0' }, '& ol': { paddingLeft: '16px', margin: 0 }, '& li': { marginBottom: '3px', color: '#0086FF', cursor: 'pointer' } },
-    stagingBadge: { marginLeft: 'auto', fontSize: '12px', fontWeight: 700, padding: '2px 8px' },
+    tableContainer: { border: 'var(--space-1) solid var(--color-grey-200)', borderRadius: 'var(--radius-4)', overflow: 'hidden' },
+    noteContainer: { border: 'var(--space-1) solid var(--color-grey-200)', borderRadius: 'var(--radius-4)', overflow: 'hidden', marginTop: 'var(--space-24)', background: 'var(--color-pastel-blue-1)' },
+    tableHeader: { display: 'flex', alignItems: 'center', padding: 'var(--space-12) var(--space-16)', borderBottom: 'var(--space-1) solid var(--color-grey-200)', fontSize: 'var(--font-14)', fontWeight: 'var(--font-weight-600)' },
+    noteHeader: { display: 'flex', alignItems: 'center', color: 'var(--color-tertiary-500)', padding: 'var(--space-12) var(--space-6) var(--space-0) var(--space-12)', fontSize: 'var(--font-14)', fontWeight: 'var(--font-weight-700)' },
+    headerTitle: { fontSize: 'var(--font-14)', fontWeight: 'var(--font-weight-600)', color: 'var(--color-content-primary)' },
+    noteTitle: { fontSize: 'var(--font-14)', fontWeight: 'var(--font-weight-600)', color: 'var(--color-tertiary-500)', marginLeft: 'var(--space-12)' },
+    noteBody: { padding: 'var(--space-0) var(--space-16) var(--space-16) var(--space-41)', fontSize: 'var(--font-13)', color: 'var(--color-tertiary-500)', marginLeft: 'var(--space-10)', '& p': { margin: 'var(--space-0) var(--space-0) var(--space-18) var(--space-0)' }, '& ol': { paddingLeft: 'var(--space-16)', margin: 'var(--space-0)' }, '& li': { marginBottom: 'var(--space-3)', color: 'var(--color-tertiary-500)', cursor: 'pointer' } },
+    stagingBadge: { marginLeft: 'auto', fontSize: 'var(--font-10)', fontWeight: 'var(--font-weight-700)', padding: 'var(--font-2) var(--font-6)', '& .MuiChip-root': { backgroundColor: '#FCE4EC', color: '#F06292', height: 'var(--space-20)', borderRadius: 'var(--radius-4)', fontWeight: 'var(--font-weight-700)' } },
     table: {
         width: '100%', borderCollapse: 'collapse',
-        '& thead': { backgroundColor: '#fafafa', '& th': { padding: '12px 16px', textAlign: 'left', fontSize: '12px', fontWeight: 700, color: '#2F2F2F', borderBottom: '1px solid #e0e0e0' } },
-        '& tbody': { '& tr': { borderBottom: '1px solid #e0e0e0', '&:last-child': { borderBottom: 'none' } }, '& td': { padding: '12px 16px', fontSize: '13px', color: '#333' } }
+        '& thead': { backgroundColor: 'var(--color-grey-000)', '& th': { padding: 'var(--space-12) var(--space-16)', textAlign: 'left', fontSize: 'var(--font-12)', fontWeight: 'var(--font-weight-700)', color: 'var(--color-content-primary)', borderBottom: 'var(--space-1) solid var(--color-grey-200)' } },
+        '& tbody': { '& tr': { borderBottom: 'var(--space-1) solid var(--color-grey-200)', '&:last-child': { borderBottom: 'none' } }, '& td': { padding: 'var(--space-12) var(--space-16)', fontSize: 'var(--font-13)', color: 'var(--color-content-primary)' } }
     },
-    linkText: { color: '#0086ff', cursor: 'pointer', '&:hover': { textDecoration: 'underline' } }
+    linkText: { color: 'var(--color-tertiary-500)', cursor: 'pointer', '&:hover': { textDecoration: 'underline' } }
 }));
