@@ -597,15 +597,30 @@ const ManageFailure = (props) => {
 
     const [exceptionalServices, setExceptionalServices] = React.useState([]);
 
+    const uniqueData = React.useMemo(() => {
+        if (!data || data.length === 0) return [];
+        const seen = new Set();
+        return data.filter((item) => {
+            const identifier = item.service_name || item.operation || item.task_name || item.url || item.issue_key;
+            if (!identifier) return true;
+            if (seen.has(identifier)) return false;
+            seen.add(identifier);
+            return true;
+        });
+    }, [data]);
+
+    const uniqueFailedServices = React.useMemo(() => [...new Set(failedServices || [])], [failedServices]);
+    const uniqueServicesContinuing = React.useMemo(() => [...new Set(servicesContinuing || [])], [servicesContinuing]);
+
     React.useEffect(() => {
-        if (exceptionalView && data && data.length > 0) {
-            setExceptionalServices(data.map(item => item.service_name));
+        if (exceptionalView && uniqueData && uniqueData.length > 0) {
+            setExceptionalServices([...new Set(uniqueData.map(item => item.service_name).filter(Boolean))]);
         }
         if (!exceptionalView) {
             setExceptionalStep(1);
             setExceptionalJustification('');
         }
-    }, [exceptionalView, data]);
+    }, [exceptionalView, uniqueData]);
 
     const taskType = data && data[0] ? data[0].task_type : null;
     const taskName = failedTask && failedTask.task_name ? failedTask.task_name : (data && data[0]?.task_name ? data[0].task_name : "N/A");
@@ -734,7 +749,7 @@ const ManageFailure = (props) => {
 
                 <div style={{ marginBottom: 'var(--space-16)', fontWeight: 'var(--font-weight-600)', fontSize: '12px', color: '#2F2F2F' }}>Services</div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-12)' }}>
-                    {data.map((item, index) => (
+                    {uniqueData.map((item, index) => (
                         <div key={index} style={{ border: 'var(--space-1) solid var(--color-grey-200)', borderRadius: 'var(--radius-8)', padding: 'var(--space-14) var(--space-16)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', boxShadow: 'var(--space-0) var(--space-4) var(--space-12) rgba(0, 0, 0, 0.12)' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-16)' }}>
                                 <input
@@ -890,7 +905,11 @@ const ManageFailure = (props) => {
                         <button
                             className={`btn btn-primary d-flex align-center justify-center btn-semi-bold ${exceptionalJustification.trim().length === 0 ? 'disabled' : ''}`}
                             disabled={exceptionalJustification.trim().length === 0}
-                            onClick={() => postContinuePipelineData([], exceptionalJustification)}
+                            onClick={() => {
+                                const allServiceNames = data.map(item => item.service_name).filter(Boolean);
+                                const servicesToSkip = allServiceNames.filter(name => !exceptionalServices.includes(name));
+                                postContinuePipelineData(servicesToSkip, exceptionalJustification);
+                            }}
                         >
                             APPROVE & PROCEED
                         </button>
@@ -1014,12 +1033,12 @@ const ManageFailure = (props) => {
                     </div>
                     <table className={classes.table}>
                         <thead><tr>{tableConfig.columns.map((col, i) => <th key={i}>{col}</th>)}</tr></thead>
-                        <tbody>{data.map((item, index) => <tr key={index}>{renderRowCells(item)}</tr>)}</tbody>
+                        <tbody>{uniqueData.map((item, index) => <tr key={index}>{renderRowCells(item)}</tr>)}</tbody>
                     </table>
                 </div>
             );
         }
-        return <ConfirmationScreen data={data} complete_rollback={complete_rollback} failed_task_dep_type={failed_task_dep_type} failedServices={failedServices} servicesContinuing={servicesContinuing} formData={formData} formError={formError} onChangeHandler={onChangeHandler} />;
+        return <ConfirmationScreen data={uniqueData} complete_rollback={complete_rollback} failed_task_dep_type={failed_task_dep_type} failedServices={uniqueFailedServices} servicesContinuing={uniqueServicesContinuing} formData={formData} formError={formError} onChangeHandler={onChangeHandler} />;
     };
 
     return (
