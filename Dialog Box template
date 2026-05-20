@@ -1,0 +1,248 @@
+import React, { useState, useEffect } from "react";
+import { makeStyles } from "@mui/styles";
+import Dialog from "@mui/material/Dialog";
+import { Input } from "../../../components/genericComponents/Input";
+import properties from "../../../properties/properties";
+import { showErrorHandlerUpdated } from "../../../util/util";
+import Button from "../../../components/genericComponents/Button";
+
+const AddPolicyTemplatee = ({
+  open = true,
+  handleSuccess,
+  handleClose,
+}) => {
+  const classes = useStyles();
+  const [isOpen, setIsOpen] = useState(open);
+  const localStorageKey = "vm_group_creation_info_flag";
+  const hideInfoSection = JSON.parse(localStorage.getItem(localStorageKey));
+  const [state, setState] = useState({
+    showLeftPanel: !hideInfoSection,
+    dontShowAgain: !!hideInfoSection,
+  });
+  
+
+  useEffect(() => {
+    setIsOpen(open);
+  }, [open]);
+
+  const onChangeHandler = (e) => {
+    const { name, value } = e.target;
+    setState((prev) => ({
+      ...prev,
+      data: {
+        ...prev.data,
+        [name]: value,
+      },
+      error: {
+        ...prev.error,
+        [name]: "",
+      },
+    }));
+  };
+
+  const handleCloseLeftStrip = () => {
+    if (state.dontShowAgain) {
+      localStorage.setItem(localStorageKey, JSON.stringify(true));
+    }
+    setState((prev) => ({
+      ...prev,
+      showLeftPanel: false,
+    }));
+  };
+
+  const handleDontShowCheckbox = (e) => {
+    const value = e?.target?.type === "checkbox" ? e.target.checked : e;
+    setState((prev) => ({ ...prev, dontShowAgain: value }));
+  };
+
+  const closeDialog = () => {
+    setIsOpen(false);
+    if (handleClose) handleClose();
+  };
+
+  const dialogTitle ="Add New Policy Template";
+
+  return (
+    <Dialog
+      fullWidth={true}
+      maxWidth={"md"}
+      open={isOpen}
+      onClose={closeDialog}
+      className={`${classes.root} dialog-align-corner`}
+      aria-labelledby="max-width-dialog-title"
+      data-testid="vmgrp-dlg"
+    >
+      <div
+        className="d-grid ml-auto dialog-sub-component"
+        style={{
+          gridTemplateColumns: state.showLeftPanel
+            ? "var(--space-396) var(--space-650)"
+            : "var(--space-0) var(--space-650)",
+        }}
+      >
+        {!hideInfoSection && (
+          <div
+            className={
+              state.showLeftPanel
+                ? "left-panel-dialog bg-white position-relative"
+                : "left-panel-dialog-down"
+            }
+          >
+            <div
+              className={
+                "d-flex align-center space-between left-panel-header pd-10"
+              }
+              style={{ padding: "var(--space-9) var(--space-20)" }}
+            >
+              <p>INFORMATION</p>
+              <button
+                className="btn btn-icon-only"
+                onClick={handleCloseLeftStrip}
+              >
+                <span className="ri-close-line color-icon-secondary"></span>
+              </button>
+            </div>
+            <div className="pd-10" style={{ padding: "var(--space-16) var(--space-20)" }}>
+              <p className="font-16 font-weight-600 color-primary mb-10">
+                Lets Create a New Policy Template
+              </p>
+              <p
+                className="font-12 color-icon-secondary"
+                style={{ color: "var(--color-grey-900)" }}
+              >
+                In Buildpiper, for a monolithic application, we need to onboard
+                the infrastructure required for deployment for the monolithic
+                applications. This infrastructure is nothing but of VMs (virtual
+                machines). Thus a virtual machine (VM) is a software-based unit
+                of a LDC - Local data centre which runs an operating system and
+                applications just like a physical computer but relies on
+                virtualization technology to operate.
+              </p>
+            </div>
+            <div
+              className="checkbox-only-divi"
+              style={{ padding: "var(--space-10) var(--space-20)" }}
+            >
+              <Input
+                style={{}}
+                type="simple-checkbox"
+                name="dont_show_again"
+                label="Don't show this again"
+                data={{ dont_show_again: state.dontShowAgain }}
+                value={state.dontShowAgain}
+                error={state.error}
+                onChangeHandler={handleDontShowCheckbox}
+              />
+            </div>
+          </div>
+        )}
+
+        <div className="right-panel-dialog bg-white">
+          <div
+            className="font-18 font-weight-600 color-white d-flex align-center space-between"
+            style={{ backgroundColor: "var(--color-tertiary-500)", padding: "var(--space-14) var(--space-288) var(--space-14) var(--space-16)" }}
+          >
+            <p>{dialogTitle}</p>
+            <button
+              className="btn float-cancel-button "
+              style={
+                hideInfoSection || !state.showLeftPanel
+                  ? {
+                    position: "absolute",
+                    top: "var(--space-0)",
+                    width:"var(--space-55)",
+                    height:"var(--space-55)",
+                    left: "calc(var(--space-55) * -1)",
+                    zIndex: 1000,
+                  }
+                  : {
+                    position: "absolute",
+                    top: "var(--space-0)",
+                    width:"var(--space-55)",
+                    height:"var(--space-55)",
+                    left: "calc(var(--space-450) * -1)",
+                    zIndex: 1000,
+                  }
+              }
+              onClick={closeDialog}
+              data-testid="vmgrp-x-btn"
+            >
+              <span className="ri-close-line "></span>
+            </button>
+          </div>
+
+          <div
+            style={{
+              padding: "0 var(--space-20) var(--space-120) var(--space-20)",
+              overflowY: "auto",
+            }}
+          >
+          </div>
+
+          <div className="footer-right-panel d-flex align-center justify-end">
+            <Button variant="ghost" onClick={closeDialog} data-testid="vmgrp-cancel-btn">
+              CANCEL
+            </Button>
+            <Button
+              className="btn btn-primary"
+              data-testid="vmgrp-save-btn"
+            >
+             SAVE & CONTINUE
+            </Button>
+          </div>
+        </div>
+      </div>
+    </Dialog>
+  );
+};
+
+const useStyles = makeStyles((theme) => ({
+  root: {
+    "&.dialog-align-corner": {
+      "& .MuiPaper-root": {
+        maxWidth: "var(--space-1100)",
+        margin: "0",
+        fontFamily: "Montserrat",
+      },
+    },
+    "& .right-panel-dialog": {
+      position: "relative",
+      width: "var(--space-650)",
+      height: "100%",
+      display: "flex",
+      flexDirection: "column",
+    },
+    "& .left-panel-dialog": {
+      width: "var(--space-396)",
+      transition: "width 0.3s",
+      "& .left-panel-header": {
+        borderBottom: "var(--space-1) solid #f1f1f1",
+        fontSize: "var(--font-12)",
+        fontWeight: "var(--font-weight-600)",
+        color: "var(--color-tertiary-500)",
+      },
+      "& .checkbox-only-divi": {
+        position: "absolute",
+        bottom: "var(--space-10)",
+        backcolor: "var(--color-white)",
+      },
+    },
+
+    "& .left-panel-dialog-down": {
+      width: "var(--space-0)",
+      overflow: "hidden",
+      transition: "width 0.3s",
+    },
+    "& .footer-right-panel": {
+      backgroundColor: "var(--color-grey-000)",
+      padding: "var(--space-20)",
+      position: "absolute",
+      bottom: "var(--space-0)",
+      width: "var(--space-650)",
+      gap: "var(--space-13)",
+      borderTop: "var(--space-1) solid #e6e6e6",
+    },
+  },
+}));
+
+export default AddPolicyTemplatee;
