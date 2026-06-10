@@ -1,0 +1,241 @@
+import React, { useEffect, useState } from 'react';
+import PropTypes from 'prop-types';
+import SyntaxHighlighter from 'react-syntax-highlighter';
+import { atomOneDark } from 'react-syntax-highlighter/dist/esm/styles/hljs';
+import Base64 from 'base-64';
+import ParseFile from '../../../util/FileParser';
+import { Input } from '../Input';
+import { ValidateDataSet, VALIDATION_TYPE_REQUIRED } from '../../../util/Validator';
+import { RemoveFromArray } from '../../../util/util';
+
+function FileUpload(props) {
+
+    const inherits = props.inherits;
+    const varient = props.varient;
+    const show_file_content = props.show_file_content ? props.show_file_content : "true"
+    const setErrorInCaseUploadFails=props.setErrorInCaseUploadFails
+    const noMandatory = props.noMandatory
+    const noLabel = props.noLabel
+    const with_command_args = props.with_command_args
+    const fullWidthFileName = props.fullWidthFileName
+    const style = props.style || {}
+    const [state, setState] = useState(normalizeState(props.state));
+    const hitCallbackFn = props.hitCallbackFn ? props.hitCallbackFn : () => { };
+    useEffect(() => {
+        if (props.state)
+            setState(new_state => ({
+                ...new_state,
+                ...normalizeState(props.state)
+            }))
+    }, [props.state])
+
+
+
+    function onChangeHandler(e) {
+        ParseFile(e, onParseComplete,setErrorInCaseUploadFails);
+        hitCallbackFn();
+    }
+
+    const onParseComplete = (file_data) => {
+        let files = varient == "single" ? [] : state.form_data.data.files;
+        files.push(file_data);
+        updateFilesInState(files);
+    }
+
+    const removeEnvManifest = (i) => {
+        let files = state.form_data.data.files;
+        files.splice(i, 1);
+        updateFilesInState(files);
+    }
+
+    function updateFilesInState(files) {
+        setState(new_state => ({
+            ...new_state,
+            content: files.length > 0 ? new_state.content : "",
+            form_data: {
+                ...new_state.form_data,
+                data: {
+                    files: files,
+                },
+                error: {
+                    files: ""
+                }
+            }
+        }));
+        if (inherits.onFileChange) {
+            inherits.onFileChange(files);
+        }
+
+    }
+
+    const onFileSelect = (i) => {
+        setState(new_state => ({
+            ...new_state,
+            content: new_state.form_data.data.files[i].content
+        }));
+    }
+
+
+    // Overloading
+    inherits.validateForm = () => {
+
+        if (!with_command_args) {
+            // RemoveFromArray(state.form_data.default_validations.cmd_agrs,VALIDATION_TYPE_REQUIRED)
+        }
+        if (noMandatory) {
+            if (state.form_data.default_validations && state.form_data.default_validations.files) {
+                RemoveFromArray(state.form_data.default_validations.files, VALIDATION_TYPE_REQUIRED);
+            }
+        }
+
+        const result = ValidateDataSet(state.form_data.data, state.form_data.default_validations);
+
+        if (!result.valid) {
+            setState(new_state => ({
+                ...new_state,
+                form_data: {
+                    ...new_state.form_data,
+                    error: result.error
+                }
+            }));
+        }
+        return result;
+    }
+
+    inherits.getData = () => {
+        return state.form_data.data;
+    }
+
+    inherits.getState = () => {
+        return state;
+    }
+    const onKeyValueChangeHandler = (k, v) => {
+        setState(new_state => ({
+            ...new_state,
+            form_data: {
+                ...new_state.form_data,
+                data: {
+                    ...new_state.form_data.data,
+                    [k]: v
+                },
+                error: { ...state.form_data.error, [k]: null }
+            }
+        }));
+    }
+
+    return (
+        <div className="box-file-upload pd-10" style={style}>
+            <Input
+                type={varient == "single" ? "file" : varient == "show_filename_only" ? "file-upload-name" : "multi-file-upload"}
+                name={"files"}
+                mandatorySign={noMandatory ? false : true}
+                label={noLabel ? null : varient == "single" ? <>Please upload the file</> :
+                    varient == "show_filename_only" ? "Please provide shell script for ticket validation" :
+                        <>Please upload the files <span className="hint-text">(You can upload multiple files)</span></>}
+                onChangeHandler={onChangeHandler}
+                data={state.form_data.data}
+                onFileSelect={onFileSelect}
+                onFileRemove={removeEnvManifest}
+                error={state.form_data.error}
+                fullWidthFileName={fullWidthFileName}
+                fileSupportText={props.fileSupportText}
+                newStyle={props.newStyle} />
+            {
+                with_command_args &&
+                <Input
+                    type="tagged-input"
+                    name="cmd_agrs"
+                    placeholder="Command Args"
+                    label="Command Args "
+                    subHeading="(Enter command args and press Enter)"
+                    data={state.form_data.data}
+                    error={state.form_data.error}
+                    onChangeHandler={onKeyValueChangeHandler}
+                />
+
+            }
+            {show_file_content === "true" && varient === "show_filename_only" ?
+                <div style={{
+                    backgroundColor: 'var(--color-content-primary)', height: '100%',
+                    borderRadius: 'var(--radius-0) var(--radius-0) var(--radius-8) var(--radius-0)', position: 'relative'
+                }}>
+
+                    {
+                        varient == "show_filename_only" ?
+                            <></> :
+                            state.content ?
+                                <SyntaxHighlighter id="viewFullScreen" language="yaml" style={atomOneDark} >
+                                    {Base64.decode(state.content)}
+                                </SyntaxHighlighter>
+                                :
+
+
+                                <>
+                                    {
+                                        state.form_data.data.files ?
+                                            state.form_data.data.files[0] ?
+                                                <>
+                                                    {state.form_data.data.files[0].content ?
+                                                        <SyntaxHighlighter id="viewFullScreen" language="yaml" style={atomOneDark} >
+                                                            {state.form_data.data.files[0].content ? Base64.decode(state.form_data.data.files[0].content) : ""}
+                                                        </SyntaxHighlighter> : null
+                                                    }
+                                                </>
+
+                                                :
+                                                null
+                                            :
+                                            null
+                                    }
+                                </>
+
+                    }
+                </div>
+                : null}
+        </div>
+    );
+}
+
+FileUpload.propTypes = {
+    ...PropTypes.objectOf(PropTypes.any),
+}
+
+export default FileUpload;
+
+// Utils
+
+function normalizeState(s) {
+    if (!s) return getDefaultState();
+    if (s.form_data) return s;
+    // s is raw data from getData() — wrap it in the full state shape
+    const defaults = getDefaultState();
+    return {
+        ...defaults,
+        form_data: {
+            ...defaults.form_data,
+            data: { ...defaults.form_data.data, ...s },
+        },
+    };
+}
+
+function getDefaultState() {
+    return {
+        content: "",
+        form_data: {
+            data: {
+                files: [],
+                cmd_agrs: []
+            },
+            error: {
+                files: ""
+            },
+            default_validations: {
+                files: [VALIDATION_TYPE_REQUIRED],
+            }
+        }
+    }
+}
+
+export function FileUploadDefaultState() {
+    return getDefaultState();
+}
