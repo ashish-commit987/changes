@@ -1,0 +1,2147 @@
+import React, { useState, useEffect, useRef } from "react";
+import PropTypes from 'prop-types';
+import { makeStyles } from '@mui/styles';
+import '../../assets/style.css'
+import ImageCheckBox from './ImageCheckBox';
+import Radio from '@mui/material/Radio';
+import RadioGroup from '@mui/material/RadioGroup';
+import Slider from "@mui/material/Slider";
+import FormControlLabel from '@mui/material/FormControlLabel';
+import { RemoveFromArray } from '../../util/util';
+import CheckboxList from './inputs/Checkbox';
+import TagInput from "./inputs/TagInput";
+import Checkbox from '@mui/material/Checkbox';
+import Typography from '@mui/material/Typography';
+import AutoCompleteDropdown from "./inputs/AutoCompleteDropDown";
+import ChipCheckboxList from "./inputs/ChipCheckboxList";
+import Tooltip from '@mui/material/Tooltip';
+import MultiSelectInput from "./MultiSelectInput";
+import VersionLogo from "./VersionLogo";
+import MultipleSelectDropdown from "./MultiSelectDropdown";
+import Zoom from "@mui/material/Zoom";
+import CustomizedCheckbox from "./StyledCheckbox";
+import SelectWithDropdown from "./SelectWithDropdown";
+import AutoCompleteWithMultipleSelect from "./inputs/AutoCompleteWithMultipleSelect";
+import AutoCompeleteDropdownV2 from "./inputs/AutoCompeleteDropdownV2";
+import MultiSelectWithSettings from "./MultiSelectWithSettings";
+import AutoCompleteDropdownFreeSoloVariant from "./inputs/AutoCompleteFreeSoloVariant";
+import CustomSelect from "./CustomSelect";
+import { Box } from "@mui/material";
+import VariableAndTextInput from "./VariableAndTextInput";
+import SearchableSelect from "./inputs/SearchableSelect";
+import Button from "./Button";
+
+const useStyles = makeStyles(theme => ({
+  root: {
+    flexGrow: 1,
+    marginTop: 'var(--space-30)',
+    '&.select-value': {
+      backgroundColor: 'var(--color-white)',
+      padding: 'var(--space-16)',
+    }
+  },
+  tabs: {
+    borderRight: `var(--space-1) solid ${theme.palette.divider}`,
+  },
+  mainDivSelected: {
+    display: 'flex',
+    alignItems: 'center',
+    backgroundColor: 'var(--color-white)',
+    padding: 'var(--space-5) var(--space-12-5)',
+    borderRadius: 'var(--radius-30) var(--radius-0) var(--radius-0) var(--radius-30)',
+    margin: 'var(--space-20) var(--space-0) var(--space-20) var(--space-20)'
+  },
+  mainDiv: {
+    display: 'flex',
+    alignItems: 'center',
+    maxWidth: 'var(--space-160)',
+    backgroundColor: 'var(--color-white)',
+    padding: 'var(--space-5) var(--space-12-5)',
+    borderRadius: 'var(--radius-30) var(--radius-30) var(--radius-30) var(--radius-30)',
+    margin: 'var(--space-20)'
+  },
+  count: {
+    width: 'var(--space-30)',
+    height: 'var(--space-30)',
+    border: 'var(--space-1) solid var(--color-grey-300)',
+    borderRadius: 'var(--radius-full)',
+    textAlign: 'center',
+    paddingTop: 'var(--space-2)'
+  },
+  text: {
+    fontSize: 'var(--font-11)',
+    fontWeight: 'var(--font-weight-400)',
+  },
+  mainBodyDiv: {
+    backgroundColor: 'var(--color-white)',
+    padding: 'var(--space-15) var(--space-20)',
+    borderRadius: 'var(--radius-8) var(--radius-8) var(--radius-0) var(--radius-0)',
+    borderTop: 'var(--space-1) solid#dedede',
+    borderLeft: 'var(--space-1) solid#dedede',
+    borderRight: 'var(--space-1) solid#dedede',
+  },
+  countBody: {
+    backgroundColor: 'var(--color-info-700)',
+    color: 'var(--color-white)',
+    width: 'var(--space-30)',
+    height: 'var(--space-30)',
+    borderRadius: 'var(--radius-full)',
+    textAlign: 'center',
+    display: 'flex',
+    justifyContent: 'center',
+    alignItems: 'center',
+    fontWeight: 'var(--font-weight-800)'
+  },
+  tabBodyDivHeading: {
+    display: 'flex',
+    alignItems: 'center',
+    paddingBottom: 'var(--space-10)',
+    borderBottom: 'var(--space-1) solid #ccc'
+  },
+  textBody: {
+    fontSize: 'var(--font-16)',
+    fontWeight: 'var(--font-weight-300)',
+    color: 'var(--color-black)'
+  },
+  formDiv: {
+    padding: 'var(--space-8) var(--space-0)',
+    margin: 'var(--space-10) var(--space-0)'
+  },
+  InputLabel: {
+    fontSize: 'var(--font-14)',
+    fontWeight: 'var(--font-weight-500)',
+    color: 'var(--color-content-primary)',
+  },
+  AlignLabel: {
+    display: 'inline-flex',
+    justifyContent: 'center',
+    alignItems: 'center'
+  },
+  hindText: {
+    fontSize: 'var(--font-10)',
+    color: 'var(--color-grey-500)',
+    fontWeight: 'var(--font-weight-400)',
+    marginLeft: 'var(--space-5)'
+  },
+  stepper: {
+    margin: 'var(--space-10) 0rem'
+  },
+  subHeading: {
+    fontSize: 'var(--font-12)',
+    color: 'var(--color-badge-grey-text)',
+    fontWeight: 'var(--font-weight-400)',
+    marginBottom: 'var(--space-10)'
+  },
+  impMakr: {
+    color: 'var(--color-error-500)'
+  },
+  multipleSelect: {
+    '& .show-selected-value': {
+      display: 'flex',
+      alignItems: 'center',
+      paddingLeft: 'var(--space-14)',
+      margin: 'var(--space-0)',
+      width: '100%',
+      lineHeight: 'var(--line-height-2)',
+      borderRadius: 'var(--radius-4)',
+      border: 'var(--space-1) solid var(--color-grey-400)',
+      backgroundColor: 'var(--color-white)',
+      color: 'var(--color-badge-grey-text);',
+      fontSize: 'var(--font-12)',
+      fontWeight: 'var(--font-weight-400)',
+      minHeight: 'var(--space-40)',
+      height: 'auto',
+      maxHeight: 'var(--space-50)',
+      cursor: 'pointer',
+      position: 'relative',
+      '& svg': {
+        fontSize: 'var(--font-21)',
+        color: 'var(--color-grey-600)',
+        position: 'absolute',
+        right: 'var(--space-8)',
+        top: 'var(--space-8)'
+      },
+      '& .selected-values': {
+        display: 'flex',
+        height: '100%',
+        overflowY: 'auto',
+        flexWrap: 'wrap',
+        width: '94%',
+        '& .selected-values-design': {
+          margin: '0 var(--space-6) !important',
+          // flex: '0 0 auto',
+          marginRight: 'var(--space-4) !important',
+          backgroundColor: 'var(--color-primary-500)',
+          borderRadius: 'var(--radius-25)',
+          color: 'var(--color-white)',
+          width: '20',
+          padding: 'var(--space-0) var(--space-6)',
+          display: "flex",
+          alignItems: 'center',
+          '& span': {
+            marginLeft: 'var(--space-12)',
+            cursor: 'pointer',
+            whiteSpace: 'nowrap'
+          }
+        }
+      }
+    },
+    '& .select-value': {
+      backgroundColor: 'var(--color-white)',
+      padding: 'var(--space-3) var(--space-0) var(--space-3) 0',
+      border: 'var(--space-1) solid var(--color-grey-500)',
+      position: 'absolute',
+      top: 'var(--space-65)',
+      width: '100%',
+      flexWrap: 'wrap',
+      zIndex: '1',
+      '& .item': {
+        paddingLeft: 'var(--space-14)',
+        color: 'var(--color-badge-grey-text)',
+        fontSize: 'var(--font-12)',
+        cursor: 'pointer',
+        transition: '0.1s',
+      },
+      '& .item:hover': {
+        backgroundColor: 'orange',
+        color: 'var(--color-white)',
+        fontSize: 'var(--font-12)',
+      },
+    }
+  }
+}));
+
+
+
+export const Input = (props) => {
+  const classes = useStyles();
+  const fileInputRef = useRef(null);
+  const type = props.type;
+  const style = props.style ? props.style : {}
+  const label = props.label;
+  const subHeading = props.subHeading;
+  const paramsHeading = props.paramsHeading;
+  const name = props.name;
+  const error = props.error || {};
+  const onChangeHandler = props.onChangeHandler;
+  const onTextClick = props.onTextClick ? props.onTextClick : () => { }
+  const data = props.data || {};
+  console.log(data, "sdcvghss")
+  const value = data[name];
+  const placeholder = props.placeholder;
+  const list = props.list;
+  const radioGroup = props.radioGroup;
+  const min = props.min;
+  const max = props.max;
+  const onFileRemove = props.onFileRemove;
+  const varient = props.varient;
+  const mandatorySign = props.mandatorySign;
+  const onFileSelect = props.onFileSelect ? props.onFileSelect : () => { };
+  //const disabled = props.disabled;
+  const valueLabel = props.valueLabel;
+  const default_css = props.default_css;
+  const isHooksCommandsVisible = props.isHooksCommandsVisible
+  const [state, setState] = useState({ showPassword: false, ishookCommandsVisible: false });
+  const isFirstTimeDropdown = props.isFirstTimeDropdown
+  const fullWidthFileName = props.fullWidthFileName;
+  const [isDuelInputDropdown, setIsDuelInputDropdown] = useState(false);
+  const rows = props.rows;
+  //const validations = props.validations;
+  const enabledComponent = props.enabledComponent;
+  const disabledComponent = props.disabledComponent;
+  const onKeyDown = props.onKeyDown ? props.onKeyDown : null;
+  const borderBottom = props.borderBottom ? props.borderBottom : null;
+  const maxLength = props.maxLength;
+  const select_default_value = props.select_default_value;
+  const remove_default_value = props.remove_default_value;
+  const inputCase = props.inputCase;
+  // const selectedValues = props.selectedValues;
+  const jiraOperation = props.jiraOperation;
+  const info = props.info;
+  const jiraOperationInfo = props.jiraOperationInfo;
+  const listError = props.listError ? props.listError : {}
+  const onBlurFun = props?.onBlurFun ? props?.onBlurFun : () => { }
+  const jira_status = props.jira_status ? props.jira_status : false;
+  const allowNewItems = props.allowNewItems ? props.allowNewItems : null;
+  const noItemsMessage = props.noItemsMessage ? props.noItemsMessage : null;
+  const no_tooltip = props.no_tooltip
+  const unDisabled_index = props.unDisabled_index;
+  const hyponInAutoDropdown = props.hyponInAutoDropdown;
+  const optionStyle = props.optionStyle ? props.optionStyle : {};
+  const maxWidth = props.maxWidth ?? null;
+  const resolvedTestId = props["data-testid"] || props.testId || props.id || name;
+
+  console.log(unDisabled_index, 'not_able_to_do')
+  const extraText = props.extraText || null;
+  const input_variant = props.input_variant ? props.input_variant : "toggle_on";
+  const renderAsSelect = props.renderAsSelect || false;
+  if (type == "select-with-checkbox") {
+    console.log("ip_0_0_0", props);
+  }
+  const [show, setShow] = useState({
+    showDropDown: false,
+  });
+
+  const [selectedValues, setSelectedValues] = useState(props.selectedValues);
+
+  const [multipleSelectList, setMultipleSelectList] = useState(props.multipleSelectList);
+
+  const selectValue = (item) => {
+    console.log(item);
+    setSelectedValues([...selectedValues, item]);
+    const filterSelecttion = multipleSelectList.filter((items) => {
+      return items != item;
+    });
+    setMultipleSelectList(filterSelecttion);
+    setShow(prevState => ({
+      ...prevState,
+      showDropDown: false
+    }))
+    // setShow({ ...show, showDropDown: false });
+    onChangeHandler([...selectedValues, item]);
+  }
+
+  const removeSelectedValue = (item) => {
+    const filterSelecttion = selectedValues.filter((items) => {
+      return items !== item;
+    });
+    setSelectedValues(filterSelecttion);
+
+    setMultipleSelectList(prevState => ([...prevState, item]))
+
+    onChangeHandler([...filterSelecttion]);
+    // setMultipleSelectList([...multipleSelectList, item]);
+    setShow({ ...show, showDropDown: false, });
+  }
+
+  const toggleDropDown = () => {
+    setShow({ ...show, showDropDown: !show.showDropDown })
+  }
+
+  useEffect(() => {
+    if (isFirstTimeDropdown) {
+      setIsDuelInputDropdown(true)
+    }
+  }, [isFirstTimeDropdown])
+
+  useEffect(() => {
+    setState(prevState => ({ ...prevState, ishookCommandsVisible: isHooksCommandsVisible }))
+  }, [isHooksCommandsVisible])
+
+  function togglePassword() {
+    setState({
+      ...state,
+      showPassword: !state.showPassword
+    })
+  }
+
+  const toggleDualInput = () => {
+    setIsDuelInputDropdown(!isDuelInputDropdown)
+  }
+
+  const isLinux =
+    typeof navigator !== "undefined" &&
+    typeof navigator.userAgent === "string" &&
+    navigator.userAgent.toLowerCase().includes("linux");
+
+  function getFieldBasedOnType() {
+    switch (type) {
+      case ("text"):
+        return (
+          <input
+            onBlur={(e) => {
+              console.log(e, 'blured_001');
+              onBlurFun(e)
+            }
+            }
+            style={props.style}
+            className={!error[name] || error[name].length == 0 ? "" : "error"}
+            name={name}
+            placeholder={placeholder}
+            value={value}
+            onKeyDown={onKeyDown}
+            onChange={onChangeHandler}
+            disabled={onChangeHandler ? false : true}
+            onKeyPress={varient == "handle-keys" ? props.onKeyPress : () => { }}
+            maxLength={maxLength}
+            data-testid={resolvedTestId}
+          />
+        );
+      case ("text-new"):
+        return (
+          <input
+            //style={{ height: props.height ? props.height : "var(--space-45)" }}
+            className={!error[name] || error[name].length == 0 ? "" : "error"}
+            name={name}
+            placeholder={placeholder}
+            value={value}
+            onKeyDown={onKeyDown}
+            onChange={onChangeHandler}
+            disabled={onChangeHandler ? false : true}
+            onKeyPress={varient == "handle-keys" ? props.onKeyPress : () => { }}
+            maxLength={maxLength}
+            data-testid={resolvedTestId}
+          />
+        );
+      case ("textarea"):
+        return (
+          <textarea
+            className={!error[name] || error[name].length == 0 ? "textarea" : "textarea error"}
+            name={name}
+            placeholder={placeholder}
+            value={value}
+            rows={rows ? rows : 1}
+            onChange={onChangeHandler}
+            disabled={onChangeHandler ? false : true}
+            onKeyPress={varient == "handle-keys" ? props.onKeyPress : () => { }}
+            style={style ? style : {}}
+            data-testid={resolvedTestId}
+          />
+        );
+
+      case ("imgCheckbox"):
+        if (varient == "multicheck") {
+          let return_list = data[name];
+          function handleChange(e) {
+            if (e.target.checked) {
+              return_list.push(e.target.value);
+              onChangeHandler(name, return_list);
+            } else {
+              return_list = RemoveFromArray(return_list, e.target.value);
+              onChangeHandler(name, return_list)
+            }
+          }
+          return (
+            <div style={{ display: 'flex' }}>
+              {
+                list.map((element) => (
+
+                  <ImageCheckBox
+                    name={element.name}
+                    label={element.label}
+                    src={element.src}
+                    variant={props.variant}
+                    state={{ selectedImageCheckboxLabel: data[name].includes(element.label) ? element.label : "" }}
+                    action={handleChange}
+                  />
+
+                ))
+              }
+            </div>
+          );
+        } else {
+          return (
+            <div className={classes.card}>
+              <ImageCheckBox
+                name={name}
+                list={list}
+                variant={props.variant}
+                state={{ selectedImageCheckboxLabel: data[name] }}
+                action={onChangeHandler} />
+            </div>
+          );
+        }
+      case ("radio"):
+        return (<>
+
+          {
+            props.variant == 'form-builder' ?
+              <RadioGroup row className="form-class">
+                {
+                  list.map((radio, index) => (
+
+                    <FormControlLabel
+                      sx={{
+                        '&.Mui-disabled': {
+                          backgroundColor: 'transparent !important',
+                          borderRadius: 'var(--radius-6)',
+                          padding: 'var(--space-4) var(--space-8)',
+                        },
+                        '& .MuiFormControlLabel-label.Mui-disabled': {
+                          color: 'var(--color-content-tertiary) !important',
+                          backgroundColor: 'white !important',
+                        },
+                      }}
+                      lg={12 / list.length}
+                      control={
+                        <Radio
+
+                          className="radio-controller"
+                          name={name}
+                          radioGroup={radioGroup}
+                          checked={data[name] == radio.value}
+                          value={radio.value}
+                          onChange={onChangeHandler}
+                          disabled={index == unDisabled_index ? false : onChangeHandler ? false : true}
+                        />
+                      }
+                      label={radio.label} />
+
+                  ))
+                }
+              </RadioGroup>
+              :
+              props.variant !== 'version-options' ? <RadioGroup row className="form-class">
+                {
+                  list.map((radio) => (
+
+                    <FormControlLabel lg={12 / list.length} control={<Radio className="radio-controller" name={name} radioGroup={radioGroup} checked={data[name] == radio.value} value={radio.value} onChange={onChangeHandler} disabled={onChangeHandler ? false : true} />} label={radio.label} />
+
+                  ))
+                }
+              </RadioGroup>
+
+
+                :
+                <RadioGroup row className="form-class">
+                  {
+                    list.map((radio) => (
+
+                      <FormControlLabel lg={12 / list.length} control={<Radio className="radio-controller" name={name} radioGroup={radioGroup} checked={data[name] == radio.value} value={radio.value} onChange={onChangeHandler} disabled={onChangeHandler ? false : true} />}
+                        label={<div className="d-flex align-center">
+                          <label className="mr-8">{radio.label}</label>
+                          <VersionLogo version={radio.value}>{radio.value}</VersionLogo>
+                        </div>
+                        }
+                      />
+
+                    ))
+                  }
+                </RadioGroup>
+          }
+        </>
+
+
+        );
+      case ("select-multiple"):
+        return (
+          <select name={name} value={data[name]} className='select' onChange={onChangeHandler} multiple>
+            <option value="">Please Select</option>
+            {list.map((option) => (
+              <option value={option.id} selected={option.selected == "selected"}>{option.label}</option>
+            ))}
+          </select>
+        );
+      case ("select-multiple-with-display"):
+        return (
+          <div className={classes.multipleSelect} /* style={{ overflowX: 'auto' }} */>
+
+            <div className='show-selected-value' onKeyDown={() => { }} onClick={toggleDropDown} tabIndex={0} role="button">
+              {
+                selectedValues?.length <= 0 && <span>Please Select Events</span>
+              }
+
+              <div className="selected-values">
+                {
+                  selectedValues?.length > 0 && selectedValues?.map((item) => {
+                    console.log('line 396', item);
+                    return (
+                      <div className='selected-values-design' key={item.id}>
+                        <span>{item}</span>&nbsp;&nbsp;<span onKeyDown={() => { }} onClick={() => {
+                          removeSelectedValue(item);
+                        }} tabIndex={0} role="button">X&nbsp;</span>
+                      </div>
+                    )
+                  })
+                }
+              </div>
+              <i className="ri-arrow-down-s-line"></i>
+            </div>
+            {/* <input type="text" className="multiple-select" /> */}
+            {
+              show.showDropDown && <div className='select-value'>
+                {multipleSelectList && multipleSelectList.map((option) => (
+                  <div className="item" key={option.id} onKeyDown={() => { }} onClick={() => { selectValue(option) }} selected={option.selected == "selected"} tabIndex={0} role="button">{option}</div>
+                ))}
+              </div>
+            }
+
+          </div>
+        );
+      case ("select-multiple-with-display-settings"):
+        return (
+          <MultiSelectWithSettings
+            name={name}
+            list={list}
+            value={data[name] ? data[name] : []}
+            {...props}
+
+          />
+        );
+      case ("select-with-checkbox"):
+        console.log(data)
+        return (
+          <MultiSelectInput
+            list={list}
+            id={props.id}
+            value={data[name] ? data[name] : []}
+            selected_checkboxes={data[name]}
+            placeholder={placeholder}
+            label={label}
+            getOptionLabel={props.getOptionLabel}
+            name={name}
+            className={!error[name] || error[name].length == 0 ? "textarea" : "textarea error"}
+            onChangeHandler={onChangeHandler}
+          />
+        );
+     case ("select"):
+        if (renderAsSelect) {
+          if (isLinux) {
+            return (
+
+              <CustomSelect
+                maxWidth={maxWidth}
+                style={style}
+                optionStyle={optionStyle}
+                testId={resolvedTestId}
+                name={name}
+                data={data}
+                error={error}
+                onChangeHandler={onChangeHandler}
+                remove_default_value={remove_default_value}
+                select_default_value={select_default_value}
+                list={list}
+              />
+            );
+          }
+          return (
+
+            <select style={style} name={name} value={data[name]} className={!error[name] || error[name].length == 0 ? "select" : "select error"} onChange={onChangeHandler} disabled={onChangeHandler ? false : true} data-testid={resolvedTestId}>
+              {remove_default_value ? null : <option className="selectoptions" style={{ fontFamily: "Montserrat, sans-serif", }} value="">{select_default_value ? select_default_value : "Please Select"}</option>}
+              {list && list.map((option) => (
+                <option className="selectoptions" style={{ fontFamily: "Montserrat, sans-serif", }} value={option.id} selected={option.selected == "selected"}>{option.label}</option>
+              ))}
+            </select>
+          );
+        }
+        console.log(`Input (${name}): list is`, list);  
+        return (
+          <SearchableSelect
+            optionStyle={optionStyle}
+            name={name}
+            data={data}
+            list={list}
+            onChangeHandler={onChangeHandler}
+            placeholder={placeholder || select_default_value}
+            disabled={!onChangeHandler}
+            error={error}
+            style={style}
+          />
+        );
+      case ("select-with-label"):
+        return (
+          <select
+            style={style}
+            name={name}
+            value={data[name]} // Set the selected value
+            className={!error[name] || error[name].length === 0 ? "select" : "select error"}
+            onChange={onChangeHandler}
+            disabled={!onChangeHandler}
+            data-testid={resolvedTestId}
+          >
+            {/* Default option */}
+            {remove_default_value ? null : (
+              <option
+                className="selectoptions"
+                style={{ fontFamily: "Montserrat, sans-serif" }}
+                value=""
+              >
+                {select_default_value ? select_default_value : "Please Select"}
+              </option>
+            )}
+
+            {/* Render options from list */}
+            {list && list.map((option) => (
+              <option
+                key={option.id}
+                className="selectoptions"
+                style={{ fontFamily: "Montserrat, sans-serif" }}
+                value={option.id}
+              >
+                {data[name] === option.id ? `status: ${option.label}` : option.label}
+              </option>
+            ))}
+          </select>
+        );
+
+
+      case ("select-with-thumbnail"):
+        return (
+          <SelectWithDropdown
+            name={name}
+            remove_default_value={remove_default_value}
+            select_default_value={select_default_value}
+            mandatorySign
+            data={data}
+            list={list}
+            error={error}
+            onChangeHandler={onChangeHandler}
+          />);
+      case ("select-for-multideployment"):
+        return (
+          no_tooltip ?
+            <select style={{
+              //maxWidth: 'var(--space-150)', // Adjust the max-width as needed
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+              backgroundPosition: `right -8px center`,
+            }} name={name} value={data[name]} className={!error[name] || error[name].length == 0 ? "select" : "select error"} onChange={onChangeHandler} disabled={onChangeHandler ? false : true} data-testid={resolvedTestId}>
+              {remove_default_value ? null : <option value="">{select_default_value ? select_default_value : "Please Select"}</option>}
+              {list && list.map((option) => (
+                <option value={option.id} selected={option.selected == "selected"}>
+                  {option.label}
+                  {/* {option.label.length > 20 ? `${option.label.substring(0, 20)}...` : option.label} */}
+                </option>
+              ))}
+            </select>
+            :
+            <Tooltip title={data[name]} arrow>
+              <select style={{
+                //maxWidth: 'var(--space-150)', // Adjust the max-width as needed
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+                backgroundPosition: `right -8px center`,
+              }} name={name} value={data[name]} className={!error[name] || error[name].length == 0 ? "select" : "select error"} onChange={onChangeHandler} disabled={onChangeHandler ? false : true} data-testid={resolvedTestId}>
+                {remove_default_value ? null : <option value="">{select_default_value ? select_default_value : "Please Select"}</option>}
+                {list && list.map((option) => (
+                  <option value={option.id} selected={option.selected == "selected"}>
+                    {option.label}
+                    {/* {option.label.length > 20 ? `${option.label.substring(0, 20)}...` : option.label} */}
+                  </option>
+                ))}
+              </select>
+            </Tooltip>
+        );
+      case ("file-upload-name"):
+        return (
+          <div className="file-upload">
+            <div className="image-upload-wrap" style={{ height: 'var(--space-43)' }}>
+              <input
+                className="file-upload-input"
+                type="file"
+                name={name}
+                onChange={onChangeHandler}
+              />
+              <div className="drag-text">
+
+              </div>
+              {data[name] ?
+                <>
+                  {data[name].name ?
+                    <div onKeyDown={() => { }} onClick={props.onFileSelect ? props.onFileSelect : () => { }} className="image-upload-chip-parent" tabIndex={0} role="button">
+                      <div className="image-upload-chip">
+                        <p>{data[name].name}</p>
+                      </div>
+                    </div>
+                    :
+
+                    <div className="image-upload-chip-parent">
+                      {(data[name]).map((element, i) => (
+                        <div className="image-upload-chip">
+                          <span role='button' tabIndex={0} onKeyDown={() => { }} onClick={() => { onFileSelect(i) }}>{element.name} </span><button className="transparent-btn" onClick={() => onFileRemove(i)}><i className="ri-close-line"></i></button>
+                        </div>
+                      ))}
+                    </div>
+
+                  }
+                </> : null
+              }
+            </div>
+          </div>
+        );
+      case ("file"):
+        const isServiceOverview = window?.location?.pathname?.includes('/service/') || window?.location?.pathname?.includes('/upload-users') || props.newStyle;
+
+        if (isServiceOverview) {
+          return (
+            <div className="file-upload">
+              <div className="image-upload-wrap" style={{ minHeight: 'var(--space-86)', height: 'auto', padding: 'var(--space-16)', border: error && error[name] ? 'var(--space-1) dashed red' : 'var(--space-1) dashed #d1d5db', borderRadius: 'var(--radius-8)', backgroundColor: error && error[name] ? '#fef2f2' : '#fafbfc', display: 'flex', flexDirection: 'column', justifyContent: 'center', position: 'relative' }}>
+                <input
+                  className="file-upload-input"
+                  type="file"
+                  name={name}
+                  onChange={onChangeHandler}
+                  style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', opacity: 0, cursor: 'pointer', zIndex: 10, maxHeight: 'none' }}
+                />
+                {!(data && data[name] && (data[name].length > 0 || data[name].name)) && (
+                  <div style={{ display: 'flex', alignItems: 'center', pointerEvents: 'none', width: '100%' }}>
+                    <div style={{ width: 'var(--space-48)', height: 'var(--space-48)', borderRadius: 'var(--radius-10)', border: 'var(--space-1) solid var(--color-badge-grey-bg)', backgroundColor: 'var(--color-white)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginRight: 'var(--space-16)', flexShrink: 0, boxShadow: 'var(--space-0) var(--space-1) var(--space-2) rgba(0,0,0,0.05)' }}>
+                      <i className="ri-upload-2-line" style={{ color: 'var(--color-tertiary-500)', fontSize: 'var(--font-24)' }}></i>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column' }}>
+                      <span style={{ fontSize: 'var(--font-13)', color: 'var(--color-primary-900)', fontWeight: 'var(--font-weight-600)'}}>
+                        Drag and Drop file here or <span style={{ color: 'var(--color-tertiary-500)' }}>click here</span> to choose file
+                      </span>
+                      <span style={{ fontSize: 'var(--font-12)', color: 'var(--color-content-tertiary)', marginTop: 'var(--space-2)' }}>
+                        {props.fileSupportText || "Upload a single file in YAML format."}
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                {data && data[name] ? (
+                  <div style={{ zIndex: 11, position: 'relative' }}>
+                    {data[name].name ?
+                      <div onKeyDown={() => { }} onClick={props.onFileSelect ? props.onFileSelect : () => { }} className="image-upload-chip-parent" tabIndex={0} role="button">
+                        <div className="image-upload-chip">
+                          <p>{data[name].name}</p>
+                        </div>
+                      </div>
+                      :
+                      <div className="image-upload-chip-parent">
+                        {(data[name]).map((element, i) => (
+                          <div className="image-upload-chip" key={i}>
+                            <span role='button' className="text-ellipsis" tabIndex={0} onKeyDown={() => { }} onClick={() => { onFileSelect(i) }}>{element.name} </span><button className="transparent-btn" onClick={() => onFileRemove(i)}><i className="ri-close-line"></i></button>
+                          </div>
+                        ))}
+                      </div>
+                    }
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          );
+        }
+
+        return (
+          <div className="file-upload">
+            <div className="image-upload-wrap">
+              <input
+                className="file-upload-input"
+                type="file"
+                name={name}
+                onChange={onChangeHandler}
+              />
+              <div className="drag-text">
+
+              </div>
+              {data && data[name] ?
+                <>
+                  {data[name].name ?
+                    <div onKeyDown={() => { }} onClick={props.onFileSelect ? props.onFileSelect : () => { }} className="image-upload-chip-parent" tabIndex={0} role="button">
+                      <div className="image-upload-chip">
+                        <p>{data[name].name}</p>
+                      </div>
+                    </div>
+                    :
+
+                    <div className="image-upload-chip-parent">
+                      {(data[name]).map((element, i) => (
+                        <div className="image-upload-chip">
+                          <span role='button' className="text-ellipsis" tabIndex={0} onKeyDown={() => { }} onClick={() => { onFileSelect(i) }}>{element.name} </span><button className="transparent-btn" onClick={() => onFileRemove(i)}><i className="ri-close-line"></i></button>
+                        </div>
+                      ))}
+                    </div>
+
+                  }
+                </> : null
+              }
+            </div>
+          </div>
+        );
+      case ("new-file"):
+        function fileUploadClick(e) {
+          let fileInput = document.getElementById("file-upload");
+          fileInput.click();
+        }
+        return (
+          <div className="file-upload-cont" style={{ width: "100%" }}>
+            <div className="input-file-wraper"
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  if (!(data[name] && data[name].name)) {
+                    fileUploadClick();
+                  }
+                }
+              }}
+              onClick={data[name] && data[name].name ? () => { } : fileUploadClick}>
+              {data[name] && data[name].name ?
+
+                <div className="d-flex space-between align-center width-full">
+                  <div className="d-flex align-center" style={{ gap: "var(--space-10)" }}>
+                    <span className="ri-file-2-line font-20 color-icon-secondary"></span>
+                    <span className="font-14 color-icon-secondary font-weight-500">{data[name].name}</span>
+                  </div>
+                  <div>
+                    <span className="ri-delete-bin-7-line font-20" style={{ color: "var(--color-error-600)" }}
+                      onClick={onFileRemove}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          onFileRemove();
+                        }
+                      }}></span>
+                  </div>
+                </div>
+
+
+                :
+                <div className="d-flex align-center" style={{ gap: "var(--space-10)" }}>
+                  <span className="ri-upload-line btn-lite-blue font-20"></span>
+                  <span className="font-14 font-weight-500 btn-lite-blue">{props.placeholder ? props.placeholder : "Choose Kubeconfig File"}</span>
+                </div>
+              }
+
+
+              <input
+                className="main-file-input"
+                id="file-upload"
+                type="file"
+                name={name}
+                onChange={onChangeHandler}
+              />
+              <div className="drag-text">
+
+              </div>
+              {/* {data[name] ?
+                <>
+                  {data[name].name ?
+                    <div onClick={props.onFileSelect ? props.onFileSelect : () => { }} className="image-upload-chip-parent">
+                      <div className="image-upload-chip">
+                        <p>{data[name].name}</p>
+                      </div>
+                    </div>
+                    :
+                    <>
+                      <div className="image-upload-chip-parent">
+                        {(data[name]).map((element, i) => (
+                          <div className="image-upload-chip">
+                            <p onClick={() => { onFileSelect(i) }}>{element.name} </p><button className="transparent-btn" onClick={() => onFileRemove(i)}><i className="ri-close-line" ></i></button>
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  }
+                </> : null
+              } */}
+            </div>
+          </div>
+        );
+      case ("new-file-upload"):
+        function fileUploadClickNew(e) {
+          let fileInput = document.getElementById("file-upload");
+          fileInput.click();
+        }
+        return (
+          <div style={{ border: 'var(--space-1) solid var(--color-tertiary-500)', width: '100%' }} className="input-file-wraper"
+            onClick={data[name] && data[name].name ? () => { } : fileUploadClickNew}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                if (!(data[name] && data[name].name)) {
+                  fileUploadClickNew();
+                }
+              }
+            }}
+          >
+            {data[name] && data[name].name ?
+
+              <div style={{ gap: "var(--space-30)" }} className="d-flex space-between align-center width-full">
+                <div className="d-flex align-center" style={{ gap: "var(--space-10)" }}>
+                  <span className="ri-file-2-line font-20 color-icon-secondary"></span>
+                  <span className="font-14 color-icon-secondary font-weight-500">{data[name].name}</span>
+                </div>
+                <div>
+                  <span className="ri-delete-bin-7-line font-20" style={{ color: "var(--color-error-600)" }} onClick={onFileRemove}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+
+                        onFileRemove();
+
+                      }
+                    }}></span>
+                </div>
+              </div>
+
+
+              :
+              <div className="d-flex align-center" style={{ gap: "var(--space-10)" }}>
+                <span className="ri-upload-line btn-lite-blue font-20"></span>
+                <span className="font-14 font-weight-500 btn-lite-blue">{props.placeholder ? props.placeholder : "Upload File"}</span>
+              </div>
+            }
+
+
+            <input
+              className="main-file-input"
+              id="file-upload"
+              type="file"
+              name={name}
+              onChange={onChangeHandler}
+            />
+            <div className="drag-text">
+
+            </div>
+          </div>
+        );
+      case ("multi-file-upload"):
+        return (
+          <div className="multi-file-upload">
+            <div
+              className="image-upload-wrap"
+              style={{ minHeight: 'var(--space-86)', height: 'auto', padding: 'var(--space-16)', border: error[name] ? 'var(--space-1) dashed red' : 'var(--space-1) dashed #d1d5db', borderRadius: 'var(--radius-8)', backgroundColor: error[name] ? '#fef2f2' : '#fafbfc', display: 'flex', flexDirection: 'column', justifyContent: 'center', position: 'relative', cursor: 'pointer' }}
+              onClick={() => fileInputRef.current && fileInputRef.current.click()}
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                const droppedFiles = e.dataTransfer.files;
+                if (droppedFiles.length > 0) {
+                  Array.from(droppedFiles).forEach(file => {
+                    const syntheticEvent = {
+                      target: { files: [file], name: name }
+                    };
+                    onChangeHandler(syntheticEvent);
+                  });
+                }
+              }}
+            >
+              <input
+                ref={fileInputRef}
+                className="file-upload-input"
+                type="file"
+                name={name}
+                onChange={onChangeHandler}
+                multiple
+                style={{ display: 'none' }}
+              />
+              {!(data[name] && (data[name].length > 0 || data[name].name)) && (
+                <div style={{ display: 'flex', alignItems: 'center', pointerEvents: 'none', width: '100%' }}>
+                  <div style={{ width: 'var(--space-48)', height: 'var(--space-48)', borderRadius: 'var(--radius-10)', border: 'var(--space-1) solid var(--color-badge-grey-bg)', backgroundColor: 'var(--color-white)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginRight: 'var(--space-16)', flexShrink: 0, boxShadow: 'var(--space-0) var(--space-1) var(--space-2) rgba(0,0,0,0.05)' }}>
+                    <i className="ri-upload-2-line" style={{ color: 'var(--color-tertiary-500)', fontSize: 'var(--font-24)' }}></i>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column' }}>
+                    <span style={{ fontSize: 'var(--font-13)', color: 'var(--color-primary-900)', fontWeight: 'var(--font-weight-600)'}}>
+                      Drag and Drop file here or <span style={{ color: 'var(--color-tertiary-500)' }}>click here</span> to choose file
+                    </span>
+                    <span style={{ fontSize: 'var(--font-12)', color: 'var(--color-content-tertiary)', marginTop: 'var(--space-2)' }}>
+                      You can Upload Multiple Files
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {data[name] ? (
+                <div style={{ position: 'relative' }}>
+                  {data[name].name ?
+                    <div onKeyDown={() => { }} onClick={(e) => { e.stopPropagation(); if (props.onFileSelect) props.onFileSelect(); }} className="image-upload-chip-parent" tabIndex={0} role="button">
+                      <div className="image-upload-chip">
+                        <p>{data[name].name}</p>
+                      </div>
+                    </div>
+                    :
+                    <div className="image-upload-chip-parent">
+                      {(data[name]).map((element, i) => (
+                        <div className="image-upload-chip" key={i} style={fullWidthFileName ? { width: 'fit-content', maxWidth: '100%' } : {}}>
+                          <span role='button' className={fullWidthFileName ? '' : 'text-ellipsis'} tabIndex={0} onKeyDown={() => { }} onClick={(e) => { e.stopPropagation(); onFileSelect(i); }} style={fullWidthFileName ? { flex: 1, wordBreak: 'break-all' } : {}}>{element.name} </span><button className="transparent-btn" onClick={(e) => { e.stopPropagation(); onFileRemove(i); }}><i className="ri-close-line"></i></button>
+                        </div>
+                      ))}
+                    </div>
+                  }
+                </div>
+              ) : null}
+            </div>
+          </div>
+        );
+      case ("file-support"):
+        return (
+          <div className="file-upload">
+            <div className="image-upload-wrap" style={{ minHeight: '86px', height: 'auto', padding: '16px', border: error && error[name] ? '1px dashed red' : '1px dashed #d1d5db', borderRadius: '8px', backgroundColor: error && error[name] ? '#fef2f2' : '#fafbfc', display: 'flex', flexDirection: 'column', justifyContent: 'center', position: 'relative' }}>
+
+              <input
+                className="file-upload-input"
+                type="file"
+                name={name}
+                onChange={onChangeHandler}
+                accept={props.accept}
+                style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', opacity: 0, cursor: 'pointer', zIndex: 10, maxHeight: 'none' }}
+                onClick={(e) => { e.target.value = null; }}
+              />
+
+              {!(data && data[name] && (data[name].length > 0 || data[name].name)) && (
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', pointerEvents: 'none' }}>
+                    <div style={{ width: '48px', height: '48px', borderRadius: '10px', border: '1px solid #e5e7eb', backgroundColor: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', marginRight: '16px', flexShrink: 0, boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>
+                      <i className="ri-upload-2-line" style={{ color: '#0086FF', fontSize: '24px' }}></i>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column' }}>
+                      <span style={{ fontSize: '13px', color: '#111827', fontWeight: 600 }}>
+                        Drag and Drop file here or <span style={{ color: '#0086FF' }}>click here</span> to choose file
+                      </span>
+                      <span style={{ fontSize: '12px', color: '#6b7280', marginTop: '2px' }}>
+                        {props.fileSupportText || "Upload a single file in YAML format."}
+                      </span>
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: '8px', position: 'relative', zIndex: 11 }}>
+                    {(props.onDownloadClick || props.downloadUrl) && (
+                      <div style={{ position: 'relative', zIndex: 11 }}>
+                        {props.onDownloadClick ? (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              props.onDownloadClick();
+                            }}
+                            className="btn btn-transparent text-anchor-blue font-12"
+                            style={{ textDecoration: "none", padding: "6px 12px", display: "flex", alignItems: "center", cursor: "pointer", border: "1px solid #0086FF", borderRadius: "4px", background: "#fff" }}
+                          >
+                            <span className="ri-download-line mr-5 font-14"></span>
+                            {props.downloadTemplateText || "DOWNLOAD TEMPLATE"}
+                          </button>
+                        ) : (
+                          <a
+                            href={props.downloadUrl}
+                            download
+                            target="_blank"
+                            rel="noreferrer"
+                            onClick={(e) => e.stopPropagation()}
+                            className="btn btn-transparent text-anchor-blue font-12"
+                            style={{ textDecoration: "none", padding: "6px 12px", display: "flex", alignItems: "center", cursor: "pointer", border: "1px solid #0086FF", borderRadius: "4px", background: "#fff" }}
+                          >
+                            <span className="ri-download-line mr-5 font-14"></span>
+                            {props.downloadTemplateText || "DOWNLOAD TEMPLATE"}
+                          </a>
+                        )}
+                      </div>
+                    )}
+                    {props.onViewClick && (
+                      <button
+                        type="button"
+                        onClick={(e) => { e.preventDefault(); e.stopPropagation(); props.onViewClick(); }}
+                        className="btn btn-transparent text-anchor-blue font-12"
+                        style={{ textDecoration: "none", padding: "6px 12px", display: "flex", alignItems: "center", cursor: "pointer", border: "1px solid #d1d5db", borderRadius: "4px", background: "#fff" }}
+                      >
+                        <span className="ri-layout-grid-line mr-5 font-14"></span>
+                        VIEW TEMPLATE
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {data && data[name] ? (
+                <div style={{ zIndex: 11, position: 'relative' }}>
+                  {data[name].name ?
+                    <div className="image-upload-chip-parent" style={{ display: 'flex', width: 'fit-content' }}>
+                      <div className="image-upload-chip" style={{ height: 'auto', padding: '8px 12px', maxWidth: 'none', width: 'fit-content', display: 'flex', alignItems: 'center' }}>
+                        <p
+                          title={data[name].name}
+                          style={{
+                            whiteSpace: 'nowrap',
+                            margin: 0,
+                            lineHeight: '1.4',
+                            flex: '0 0 auto',
+                            width: 'auto',
+                            overflow: 'visible',
+                            maxWidth: '400px',
+                            textOverflow: 'unset'
+                          }}
+                        >
+                          {data[name].name}
+                        </p>
+                        <button
+                          type="button"
+                          className="transparent-btn"
+                          style={{ marginLeft: '12px', cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', background: 'none', border: 'none', padding: 0 }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (props.onFileRemove) props.onFileRemove();
+                          }}
+                        >
+                          <i className="ri-close-line font-18"></i>
+                        </button>
+                      </div>
+                    </div>
+                    :
+                    <div className="image-upload-chip-parent" style={{ display: 'flex', flexWrap: 'wrap', height: 'auto', gap: '8px' }}>
+                      {(data[name]).map((element, i) => (
+                        <div className="image-upload-chip" key={i} style={{ height: 'auto', padding: '8px 12px', display: 'flex', alignItems: 'center', maxWidth: 'none', width: 'fit-content' }}>
+                          <span
+                            role='button'
+                            title={element.name}
+                            style={{ whiteSpace: 'nowrap', lineHeight: '1.4', width: 'auto', overflow: 'visible' }}
+                            onClick={(e) => { e.stopPropagation(); onFileSelect(i); }}
+                          >
+                            {element.name}
+                          </span>
+                          <button
+                            type="button"
+                            className="transparent-btn"
+                            style={{ marginLeft: '12px', cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', background: 'none', border: 'none', padding: 0 }}
+                            onClick={(e) => { e.stopPropagation(); onFileRemove(i); }}
+                          >
+                            <i className="ri-close-line font-18"></i>
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  }
+                </div>
+              ) : null}
+            </div>
+          </div>
+        );
+      case ("file-support-new"):
+        return (
+          <div className="file-upload">
+            <div className="image-upload-wrap" style={{ minHeight: '86px', height: 'auto', padding: '16px', border: error && error[name] ? '1px dashed red' : '1px dashed #d1d5db', borderRadius: '8px', backgroundColor: error && error[name] ? '#fef2f2' : '#fafbfc', display: 'flex', flexDirection: 'column', justifyContent: 'center', position: 'relative' }}>
+
+              <input
+                className="file-upload-input"
+                type="file"
+                name={name}
+                onChange={onChangeHandler}
+                accept={props.accept}
+                style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', opacity: 0, cursor: 'pointer', zIndex: 10, maxHeight: 'none' }}
+                onClick={(e) => { e.target.value = null; }}
+              />
+
+              {!(data && data[name] && (data[name].length > 0 || data[name].name)) && (
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', pointerEvents: 'none' }}>
+                    <div style={{ width: '48px', height: '48px', borderRadius: '10px', border: '1px solid #e5e7eb', backgroundColor: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', marginRight: '16px', flexShrink: 0, boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>
+                      <i className="ri-upload-2-line" style={{ color: '#0086FF', fontSize: '24px' }}></i>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column' }}>
+                      <span style={{ fontSize: '13px', color: '#111827', fontWeight: 600 }}>
+                        Drag and Drop file here or <span style={{ color: '#0086FF' }}>click here</span> to choose file
+                      </span>
+                      <span style={{ fontSize: '12px', color: '#6b7280', marginTop: '2px' }}>
+                        {props.fileSupportText || "Upload a single file."}
+                      </span>
+                    </div>
+                  </div>
+
+                  {props.actionBtns && props.actionBtns.length > 0 && (
+                    <div style={{ display: 'flex', gap: '8px', position: 'relative', zIndex: 11 }}>
+                      {props.actionBtns.map((btn, idx) => {
+                        // If it's a link (href)
+                        if (btn.href) {
+                          return (
+                            <Button
+                              key={idx}
+                              variant="outline"
+                              size="sm"
+                              startIcon={btn.icon}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                window.open(btn.href, '_blank', 'noopener,noreferrer');
+                              }}
+                              style={{ flexShrink: 0, ...btn.style }} // allow overriding if they passed custom styles
+                            >
+                              {btn.label}
+                            </Button>
+                          );
+                        }
+
+                        // Standard button
+                        return (
+                          <Button
+                            key={idx}
+                            variant="outline"
+                            size="sm"
+                            startIcon={btn.icon}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              if (btn.onClick) btn.onClick(e);
+                            }}
+                            style={{ flexShrink: 0, ...btn.style }}
+                          >
+                            {btn.label}
+                          </Button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* File preview and removal logic */}
+              {data && data[name] ? (
+                <div style={{ zIndex: 11, position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+
+                  {/* LEFT SIDE: The Uploaded File Pill */}
+                  {data[name].name ? (
+                    <div className="image-upload-chip-parent" style={{ display: 'flex', width: 'fit-content' }}>
+                      <div className="image-upload-chip" style={{ height: 'auto', padding: '8px 12px', maxWidth: 'none', width: 'fit-content', display: 'flex', alignItems: 'center' }}>
+                        <p
+                          title={data[name].name}
+                          style={{ whiteSpace: 'nowrap', margin: 0, lineHeight: '1.4', flex: '0 0 auto', width: 'auto', overflow: 'visible', maxWidth: '400px', textOverflow: 'unset' }}
+                        >
+                          {data[name].name}
+                        </p>
+                        <button
+                          type="button"
+                          className="transparent-btn"
+                          style={{ marginLeft: '12px', cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', background: 'none', border: 'none', padding: 0 }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (props.onFileRemove) props.onFileRemove();
+                          }}
+                        >
+                          <i className="ri-close-line font-18"></i>
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="image-upload-chip-parent" style={{ display: 'flex', flexWrap: 'wrap', height: 'auto', gap: '8px' }}>
+                      {(data[name]).map((element, i) => (
+                        <div className="image-upload-chip" key={i} style={{ height: 'auto', padding: '8px 12px', display: 'flex', alignItems: 'center', maxWidth: 'none', width: 'fit-content' }}>
+                          <span
+                            role='button'
+                            title={element.name}
+                            style={{ whiteSpace: 'nowrap', lineHeight: '1.4', width: 'auto', overflow: 'visible' }}
+                            onClick={(e) => { e.stopPropagation(); }}
+                          >
+                            {element.name}
+                          </span>
+                          <button
+                            type="button"
+                            className="transparent-btn"
+                            style={{ marginLeft: '12px', cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', background: 'none', border: 'none', padding: 0 }}
+                            onClick={(e) => { e.stopPropagation(); }}
+                          >
+                            <i className="ri-close-line font-18"></i>
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* RIGHT SIDE: The Preview Button using Custom Component */}
+                  {props.onFilePreview && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      startIcon="ri-eye-line"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        props.onFilePreview();
+                      }}
+                      style={{ flexShrink: 0, ...props.previewBtnStyle }}
+                    >
+                      PREVIEW
+                    </Button>
+                  )}
+
+                </div>
+              ) : null}
+            </div>
+          </div>
+        );
+      case ("number"):
+        return (
+          <input
+            type="number"
+            value={data[name]}
+            name={name}
+            placeholder={placeholder}
+            min={min}
+            max={max}
+            disabled={onChangeHandler ? false : true}
+            onChange={onChangeHandler}
+            onKeyPress={varient == "handle-keys" ? props.onKeyPress : () => { }}
+            onFocus={props.onFocus}
+            maxLength={maxLength}
+            data-testid={resolvedTestId}
+          />
+        );
+      case ("password"):
+        return (
+          <Box sx={{
+            position: 'relative',
+            '& .field-icon': {
+              position: 'absolute',
+              right: 'var(--space-10)',
+              top: 'var(--space-7)',
+              float: 'none',
+              margin: 'var(--space-0)',
+              '&:hover': {
+                cursor: 'pointer'
+              }
+            }
+          }}>
+            <input
+              type={state.showPassword ? "text" : "password"}
+              className={!error[name] || error[name].length == 0 ? "" : "error"}
+              name={name}
+              placeholder={placeholder}
+              value={value}
+              onChange={onChangeHandler}
+              disabled={onChangeHandler ? false : true}
+              autoComplete="off"
+              data-testid={resolvedTestId}
+            />
+            {
+              input_variant === "toggle_off" ?
+                <></> :
+                <span className="field-icon" onKeyDown={() => { }} onClick={togglePassword} tabIndex={0} role="button">
+                  {
+                    state.showPassword ?
+                      <i className="ri-eye-line" style={{ color: 'var(--color-grey-300)', fontSize: 'var(--font-18)' }} /> :
+                      < i className="ri-eye-off-line" style={{ color: 'var(--color-grey-300)', fontSize: 'var(--font-18)' }} />
+                  }
+                </span>
+            }
+          </Box>
+        );
+      case ("hook-commands"):
+        return (
+          <div style={{ height: 'var(--space-60)', display: 'flex' }}>
+            <input
+              type={state.ishookCommandsVisible ? "text" : "password"}
+              className={!error[name] || error[name].length == 0 ? "" : "error"}
+              name={name}
+              placeholder={placeholder}
+              value={value}
+              onChange={onChangeHandler}
+              disabled={onChangeHandler ? false : true}
+              data-testid={resolvedTestId}
+            />
+            <span style={{ position: 'relative', left: 'calc(var(--space-45) * -1)', top: 'var(--space-19)' }} onKeyDown={() => { }} onClick={() => { setState((prevState => ({ ...prevState, ishookCommandsVisible: !prevState.ishookCommandsVisible }))) }} tabIndex={0} role="button">
+
+              {state.ishookCommandsVisible ?
+
+                <i className="ri-eye-line" style={{ color: 'var(--color-grey-300)', fontSize: 'var(--font-20)' }} /> :
+                < i className="ri-eye-off-line" style={{ color: 'var(--color-grey-300)', fontSize: 'var(--font-20)' }} />
+
+              }
+            </span>
+          </div>
+        );
+      case ("switch"):
+        return (
+          <>
+            <div className={varient == "aws-ingress" ? "" : borderBottom ? 'card-header border-bottom' : 'card-header'} style={varient == "child-build" ?
+              {
+                background: "transparent",
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "flex-start",
+                gap: "var(--space-10)",
+                borderBottom: "none",
+                padding: props.padding ? props.padding : "var(--space-10)"
+              } :
+              varient == "db-management" ?
+                {
+                  background: "transparent",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "var(--space-10)",
+                  borderBottom: "none",
+                  padding: "0 !important",
+                  justifyContent: "flex-start"
+                }
+                :
+                varient == "aws-ingress" ?
+                  {
+                    background: "var(--color-white)",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "var(--space-10)",
+                    borderBottom: "none",
+                    padding: "0 !important",
+                    height: "var(--space-50)",
+                    backgroundColor: "none"
+                  }
+                  :
+                  {
+                    background: "transparent",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "var(--space-10)",
+                    borderBottom: "none",
+                    padding: props.padding ? props.padding : "var(--space-10)"
+                  }}
+            >
+              <div className='heading font-family-v1 font-weight-500 font-14 color-value'>
+                {label}<span style={mandatorySign ? { color: 'var(--color-error-500)' } : { display: 'none' }}>*</span>
+                {info ?
+                  <>
+                    <Tooltip TransitionComponent={Zoom} title={info ? info : jiraOperationInfo} style={{ marginLeft: "var(--space-4)" }} placement="right" arrow slotProps={{ tooltip: { style: { maxWidth: props.tooltipMaxWidth || 300 } } }}>
+                      <i className="ri-information-line"></i>
+                    </Tooltip>
+                  </>
+                  : ""}
+              </div>
+
+              <label className="switch">
+                <input className="switch-input" name={name} checked={data[name]} onChange={onChangeHandler} type="checkbox" />
+                <span className="switch-label" style={{ fontSize: "var(--font-13)" }} data-on="Yes" data-off="No"></span>
+                <span className="switch-handle"></span>
+              </label>
+            </div>
+            {
+              error[name] && error[name].length > 0 ?
+                <div className="error-message">{error[name]}</div>
+                : null
+            }
+            {
+              enabledComponent ?
+                <>
+                  {data[name] ? enabledComponent :
+                    disabledComponent ? disabledComponent : null}
+                </> : null
+            }
+
+          </>
+
+        );
+      case ("enabled-disabled-switch"):
+        return (
+          <>
+            <div className={borderBottom ? 'card-header border-bottom' : 'card-header'} style={inputCase ? { width: "var(--space-220)" } : {}}>
+              <div className='heading'>
+                {label}<span style={mandatorySign ? { color: 'var(--color-error-500)' } : { display: 'none' }}>*</span>
+              </div>
+
+              <label className="switch ed-switch">
+                <input className="switch-input" name={name} checked={data[name]} onChange={onChangeHandler} type="checkbox" />
+                <span className="switch-label width-fix" data-on="Enabled" data-off="Disabled"></span>
+                <span className="switch-handle switch-handle-fix"></span>
+              </label>
+            </div>
+            {
+              error[name] && error[name].length > 0 ?
+                <div className="error-message">{error[name]}</div>
+                : null
+            }
+            {
+              enabledComponent ?
+                <>
+                  {data[name] ? enabledComponent :
+                    disabledComponent ? disabledComponent : null}
+                </> : null
+            }
+
+          </>
+
+        );
+      case ("only-switch"):
+        console.log(name, data[name], "sdnbshdbchjsdbc")
+        return (
+          <>
+            <>
+              {/* <div className='heading'>
+                {label}<span style={mandatorySign ? { color: 'var(--color-error-500)' } : { display: 'none' }}>*</span>
+              </div> */}
+
+              <label className="switch">
+                <input className="switch-input" name={name} checked={data[name]} onChange={onChangeHandler} type="checkbox" />
+                <span className="switch-label" data-on="Yes" data-off="No"></span>
+                <span className="switch-handle"></span>
+              </label>
+            </>
+            {
+              error[name] && error[name].length > 0 ?
+                <div className="error-message">{error[name]}</div>
+                : null
+            }
+            {
+              enabledComponent ?
+                <>
+                  {data[name] ? enabledComponent :
+                    disabledComponent ? disabledComponent : null}
+                </> : null
+            }
+
+          </>
+
+        );
+      case ("only-switch-without-label"):
+        return (
+          <>
+            <>
+              {/* <div className='heading'>
+                  {label}<span style={mandatorySign ? { color: 'var(--color-error-500)' } : { display: 'none' }}>*</span>
+                </div> */}
+
+              <label className="switch">
+                <input className="switch-input" name={name} checked={data[name]} onChange={onChangeHandler} type="checkbox" />
+                <span className="switch-label" data-on="Yes" data-off="No"></span>
+                <span className="switch-handle"></span>
+              </label>
+            </>
+            {
+              error[name] && error[name].length > 0 ?
+                <div className="error-message">{error[name]}</div>
+                : null
+            }
+            {
+              enabledComponent ?
+                <>
+                  {data[name] ? enabledComponent :
+                    disabledComponent ? disabledComponent : null}
+                </> : null
+            }
+
+          </>
+
+        );
+      case ("true-false-switch"):
+        return (
+          <>
+            <label className="switch">
+              <input className="switch-input" name={name} checked={data[name]} onChange={onChangeHandler} type="checkbox" />
+              <span className="switch-label" data-on="Yes" data-off="No"></span>
+              <span className="switch-handle"></span>
+            </label>
+
+            {
+              error[name] && error[name].length > 0 ?
+                <div className="error-message">{error[name]}</div>
+                : null
+            }
+            {
+              enabledComponent ?
+                <>
+                  {data[name] ? enabledComponent :
+                    disabledComponent ? disabledComponent : null}
+                </> : null
+            }
+
+          </>
+
+        );
+      case ("active-inactive-switch"):
+        // console.log('data:', data, name, data[name]);
+        return (
+          <>
+
+            <label className="switch">
+              <input className="switch-input" name={name} checked={data[name]} onChange={onChangeHandler} type="checkbox" />
+              <span className="switch-label" data-on="Active" data-off="Inactive"></span>
+              <span className="switch-handle"></span>
+            </label>
+
+            {
+              error[name] && error[name].length > 0 ?
+                <div className="error-message">{error[name]}</div>
+                : null
+            }
+            {
+              enabledComponent ?
+                <>
+                  {data[name] ? enabledComponent :
+                    disabledComponent ? disabledComponent : null}
+                </> : null
+            }
+          </>
+        );
+      case ("slider"):
+        function changeValue(type) {
+          onChangeHandler({
+            target: {
+              type: "text",
+              name: name,
+              value: type == "increase" ? data[name] + 1 : data[name] - 1,
+            }
+          });
+        }
+        return (
+          <div className="d-flex align-center space-between slider-controller" >
+            {
+              varient == "divison" ?
+                <Slider
+                  name={name}
+                  style={{ width: '80%!important' }}
+                  sx={{
+                    '& .MuiSlider-track': {
+                      border: 'none',
+                    },
+                  }}
+                  value={data[(name + "_divison")]}
+                  onChange={onChangeHandler}
+                  valueLabelDisplay={valueLabel == "on" ? "on" : "off"}
+                  max={max}
+                  min={min}
+                />
+                :
+                <Slider
+                  name={name}
+                  style={{ width: '80%!important' }}
+                  sx={{
+                    '& .MuiSlider-track': {
+                      border: 'none',
+                    },
+                  }}
+                  value={data[name]}
+                  onChange={onChangeHandler}
+                  valueLabelDisplay={valueLabel == "on" ? "on" : valueLabel == "auto" ? "auto" : "off"}
+                  max={max}
+                  min={min}
+                />
+            }
+            <div className="input-with-btn">
+              <div className="change-value-btn">
+                <span onKeyDown={() => { }} onClick={() => changeValue("increase")} className="ri-arrow-up-s-line" tabIndex={0} role="button"></span>
+                <span onKeyDown={() => { }} onClick={changeValue} className="ri-arrow-down-s-line" tabIndex={0} role="button"></span>
+              </div>
+              <input
+                type="text"
+                name={name}
+                className="range-slider-input"
+                placeholder={placeholder}
+                value={data[name]}
+                onChange={onChangeHandler}
+                max={max}
+                min={min}
+
+              />
+            </div>
+
+          </div>
+        );
+      case ("checkbox"):
+        return <CheckboxList disabled={!onChangeHandler} listError={listError} data={data} name={name} onTextClick={onTextClick} list={list} selected_checkboxes={name == "BP_VERSIONING_APPROVAL_BP_KIND_LIST" || name == "SNOW_MANDATORY_FIELDS" ? getBpSelectedList(data[name]) : data[name]} varient={props.varient} label={props.label} onChangeHandler={onChangeHandler} text={extraText} />
+      case ("checkbox-list"):
+        return <ChipCheckboxList name={name} list={list} selected_checkboxes={data[name]} variant={props.variant} label={props.label} onChangeHandler={onChangeHandler} />
+      case ("tagged-input"):
+        return <TagInput name={name} placeholder={placeholder} tag_list={data[name]} onChangeHandler={onChangeHandler} maxLength={maxLength} varient={varient} />
+      case "auto-complete-dropdown":
+        return (<AutoCompleteDropdown
+          testId={resolvedTestId}
+          style={props.style}
+          label={label}
+          height={props.height}
+          name={name}
+          id={props.id}
+          freeSolo={props.freeSolo}
+          default_css={default_css}
+          getOptionLabel={props.getOptionLabel}
+          value={data[name]}
+          placeholder={placeholder}
+          className={!error?.[name] || error[name]?.length == 0 ? "textarea" : "textarea error"}
+          list={list}
+          disabled={onChangeHandler ? false : true}
+          varient={varient}
+          onChangeHandler={onChangeHandler} />)
+      case "auto-complete-dropdown-freesolo-variant":
+        return (<AutoCompleteDropdownFreeSoloVariant
+          testId={resolvedTestId}
+          style={props.style}
+          label={label}
+          height={props.height}
+          name={name}
+          id={props.id}
+          freeSolo={props.freeSolo}
+          default_css={default_css}
+          getOptionLabel={props.getOptionLabel}
+          value={data[name]}
+          placeholder={placeholder}
+          className={!error?.[name] || error[name]?.length == 0 ? "textarea" : "textarea error"}
+          list={list}
+          disabled={onChangeHandler ? false : true}
+          onChangeHandler={onChangeHandler} />)
+      case "auto-complete-freesolo-v2":
+        return (
+          <AutoCompeleteDropdownV2
+            testId={resolvedTestId}
+            list={list}
+            hyponInAutoDropdown={hyponInAutoDropdown}
+            setting={props.setting}
+            onTextClick={props.onTextClick}
+            selectedValues={data[name]}
+            value={data[name]}
+            count={props.count}
+            allowNewItems={allowNewItems}
+            noItemsMessage={noItemsMessage}
+            placeholder={placeholder}
+            disable={props.disable}
+            onChange={props.disable ? () => {} :
+              (newValue) => {
+
+                onChangeHandler({
+                  target: {
+                    name: name,
+                    value: newValue,
+                  }
+                });
+              }}
+          />
+        )
+      case "auto-complete-freesolo":
+        return (
+          // <div className="auto-complete-dropdown auto-complete-dropdown-42 auto-complete-dropdown-ticketing">
+          <AutoCompleteWithMultipleSelect
+            list={list} // Make sure this is in the correct format
+            selectedValues={data[name]} // This should be an array of selected values
+            value={data[name]}
+            allowNewItems={allowNewItems}
+            noItemsMessage={noItemsMessage}
+            placeholder={placeholder}
+            onChange={(newValue) => {
+              // Handle the change, updating your component's state as necessary
+              onChangeHandler({
+                target: {
+                  name: name,
+                  value: newValue, // newValue should be the updated array of selected items
+                }
+              });
+            }}
+          />
+          // </div>
+        )
+      case "multiple-selected-dropdown":
+        return (<MultipleSelectDropdown
+          label={label}
+          name={name}
+          value={data[name]}
+          id={props.id}
+          placeholder={placeholder}
+          options={list}
+          selectedOptions={data[name]}
+          onChangeHandler={onChangeHandler}
+        />)
+      case "round-checkbox":
+        function returnCheckboxValue(e) {
+          onChangeHandler({
+            target: {
+              name: name,
+              value: e.target.checked,
+            }
+          });
+        }
+        return (
+          <div className='round-checkbox d-flex align-center justify-center'>
+
+            <input type="checkbox" onChange={returnCheckboxValue} checked={data[name]} name={name} id={name} />
+            <label data-testid={resolvedTestId} htmlFor={name}> {props.label}</label>
+          </div>
+
+        );
+      case "simple-checkbox":
+        function returnValue(e) {
+          onChangeHandler({
+            target: {
+              name: name,
+              value: e.target.checked,
+            }
+          });
+        }
+        return (
+          <Checkbox
+            checked={data[name]}
+            onChange={returnValue}
+            // for="simple-checkbox"
+            name={name} />
+        );
+      case "simple-checkbox-new-ui":
+        function returnValueNewUI(e) {
+          onChangeHandler({
+            target: {
+              name: name,
+              value: e.target.checked,
+            }
+          });
+        }
+        return (
+          <CustomizedCheckbox
+            checked={data[name]}
+            returnValue={returnValueNewUI}
+            name={name} />
+        );
+      case ("dual-input"):
+        return (<>
+          {
+            !isDuelInputDropdown ?
+              <input
+                className={!error[name] || error[name].length == 0 ? "" : "error"}
+                name={name}
+                placeholder={placeholder}
+                value={value}
+                onKeyDown={onKeyDown}
+                onChange={onChangeHandler}
+                disabled={onChangeHandler ? false : true}
+                onKeyPress={varient == "handle-keys" ? props.onKeyPress : () => { }}
+                maxLength={maxLength}
+              /> :
+
+              isLinux ?
+                <CustomSelect
+                  maxWidth={maxWidth}
+                  style={style}
+                  name={name}
+                  data={data}
+                  error={error}
+                  onChangeHandler={onChangeHandler}
+                  remove_default_value={remove_default_value}
+                  select_default_value={select_default_value}
+                  list={list}
+                />
+
+                :
+                <select name={name} value={data[name]} className={!error[name] || error[name].length == 0 ? "select" : "select error"} onChange={onChangeHandler} disabled={onChangeHandler ? false : true}>
+                  <option value="">Please Select</option>
+                  {list && list.map((option) => (
+                    <option value={option.id} selected={option.selected == "selected"}>{option.label}</option>
+                  ))}
+                </select>
+          }
+
+        </>
+
+        );
+      case ("date"):
+        return (
+          <input
+            type="date"
+            className={!error[name] || error[name].length == 0 ? "" : "error"}
+            name={name}
+            placeholder={placeholder}
+            value={value}
+            onKeyDown={onKeyDown}
+            onChange={onChangeHandler}
+            disabled={onChangeHandler ? false : true}
+            onKeyPress={varient == "handle-keys" ? props.onKeyPress : () => { }}
+            min={min}
+            max={max}
+            data-testid={resolvedTestId}
+          />
+        );
+      case ("time"):
+        return (
+          <input
+            type="time"
+            className={!error[name] || error[name].length == 0 ? "" : "error"}
+            name={name}
+            placeholder={placeholder}
+            value={value}
+            onKeyDown={onKeyDown}
+            onChange={onChangeHandler}
+            disabled={onChangeHandler ? false : true}
+            onKeyPress={varient == "handle-keys" ? props.onKeyPress : () => { }}
+            data-testid={resolvedTestId}
+          />
+        );
+      case ("date-time"):
+        return (
+          <input
+            type="datetime-local"
+            step="1"
+            className={!error[name] || error[name].length == 0 ? "" : "error"}
+            name={name}
+            placeholder={placeholder}
+            value={value}
+            onKeyDown={onKeyDown}
+            onChange={onChangeHandler}
+            disabled={onChangeHandler ? false : true}
+            onKeyPress={varient == "handle-keys" ? props.onKeyPress : () => { }}
+            data-testid={resolvedTestId}
+          />
+        )
+      case ("custom-radio"):
+        let CustomRadioComponent = props.customRadio ? props.customRadio : Radio;
+        let CustomRadioLabel = props.customLabel ? props.customLabel : null;
+        return (
+          <RadioGroup row className="form-class" data-testid={resolvedTestId}>
+            {
+              list.map((radio) => (
+
+                <FormControlLabel lg={12 / list.length} control={<CustomRadioComponent className="radio-controller" name={name} radioGroup={radioGroup} checked={data[name] == radio.value} value={radio.value} onChange={onChangeHandler} disabled={onChangeHandler ? false : true} />} label={CustomRadioLabel ? <CustomRadioLabel label={radio.label} info={radio.info} /> : radio.label} />
+
+              ))
+            }
+          </RadioGroup>
+        );
+      case ("variable-and-text"):
+        return (
+          <VariableAndTextInput
+            style={props.style}
+            list={list}
+            name={name}
+            value={data[name]}
+            disabled={onChangeHandler ? false : true}
+            onChangeHandler={onChangeHandler}
+            className={!error?.[name] || error[name]?.length == 0 ? "textarea" : "textarea error"}
+          />
+        )
+      default:
+        return null;
+    }
+  }
+
+  function getBpSelectedList(data) {
+    let selected_data = data;
+    if (selected_data && typeof (selected_data) == "string") {
+      let updatedData = JSON.parse(selected_data);
+      return updatedData;
+    }
+    if (selected_data && typeof (selected_data) == "object") {
+      return data;
+    }
+  }
+
+  return (
+    <>
+
+      {type === 'dual-input' ?
+
+        <>
+          {
+            label &&
+
+            <div className="d-flex space-between align-center" >
+              <span>
+                <label className={"input-label"}>
+                  {label}
+                  <span style={mandatorySign ? { color: 'var(--color-error-500)' } : { display: 'none' }}>*</span>
+                  {info &&
+                    <Tooltip TransitionComponent={Zoom} title={info ? info : jiraOperationInfo} style={{ marginLeft: "var(--space-4)" }} placement="right">
+                      <i className="ri-information-line"></i>
+                    </Tooltip>
+                  }
+
+                </label>
+                <span className={classes.hindText + " input-hint-label"}>{subHeading}</span>
+              </span>
+              <button className="btn btn-clear mr-0 btn-link  text-anchor-blue pr-0" onClick={toggleDualInput}>{isDuelInputDropdown ? "Provide Custom Value" : "Choose Value"}</button>
+            </div>
+
+          }
+          {getFieldBasedOnType()}
+          {
+            error[name] && error[name].length > 0 ?
+              typeof (error[name]) == "string" ?
+                <Tooltip title={error[name]}>
+                  <p className="text-ellipsis-300 error-message">{error[name]}</p>
+                </Tooltip>
+                :
+                <div className="error-message">
+                  {
+                    error[name].map((error2, key) => (
+                      error2 + (key + 1 != error[name].length ? ", " : "")
+                    ))
+                  }
+                </div>
+              : null
+          }
+        </> :
+        type === "switch" ?
+          <>
+            {getFieldBasedOnType()}
+          </>
+
+          :
+          type === "simple-checkbox" ?
+            <div className="input-component d-flex align-center">
+              {getFieldBasedOnType()}
+              {
+                label && type !== "switch" ?
+
+                  <div className="d-flex space-between">
+                    <span className="d-flex space-between align-center width-100">
+                      <label className={classes.InputLabel}>
+                        {label}
+                        <span style={mandatorySign ? { color: 'var(--color-error-500)' } : { display: 'none' }}>*</span>
+                      </label>
+                      <span className={classes.hindText}>{subHeading}</span>
+                    </span>
+                    {props.extraDiv ? props.extraDiv : null}
+
+                  </div>
+
+
+                  : null
+              }
+              {/* {getFieldBasedOnType()} */}
+              {
+                error[name] && error[name].length > 0 ?
+                  typeof (error[name]) == "string" ?
+                    <div className="error-message">{error[name]}</div> :
+                    <div className="error-message">
+                      {
+                        error[name].map((error2, key) => (
+                          error2 + (key + 1 != error[name].length ? ", " : "")
+                        ))
+                      }
+                    </div>
+                  : null
+              }
+            </div>
+            :
+            <div className="input-component d-flex f-direction-column" style={{ gap: props.gap ? props.gap : "var(--space-5)" }}>
+              {
+                label && type !== "switch" && inputCase != "cache_switch" ?
+
+                  <div className="d-flex space-between ">
+                    {
+                      type !== "round-checkbox" &&
+                      <span className={"d-flex space-between align-center"} style={{ color: "var(--color-content-primary)", fontWeight: "var(--font-weight-500)", fontSize: "var(--font-14)", lineHeight: 'var(--line-height-17-07)', gap: "var(--space-5)" }}>
+                        <label className={jiraOperation || info ? classes.InputLabel + " " + classes.AlignLabel + " " + " label-controller" : classes.InputLabel + " " + " label-controller"} >
+                          {label}
+                          <span style={mandatorySign ? { color: 'var(--color-error-500)' } : { display: 'none' }}>*</span>
+
+                          {jiraOperation || info ?
+                            <>
+                              <Tooltip TransitionComponent={Zoom} title={info ? info : jiraOperationInfo} style={{ marginLeft: "var(--space-4)" }} placement="right">
+                                <i className="ri-information-line font-14 color-secondary"></i>
+                              </Tooltip>
+                              {
+                                props.varient == "database" && <span className="Y6 " style={{ backgroundColor: "rgb(0, 134, 255)" }}>coming soon</span>
+                              }
+                            </>
+                            : ""}
+                          {jira_status ?
+                            <Tooltip TransitionComponent={Zoom} title={"This is the list of valid Jira statuses"} style={{ marginLeft: "var(--space-4)" }} placement="right">
+                              <i className="ri-information-line"></i>
+                            </Tooltip>
+                            : ""}
+                        </label>
+                      </span>
+                    }
+
+                    {props.extraDiv ? props.extraDiv : null}
+
+                  </div>
+
+
+                  : null
+              }
+              {getFieldBasedOnType()}
+              {
+                paramsHeading &&
+                <span className={"subheading-input-label" + " " + " sub-heading-controller"}>{paramsHeading}</span>
+              }
+              {
+                error[name] && error[name].length > 0 ?
+                  typeof (error[name]) == "string" ?
+                    <Tooltip title={error[name]}>
+                      <p className="text-ellipsis-340 error-message">{error[name]}</p>
+                    </Tooltip>
+                    :
+                    <div className="error-message">
+                      {
+                        error[name].map((error2, key) => (
+                          error2 + (key + 1 != error[name].length ? ", " : "")
+                        ))
+                      }
+                    </div>
+                  : null
+              }
+            </div>
+
+      }
+    </>
+  );
+}
+
+Input.propTypes = {
+  ...PropTypes.objectOf(PropTypes.any),
+}
