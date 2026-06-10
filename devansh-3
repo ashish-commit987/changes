@@ -1,0 +1,652 @@
+import React, { useState, useEffect } from 'react';
+import PropTypes from 'prop-types';
+import { ErrorComponent } from '../../utils/Error';
+import Slide from '@mui/material/Slide';
+import Tooltip from '@mui/material/Tooltip';
+import { getCommonFunctions } from '../../serviceRevamp/add/ci_flow/SourceDetails';
+import FileUpload, { FileUploadDefaultState } from '../../../components/genericComponents/Forms/FileUpload';
+import Button from '../../../components/genericComponents/Button';
+import InvokeApi, { PostData } from '../../../util/apiInvoker';
+import properties from '../../../properties/properties';
+import GenerateURL from '../../../util/APIUrlProvider';
+import { useNavigate } from 'react-router-dom';
+import { useCustomSnackbar } from '../../../contexts/SnackbarContext';
+import { showErrorHandlerUpdated } from '../../../util/util';
+import { useDocumentTitle } from '../../../hooks/useDocumentTitle';
+import GenericSkeleton from '../../../components/genericComponents/Skeletons/GenericSkeleton';
+import PageHeader from '../../../components/PageHeader';
+import NewChip from '../../../components/newChip/NewChip';
+import { Link } from 'react-router-dom';
+
+
+const Transition = React.forwardRef(function Transition(props, ref) {
+    return <Slide direction="up" ref={ref} {...props} />;
+})
+
+const GRID_COLS = '18% 14% 10% 10% 10% 16% 14% 12%';
+
+const TABLE_COLUMNS = [
+    { label: 'Uploaded Via', key: 'user' },
+    { label: 'Uploaded', key: 'uploaded' },
+    { label: 'Users', key: 'users' },
+    { label: 'Imported', key: 'imported' },
+    { label: 'Failed', key: 'failed' },
+    { label: 'File Upload Status', key: 'status' },
+    { label: 'File', key: 'file' }, 
+];
+
+const tableStyles = {
+    card: {
+        border: '1px solid var(--color-badge-grey-bg)',
+        borderRadius: 'var(--radius-8)',
+        overflow: 'hidden',
+    },
+    header: {
+        display: 'grid',
+        gridTemplateColumns: GRID_COLS,
+        alignItems: 'center',
+        padding: 'var(--space-12) var(--space-16)',
+        background: 'var(--color-grey-100)',
+        borderBottom: '1px solid var(--color-badge-grey-bg)',
+        gap: 'var(--space-16)',
+    },
+    headerLabel: {
+        fontWeight: 'var(--font-weight-600)',
+        fontSize: 'var(--font-12)',
+        fontFamily: 'Montserrat, sans-serif',
+        color: 'var(--color-content-primary)',
+        whiteSpace: 'nowrap',
+    },
+    row: {
+        display: 'grid',
+        gridTemplateColumns: GRID_COLS,
+        alignItems: 'center',
+        padding: 'var(--space-14) var(--space-16)',
+        borderBottom: '1px solid var(--color-badge-grey-bg)',
+        gap: 'var(--space-16)',
+        backgroundColor: 'var(--color-white)',
+    },
+    cellText: {
+        fontSize: 'var(--font-12)',
+        color: 'var(--color-content-primary)',
+        whiteSpace: 'nowrap',
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
+    },
+    cellSecondary: {
+        fontSize: 'var(--font-12)',
+        color: 'var(--color-grey-600)',
+        whiteSpace: 'nowrap',
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
+    },
+};
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+/**
+ * Returns a relative time string like "4 days ago", "2 hours ago", etc.
+ */
+function getRelativeTime(isoString) {
+    if (!isoString) return '—';
+    const now = new Date();
+    const past = new Date(isoString);
+    const diffMs = now - past;
+    const diffSec = Math.floor(diffMs / 1000);
+    const diffMin = Math.floor(diffSec / 60);
+    const diffHr = Math.floor(diffMin / 60);
+    const diffDay = Math.floor(diffHr / 24);
+    const diffWk = Math.floor(diffDay / 7);
+    const diffMo = Math.floor(diffDay / 30);
+    const diffYr = Math.floor(diffDay / 365);
+
+    if (diffSec < 60) return 'just now';
+    if (diffMin < 60) return `${diffMin} minute${diffMin !== 1 ? 's' : ''} ago`;
+    if (diffHr < 24) return `${diffHr} hour${diffHr !== 1 ? 's' : ''} ago`;
+    if (diffDay < 7) return `${diffDay} day${diffDay !== 1 ? 's' : ''} ago`;
+    if (diffWk < 5) return `${diffWk} week${diffWk !== 1 ? 's' : ''} ago`;
+    if (diffMo < 12) return `${diffMo} month${diffMo !== 1 ? 's' : ''} ago`;
+    return `${diffYr} year${diffYr !== 1 ? 's' : ''} ago`;
+}
+
+/**
+ * Formats an ISO string to a readable absolute date+time for the tooltip.
+ */
+function formatAbsolute(isoString) {
+    if (!isoString) return '';
+    const d = new Date(isoString);
+    const date = d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+    const time = d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+    return `${date}, ${time}`;
+}
+
+/**
+ * Parses the description string to extract Users, Imported, Failed counts.
+ * Falls back to 0 for any field not found.
+ *
+ * Expected format examples:
+ *   "Users: 10 Imported: 8 Failed: 2 User imported Successfully"
+ *   "Error in creating policy and user group"
+ */
+function parseDescriptionCounts(description) {
+    const str = description || '';
+    const extract = (key) => {
+        const match = str.match(new RegExp(`${key}\\s*:\\s*(\\d+)`, 'i'));
+        return match ? parseInt(match[1], 10) : 0;
+    };
+    return {
+        users: extract('Users'),
+        imported: extract('Imported'),
+        failed: extract('Failed'),
+    };
+}
+
+function StatusChip({ status }) {
+    const s = (status || '').toUpperCase();
+    if (s === 'SUCCESS') return <NewChip className='font-12' label="Success" shape="standard" size="md" variant="success" />;
+    if (s === 'FAILED') return <NewChip className='font-12' label="Failed" shape="standard" size="md" variant="error" />;
+    if (s === 'RUNNING') return <NewChip className='font-12' label="Running" shape="standard" size="md" variant="warning" />;
+    return <NewChip label={status || '—'} className='font-12' shape="standard" size="md" variant="default" />;
+}
+
+// ─── Skeleton ─────────────────────────────────────────────────────────────────
+function UploadUsersTableSkeleton() {
+    return (
+        <div>
+            <div style={tableStyles.header}>
+                {TABLE_COLUMNS.map((col) => (
+                    <GenericSkeleton
+                        key={col.key}
+                        variant="text"
+                        width="80px"
+                        height="13px"
+                        style={{ borderRadius: 'var(--radius-4)' }}
+                    />
+                ))}
+            </div>
+            {Array.from({ length: 8 }).map((_, i) => (
+                <div key={i} style={tableStyles.row}>
+                    {/* User */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <GenericSkeleton variant="circle" width="28px" height="28px" rootStyle={{ flex: '0 0 28px' }} />
+                        <GenericSkeleton variant="text" width="70px" height="13px" style={{ borderRadius: 'var(--radius-4)' }} />
+                    </div>
+                    {/* Uploaded */}
+                    <GenericSkeleton variant="text" width="80px" height="13px" style={{ borderRadius: 'var(--radius-4)' }} />
+                    {/* Users */}
+                    <GenericSkeleton variant="text" width="30px" height="13px" style={{ borderRadius: 'var(--radius-4)' }} />
+                    {/* Imported */}
+                    <GenericSkeleton variant="text" width="30px" height="13px" style={{ borderRadius: 'var(--radius-4)' }} />
+                    {/* Failed */}
+                    <GenericSkeleton variant="text" width="30px" height="13px" style={{ borderRadius: 'var(--radius-4)' }} />
+                    {/* Status */}
+                    <GenericSkeleton variant="rect" width="64px" height="24px" style={{ borderRadius: 'var(--radius-20)' }} />
+                    {/* File */}
+                    <GenericSkeleton variant="text" width="90px" height="13px" style={{ borderRadius: 'var(--radius-4)' }} />
+                </div>
+            ))}
+        </div>
+    );
+}
+
+// ─── Count Badge ──────────────────────────────────────────────────────────────
+function CountBadge({ label, value, colorVar }) {
+    return (
+        <div style={{
+            display: 'inline-flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            padding: '2px 8px',
+            borderRadius: 'var(--radius-6)',
+            background: 'var(--color-grey-100)',
+            minWidth: 44,
+        }}>
+            <span style={{
+                fontSize: 'var(--font-11)',
+                fontWeight: 'var(--font-weight-700)',
+                color: colorVar || 'var(--color-content-primary)',
+                lineHeight: 1.4,
+            }}>
+                {value}
+            </span>
+            <span style={{
+                fontSize: 'var(--font-10)',
+                color: 'var(--color-grey-600)',
+                lineHeight: 1.2,
+                whiteSpace: 'nowrap',
+            }}>
+                {label}
+            </span>
+        </div>
+    );
+}
+
+// ─── Table row ────────────────────────────────────────────────────────────────
+function ActivityTableRow({ item }) {
+    const uploadedBy = item?.user || '—';
+    const description = item?.description || '—';
+    const createdAt = item?.created_at;
+    const counts = parseDescriptionCounts(item?.description);
+    const activityToken = item?.activity_token;
+    const fileName = item?.entity_detail?.file?.name || null;
+
+    const initials = uploadedBy
+        .split(' ')
+        .slice(0, 2)
+        .map((w) => w[0]?.toUpperCase() || '')
+        .join('');
+
+    const relativeTime = getRelativeTime(createdAt);
+    const absoluteTime = formatAbsolute(createdAt);
+
+    return (
+        <div style={tableStyles.row}>
+
+            {/* User */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-8)', overflow: 'hidden' }}>
+                <div
+                    style={{
+                        flexShrink: 0,
+                        width: 28,
+                        height: 28,
+                        borderRadius: '50%',
+                        background: 'var(--color-primary-100, #e8f0fe)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: 'var(--font-10)',
+                        fontWeight: 'var(--font-weight-700)',
+                        color: 'var(--color-primary-500)',
+                    }}
+                >
+                    {initials}
+                </div>
+                <Tooltip title={uploadedBy} placement="top" arrow>
+                    <span style={tableStyles.cellText}>{uploadedBy}</span>
+                </Tooltip>
+            </div>
+
+            {/* Uploaded (relative time) */}
+            <Tooltip title={absoluteTime} placement="top" arrow>
+                <div style={{ ...tableStyles.cellText, cursor: 'default' }}>
+                    {relativeTime}
+                </div>
+            </Tooltip>
+
+            {/* Users — separate column */}
+            <div style={tableStyles.cellText}>
+                {counts.users}
+            </div>
+
+            {/* Imported — separate column */}
+            <div style={{ fontSize: 'var(--font-12)', color: 'var(--color-success-500, #16a34a)', fontWeight: 'var(--font-weight-600)' }}>
+                {counts.imported}
+            </div>
+
+            {/* Failed — separate column */}
+            <div style={{
+                fontSize: 'var(--font-12)',
+                color: counts.failed > 0 ? 'var(--color-danger-500, #dc2626)' : 'var(--color-content-primary)',
+                fontWeight: 'var(--font-weight-600)',
+            }}>
+                {counts.failed}
+            </div>
+
+            {/* File Upload Status */}
+            <div>
+                <StatusChip status={item?.status} />
+            </div>
+
+            {/* File — last column */}
+            <div style={{ overflow: 'hidden' }}>
+                {activityToken ? (
+                    <Link
+                        to={`/logs?global_task_id=${activityToken}`}
+                        target="_blank"
+                        style={{
+                            fontSize: 'var(--font-12)',
+                            color: 'var(--color-primary-500)',
+                            whiteSpace: 'nowrap',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 'var(--space-4)',
+                            textDecoration: 'underline',
+                            cursor: 'pointer',
+                            fontWeight: 'var(--font-weight-500)',
+                        }}
+                    >
+                        <span className="ri-external-link-line" style={{ fontSize: 'var(--font-12)', flexShrink: 0 }} />
+                        {fileName || 'View Logs'}
+                    </Link>
+                ) : (
+                    <Tooltip title={fileName || '—'} placement="top" arrow>
+                        <span style={tableStyles.cellText}>{fileName || '—'}</span>
+                    </Tooltip>
+                )}
+            </div>
+
+        </div>
+    );
+}
+
+// ─── Main component ───────────────────────────────────────────────────────────
+const UploadUsers = (props) => {
+
+    const inherits = props.inherits ? props.inherits : {}
+    const { showSnackbar } = useCustomSnackbar();
+    const [state, setState] = useState({
+        fileUpload: null,
+        show_upload_tab: false,
+        file_not_selected: false,
+        child_inherits: {
+            fileUpload: {
+                "validateForm": () => { return { valid: true } },
+                "getState": () => { return {} },
+                "getData": () => { return {} }
+            }
+        },
+        errorInUpload: null,
+    })
+    const commonFunctions = getCommonFunctions(state, setState, inherits)
+    useDocumentTitle("Upload  Bulk User Sheet")
+    const navigate = useNavigate();
+
+    useEffect(() => {
+        fetchRecentUploadedFile();
+    }, [])
+
+    useEffect(() => {
+        if (state.show_upload_tab) {
+            setState((prev_state) => ({
+                ...prev_state,
+                fileUpload: { files: [] }
+            }))
+        }
+    }, [state.show_upload_tab])
+
+    function getFileUploadState() {
+        var state_temp = FileUploadDefaultState();
+        if (state.fileUpload) {
+            state.fileUpload.files.forEach(file_name => {
+                if (typeof (file_name) == "string") {
+                    state_temp.form_data.data.files.push({ name: file_name });
+                } else {
+                    state_temp.form_data.data.files.push(file_name);
+                }
+            });
+        }
+        return state_temp;
+    }
+
+    function ValidateAndUploadSheet() {
+        var children_vaidation_result = inherits.validateForm ? inherits.validateForm() : { valid: true }
+        var child_states = inherits.getState ? inherits.getState() : null;
+        var fileupload_data = child_states.fileUpload && child_states.fileUpload.files ? child_states.fileUpload.files : null;
+
+        if (children_vaidation_result.valid) {
+            if (fileupload_data.length > 0) {
+                var final_obj = {
+                    ...final_obj,
+                    content: fileupload_data[0].content,
+                    name: fileupload_data[0].name
+                }
+                var final_arr = [final_obj];
+                var post_url = GenerateURL({}, properties.api.user_list);
+                showSnackbar('info', "Uploading user sheet. This may take a few moments...");
+                PostData(post_url, final_arr, postSuccess, postFail);
+                setState(new_state => ({
+                    ...new_state,
+                    data_post: "SENDING",
+                    file_not_selected: false
+                }))
+            } else {
+                setState(new_state => ({
+                    ...new_state,
+                    file_not_selected: true
+                }))
+            }
+        }
+    }
+
+    function postSuccess(response) {
+        showSnackbar('success', "User sheet uploaded successfully");
+        setState(new_state => ({ ...new_state, data_post: "SUCCESS" }))
+        toggleForm();
+        fetchRecentUploadedFile();
+    }
+
+    function postFail(response) {
+        var error_msg = showErrorHandlerUpdated(response);
+        showSnackbar('error', "Unable to upload users.", error_msg);
+        setState(new_state => ({
+            ...new_state,
+            data_post: "FAILED",
+            password_type_secrets: { error: { name: response.name ? response.name : null } },
+            error_in_save: error_msg
+        }))
+    }
+
+    const fetchRecentUploadedFile = () => {
+        var requestInfo = {
+            endPoint: GenerateURL({}, properties.api.get_activities_details),
+            httpMethod: "GET",
+            httpHeaders: { "Content-Type": "application/json" }
+        }
+        requestInfo.endPoint = requestInfo.endPoint + "?activity_name=user"
+        InvokeApi(requestInfo, handlefetchRecentUploadedFileSuccess, handlefetchRecentUploadedFileFailed);
+        setState(new_state => ({ ...new_state, loading: true }));
+    }
+
+    const handlefetchRecentUploadedFileSuccess = (response) => {
+        setState(new_state => ({
+            ...new_state,
+            loading: false,
+            recent_user_list: response.results,
+            error_msg: null
+        }));
+    }
+
+    const handlefetchRecentUploadedFileFailed = (error) => {
+        setState(new_state => ({ ...new_state, loading: false, error_msg: error }));
+    }
+
+    const toggleForm = () => {
+        setState((prev_state) => ({
+            ...prev_state,
+            show_upload_tab: !prev_state.show_upload_tab,
+        }))
+    }
+
+    function handleClose() {
+        setState({ ...state, data_post: null, errorInUpload: null });
+    }
+
+    const removeValidations = () => {
+        setState({ ...state, file_not_selected: false });
+    }
+
+    function setErrorInCaseUploadFails(error) {
+        const message = error.message ? "Please check the upload file for spaces or null characters" : null
+        setState((new_state) => ({ ...new_state, errorInUpload: message }))
+    }
+
+    return (
+        <div
+            className="pd-20"
+            style={{ backgroundColor: "var(--color-white)", height: '100%' }}
+        >
+            {/* ── Header ── */}
+            <div className="head d-flex align-center space-between mb-20">
+                <PageHeader
+                    heading="Upload Bulk User Sheet"
+                    subHeading="Displaying list of user sheets uploaded in the past"
+                    icon="ri-upload-cloud-2-line"
+                    primaryButton={null}
+                />
+                <div className="btn-group ">
+                    <Tooltip title="Back">
+                        <button className="btn-sq-icon-primary d-flex align-center" onClick={() => navigate("/manage-users")}>
+                            <span className="ri-arrow-left-line "></span>
+                        </button>
+                    </Tooltip>
+                    <Tooltip title="Refresh Page">
+                        <button className="btn-sq-icon-primary d-flex align-center" onClick={fetchRecentUploadedFile}>
+                            <span className="ri-restart-line"></span>
+                        </button>
+                    </Tooltip>
+                    <Tooltip title="Upload User Sheet" >
+                        <button className="btn-sq-icon-primary d-flex align-center" onClick={toggleForm}>
+                            <span className="ri-upload-fill "></span>
+                        </button>
+                    </Tooltip>
+                </div>
+            </div>
+
+            {/* ── Upload panel ── */}
+            {state.show_upload_tab && (
+                <div
+                    className="mb-20"
+                    style={{
+                        border: "1px solid var(--color-border-grey)",
+                        borderRadius: "var(--radius-8)",
+                        overflow: "hidden",
+                        backgroundColor: "var(--color-white)",
+                    }}
+                >
+                    {/* panel header */}
+                    <div style={{
+                        display: "flex", alignItems: "center", justifyContent: "space-between",
+                        padding: "var(--space-12) var(--space-16)",
+                        borderBottom: "1px solid var(--color-border-grey)",
+                        background: "var(--color-grey-100)",
+                    }}>
+                        <div className="d-flex align-center" style={{ gap: "var(--space-8)" }}>
+                            <span className="ri-file-upload-line" style={{ fontSize: "var(--font-16)", color: "var(--color-primary-500)" }} />
+                            <span style={{ fontSize: "var(--font-14)", fontWeight: "var(--font-weight-600)", color: "var(--color-content-primary)" }}>
+                                Upload User Sheet
+                            </span>
+                        </div>
+                        <button
+                            className="btn btn-transparent d-flex align-center justify-center"
+                            onClick={toggleForm}
+                            style={{ width: "var(--space-28)", height: "var(--space-28)", borderRadius: "var(--radius-6)" }}
+                        >
+                            <span className="ri-close-line" style={{ fontSize: "var(--font-18)", color: "var(--color-content-secondary)" }} />
+                        </button>
+                    </div>
+
+                    {/* file upload body */}
+                    <div style={{ padding: "var(--space-16)" }}>
+                        <div className={state.file_not_selected ? "set-error" : ""}>
+                            <FileUpload
+                                inherits={state.child_inherits.fileUpload}
+                                show_file_content={"false"}
+                                varient="single"
+                                hitCallbackFn={removeValidations}
+                                state={state.fileUpload ? state.fileUpload.files ? getFileUploadState() : null : null}
+                                setErrorInCaseUploadFails={setErrorInCaseUploadFails}
+                                fileSupportText="Upload a single file in CSV format."
+                            />
+                            {state.file_not_selected && (
+                                <p className='color-danger font-11' style={{ marginTop: 'var(--space-4)', marginLeft: 'var(--space-10)' }}>This field is mandatory</p>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* panel footer */}
+                    <div style={{
+                        display: "flex", alignItems: "center", justifyContent: "flex-end",
+                        gap: "var(--space-8)", padding: "var(--space-12) var(--space-16)",
+                        borderTop: "1px solid var(--color-border-grey)",
+                        background: "var(--color-grey-100)",
+                    }}>
+                        <button
+                            className="btn btn-outline-grey"
+                            onClick={toggleForm}
+                            style={{ height: "var(--space-36)", borderRadius: "var(--radius-8)", padding: " var(--space-10)", fontSize: "var(--font-12)" }}
+                        >
+                            Cancel
+                        </button>
+                        <Button
+                            className="btn btn-primary"
+                            onClick={ValidateAndUploadSheet}
+                            isLoading={state.data_post === 'SENDING'}
+                            style={{ height: "var(--space-36)", borderRadius: "var(--radius-8)", padding: "var(--space-10)", fontSize: "var(--font-12)", fontWeight: "var(--font-weight-600)" }}
+                        >
+                            Upload Sheet
+                        </Button>
+                    </div>
+                </div>
+            )}
+
+            {/* ── Table card ── */}
+            <div style={tableStyles.card}>
+                {state.loading ? (
+                    <UploadUsersTableSkeleton />
+                ) : state.error_msg ? (
+                    <ErrorComponent variant="error-box" error={state.error_msg} />
+                ) : state.recent_user_list && state.recent_user_list.length > 0 ? (
+                    <>
+                        {/* Table header */}
+                        <div style={tableStyles.header}>
+                            {TABLE_COLUMNS.map((col) => (
+                                <span key={col.key} style={tableStyles.headerLabel}>{col.label}</span>
+                            ))}
+                        </div>
+                        {/* Table rows */}
+                        {state.recent_user_list.map((item, index) => (
+                            <ActivityTableRow
+                                key={item.id || item.activity_token || index}
+                                item={item}
+                            />
+                        ))}
+                    </>
+                ) : (
+                    /* Empty state */
+                    <div style={{
+                        display: 'flex', flexDirection: 'column', alignItems: 'center',
+                        height: '250px', justifyContent: 'center',
+                        padding: 'var(--space-60) var(--space-20)', gap: 'var(--space-12)',
+                    }}>
+                        <div style={{
+                            width: 56, height: 56, borderRadius: '50%',
+                            background: 'var(--color-grey-100)',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        }}>
+                            <span className="ri-file-upload-line" style={{ fontSize: 24, color: 'var(--color-badge-grey-text)' }} />
+                        </div>
+                        <div style={{ textAlign: 'center' }}>
+                            <p style={{ fontSize: 'var(--font-14)', fontWeight: 'var(--font-weight-600)', color: 'var(--color-text-primary)', marginBottom: 'var(--space-4)' }}>
+                                No user sheet uploaded yet
+                            </p>
+                            <p style={{ fontSize: 'var(--font-12)', color: 'var(--color-content-secondary)', marginBottom: 'var(--space-12)' }}>
+                                Upload a CSV sheet to bulk-add users to the platform
+                            </p>
+                            <button
+                                className="btn btn-primary d-flex align-center"
+                                onClick={toggleForm}
+                                style={{
+                                    margin: '0 auto', height: "var(--space-36)",
+                                    borderRadius: "var(--radius-8)", gap: "var(--space-6)",
+                                    padding: "0 var(--space-16)", fontSize: "var(--font-14)",
+                                    fontWeight: "var(--font-weight-600)",
+                                }}
+                            >
+                                <span className="ri-upload-2-line" style={{ fontSize: "var(--font-16)", lineHeight: 1 }} />
+                                Upload Sheet
+                            </button>
+                        </div>
+                    </div>
+                )}
+            </div>
+        </div>
+    )
+}
+
+UploadUsers.propTypes = {
+    ...PropTypes.objectOf(PropTypes.any),
+}
+
+export default UploadUsers
