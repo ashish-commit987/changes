@@ -1,0 +1,78 @@
+import React, { useState } from "react";
+import HeaderPart from "../GenricComponents/HeaderPart/HeaderPart";
+import { dora16, code, delivery, cost, dora, code16, delivery16, cost16, org } from '../iconsContainer';
+import { styled } from '@mui/system';
+import HeadInfo from "../GenricComponents/HeadInfo/HeadInfo";
+import OverviewDashboard from "./OverviewDashboard";
+import properties from "../../properties/properties";
+import { useLocation } from "react-router-dom";
+import DoraMetrics from "../doraMetricsDashboard/DoraMetrics";
+
+const OrganizationDashboard = ({ configuredMatricGrpups, metalRatings, handleChangeViewFilter, selectedView, setParentState, view,startDate, endDate,onDateRangeChange, }) => {
+
+    console.log(handleChangeViewFilter, selectedView, view, 'name_00p_lm')
+    const decodedView = decodeURIComponent(view);
+
+    const [state, setState] = useState({
+        teams: null,
+        services: null,
+        journeys: null,
+        refresh: 0
+    })
+
+    const setTeamsServices = (teams, services,journeys) => {
+
+        setState(PrevState => ({
+            ...PrevState,
+            teams: teams,
+            services: services,
+            journeys: journeys,
+        }))
+
+        setParentState(prevState => ({
+            ...prevState,
+            serviceCount: services,
+            applicationCount: teams,
+            journeyCount: journeys,
+        }))
+    }
+
+    const handleRefresh = () => {
+        setState(prevState => ({
+            ...prevState,
+            refresh: prevState.refresh + 1
+        }))
+    }
+
+    return (
+        <div className="font-family-v1">
+            {decodedView !== "all" ? (
+                <DoraMetrics
+                    startDate={startDate}
+                    endDate={endDate}
+                    onDateRangeChange={onDateRangeChange}
+                    metricGroup={decodedView}
+                />
+            ) : (
+                <div>
+                    <HeaderPart
+                        handleChangeViewFilter={handleChangeViewFilter}
+                        list={configuredMatricGrpups}
+                        onRefresh={handleRefresh}
+                        childComponent={null}
+                        selectedView={selectedView}
+                    />
+                    <OverviewDashboard
+                        handleChangeViewFilter={handleChangeViewFilter}
+                        viewType={view}
+                        setTeamsServices={setTeamsServices}
+                        refresh={state.refresh}
+                        metalRatings={metalRatings}
+                    />
+                </div>
+            )}
+        </div>
+    )
+}
+
+export default OrganizationDashboard;
