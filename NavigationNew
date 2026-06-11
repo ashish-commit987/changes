@@ -1,0 +1,401 @@
+import React, { useEffect, useState } from 'react';
+import { styled } from '@mui/system';
+import { Drawer, List, ListItem, Tooltip } from '@mui/material';
+import { Link, useLocation } from 'react-router-dom';
+import { IsSuperUser } from "../../util/security";
+import "../layout-styles.css";
+import 'remixicon/fonts/remixicon.css'
+import properties from "../../properties/properties";
+import InvokeApi from "../../util/apiInvoker";
+import GenerateURL, { GenerateSearchURL } from "../../util/APIUrlProvider";
+import { useMatch } from 'react-router-dom';
+
+const tenentKey = properties.tenent;
+
+const navigationJson = [
+    { label: "Maturity Insights", url: '/maturity-overview/Dora%20Metrics', subOptions: [], icon: 'ri-bar-chart-fill' },
+    {
+        label: "Velocity Insights", url: '/velocity-insights/build', icon: 'ri-pie-chart-2-line',
+        subOptions: [{ label: 'Build Velocity', url: '/velocity-insights/build' }, { label: 'Deploy Velocity', url: '/velocity-insights/deploy' }],
+    },
+
+
+    {
+        label: "Developers Insights", url: '/developer-insights', subOptions: [], icon: 'ri-code-s-slash-fill'
+    },
+    {
+        label: "Manage User", url: '/manage-users/users', subOptions: [{ label: 'Users', url: '/manage-users/users' },
+        { label: 'Upload Users', url: '/manage-users/upload-users' }], icon: 'ri-user-settings-line'
+    },
+    {
+        label: "Release Compliance", url: '/release-compliance', subOptions: [], icon: 'ri-code-s-slash-fill'
+    },
+]
+const NAV_WIDTH = 86; // px — must match insights-nav width
+const NavigationNew = ({ isSubOptionActive, setIsSubOptionActive, ...props }) => {
+    const open = props.open;
+    const location = useLocation();
+    const pathName = location?.pathname;
+    const match = location?.pathname;
+
+    const [subOptions, setSubOptions] = useState([]);
+    const [navigation, setNavigation] = useState(navigationJson);
+    const [subOptionTitle, setSubOptionTitle] = useState(null);
+    const [settingsSubOption, setSettingsSubOption] = useState(false);
+    // controls the floating overlay drawer
+    const [subDrawerOpen, setSubDrawerOpen] = useState(false);
+
+    const checkPath = (target, currentpath) => {
+        const firstPath = currentpath.split('/');
+        const targetFirstPath = target.split('/');
+        return firstPath[1] === targetFirstPath[1];
+    };
+
+    function normalizePath(path) {
+        return path.replace(/\/+$/, '');
+    }
+
+    // ── derive sub-options whenever path changes ───────────────────────────────
+    useEffect(() => {
+        let derivedSubOptions = [];
+        let title = 'Insights';
+
+        navigation?.forEach(navItem => {
+            if (checkPath(navItem.url, pathName) && navItem?.subOptions?.length > 0) {
+                derivedSubOptions = navItem.subOptions;
+                title = navItem?.label;
+
+                if (location.search !== '') {
+                    derivedSubOptions = derivedSubOptions.map(item => {
+                        let urlPathArray = item?.url.split('?');
+                        if (urlPathArray?.length === 1)
+                            item.url = normalizePath(item.url) + '/' + location.search;
+                        return item;
+                    });
+                } else {
+                    derivedSubOptions = derivedSubOptions.map(item => {
+                        item.url = item.url.split('?')[0];
+                        return item;
+                    });
+                }
+            }
+        });
+
+        if (derivedSubOptions?.length > 0) {
+            setSubOptions(derivedSubOptions);
+            setIsSubOptionActive(true);
+            setSubOptionTitle(title);
+            setSettingsSubOption(false);
+            setSubDrawerOpen(true); 
+        } else {
+            setSubOptions([]);
+            setIsSubOptionActive(false);
+            setSubOptionTitle(null);
+            setSubDrawerOpen(false);
+        }
+    }, [pathName, navigation]);
+
+    // ── fetch maturity metric groups ──────────────────────────────────────────
+    useEffect(() => {
+        fetchData();
+    }, []);
+
+    const fetchData = () => {
+        let requestInfo = {
+            endPoint: GenerateURL({}, properties.api.maturityInsightsGroups),
+            httpMethod: "GET",
+            httpHeaders: { "Content-Type": "application/json" }
+        };
+
+        InvokeApi(requestInfo, (response) => {
+            const options = Array.isArray(response)
+                ? response.map(group => ({
+                    label: group.name,
+                    url: `/maturity-overview/${encodeURIComponent(group.name)}`
+                }))
+                : [];
+
+            const navigations = [...navigation];
+            navigations[0].subOptions = options;
+            setNavigation(navigations);
+        }, () => { });
+    };
+
+    const checkSubOptionsSelection = (url) => {
+        if (location.search !== '') {
+            const path1 = normalizePath(pathName + location.search);
+            const path2 = normalizePath(url);
+            return path1 === path2;
+        }
+        return decodeURIComponent(pathName) === normalizePath(url);
+    };
+    const handleNavClick = (navItem, e) => {
+        if (navItem?.subOptions?.length > 0 && checkPath(navItem.url, pathName)) {
+            e.preventDefault(); 
+            setSubDrawerOpen(true);
+        }
+    };
+
+    const ontoggleState = () => {
+        setSettingsSubOption(false);
+        setSubOptions([]);
+        setIsSubOptionActive(false);
+        setSubOptionTitle(null);
+        setSubDrawerOpen(false);
+    };
+
+    const handleSettingsClick = () => {
+        setSettingsSubOption(true);
+        setSubDrawerOpen(true);
+        setIsSubOptionActive(false);
+    };
+
+    const handleSubDrawerClose = () => {
+        setSubDrawerOpen(false);
+    };
+
+    // ── sub-options panel content ─────────────────────────────────────────────
+    const SubOptionsContent = () => (
+        <SubOptionsPanel>
+            {/* close button */}
+            <button
+                onClick={handleSubDrawerClose}
+                style={{
+                    position: 'absolute',
+                    top: 12,
+                    right: 10,
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                    color: '#8598a7',
+                    fontSize: 18,
+                    lineHeight: 1,
+                    padding: '2px 4px',
+                    borderRadius: 4,
+                }}
+                title="Close"
+            >
+                <i className="ri-close-line" />
+            </button>
+
+            <div className="sub-title">
+                {settingsSubOption ? 'Settings' : subOptionTitle}
+            </div>
+
+            {settingsSubOption ? (
+                <>
+                    <Link to="/maturity-configuration">
+                        <div className={checkSubOptionsSelection("/maturity-configuration") ? 'sub-options-selected d-flex align-center' : 'sub-options d-flex align-center'}>
+                            <span>Maturity Configuration</span>
+                        </div>
+                    </Link>
+                    <Link to="#">
+                        <div className="sub-options d-flex align-center"><span>Manage Account</span></div>
+                    </Link>
+                    <Link to="#">
+                        <div className="sub-options d-flex align-center"><span>Help & Support</span></div>
+                    </Link>
+                </>
+            ) : (
+                subOptions?.map((item, index) => (
+                    <Link to={item.url} key={index}>
+                        <div className={checkSubOptionsSelection(item.url) ? 'sub-options-selected d-flex align-center' : 'sub-options d-flex align-center'}>
+                            <span>{item.label}</span>
+                        </div>
+                    </Link>
+                ))
+            )}
+        </SubOptionsPanel>
+    );
+
+    const authData = JSON.parse(localStorage.getItem('authData') || '{}');
+    const isSuperuser = authData.userDetails?.is_superuser || false;
+
+    return (
+        <>
+            {/* ── primary permanent nav ─────────────────────────────────────── */}
+            <Drawer anchor="left" variant="permanent" open={open}>
+                <Root style={{ height: '100%' }}>
+                    <div className="insights-nav">
+                        <List className="root side-nav">
+                            <Link to="/maturity-overview/OWASP%20Java">
+                                <div className="d-flex align-center justify-center" style={{ padding: "12px 8px" }}>
+                                    <img src="/images/buildpiper_updated_logo.png" style={{ height: "40px", width: "72px" }} />
+                                </div>
+                            </Link>
+
+                            <div className="main_menu">
+                                {navigation?.map((navItem, index) => {
+                                    if (navItem.label === "Manage User" && !isSuperuser) {
+                                        return (
+                                            <Tooltip title="You don't have permission to access to this section" placement="right" key={index}>
+                                                <div style={{ display: 'flex', flexDirection: 'column', backgroundColor: checkPath(navItem.url, match) && '#1C3854', padding: "12px 8px" }} className="main-menu hover-effect">
+                                                    <span style={{ color: checkPath(navItem.url, match) ? '#0086FF' : '#fff' }} className={`${navItem.icon} font-18`}></span>
+                                                    <div style={{
+                                                        fontSize: '11px',
+                                                        fontWeight: '500',
+                                                        lineHeight: "13.41px",
+                                                        textAlign: 'center',
+                                                        color: '#fff'
+                                                    }}>
+                                                        {navItem.label}
+                                                    </div>
+                                                </div>
+                                            </Tooltip>
+                                        );
+                                    }
+
+                                   return (
+                                       <Link to={navItem.url} key={index} onClick={(e) => handleNavClick(navItem, e)}>
+                                            <div
+                                                style={{
+                                                    display: 'flex',
+                                                    flexDirection: 'column',
+                                                    backgroundColor: checkPath(navItem.url, match) ? '#1C3854' : undefined,
+                                                    padding: "12px 8px"
+                                                }}
+                                                className="main-menu hover-effect"
+                                            >
+                                                <span style={{ color: checkPath(navItem.url, match) ? '#0086FF' : '#fff' }} className={`${navItem.icon} font-18`} />
+                                                <div style={{ fontSize: '11px', fontWeight: '500', lineHeight: "13.41px", textAlign: 'center', color: '#fff' }}>
+                                                    {navItem.label}
+                                                </div>
+                                            </div>
+                                        </Link>
+                                    )
+                                }
+                                )}
+
+                                {properties.bp_url && (
+                                    <a href={properties.bp_url}>
+                                        <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', height: "75px" }} className="main-menu hover-effect">
+                                            <img src="/images/logos/bp-white.png" width={35} height={18} alt="buildpiper" />
+                                            <div style={{ width: "56px", fontSize: '11px', fontWeight: '500', lineHeight: "13.41px", textAlign: 'center', color: "#fff", marginTop: '8px' }}>
+                                                Buildpiper
+                                            </div>
+                                        </div>
+                                    </a>
+                                )}
+                            </div>
+                        </List>
+
+                        <div>
+                            <div className="d-flex align-center justify-center" style={{ marginBottom: "20px" }}>
+                                <Link to="/initiateLogOut">
+                                    <span style={{ color: "#fff" }} className="ri-logout-circle-line font-20" />
+                                </Link>
+                            </div>
+                            <div className="d-flex align-center justify-center" style={{ marginBottom: "70px" }}>
+                                {
+                                    isSuperuser ?
+                                        <Link to={"/maturity-configuration"} onClick={ontoggleState} className='btn btn-transparent'>
+                                            <span style={{ color: "#fff" }} className="ri-settings-4-line font-20"></span>
+                                        </Link>
+                                        :
+                                        <Tooltip title="You don't have permission to access to this section" placement="right">
+                                            <span style={{ color: "#fafafa", cursor: "pointer" }} className="ri-settings-4-line font-20"></span>
+                                        </Tooltip>
+                                }
+                            </div>
+                        </div>
+                    </div>
+                </Root>
+            </Drawer>
+
+            {/* ── floating sub-options overlay — does NOT push dashboard width ─ */}
+            <Drawer
+                anchor="left"
+                variant="temporary"
+                open={subDrawerOpen}
+                onClose={handleSubDrawerClose}
+                disableEnforceFocus   // keep main nav usable
+                disableScrollLock     // don't lock page scroll
+                BackdropProps={{
+                    style: { background: 'transparent' }  // ← add this
+                }}
+                ModalProps={{
+                    keepMounted: true,
+                }}
+                PaperProps={{
+                    style: {
+                        pointerEvents: 'auto',
+                        left: NAV_WIDTH,        // sit flush against the right edge of the nav
+                        width: 205,
+                        boxShadow: '4px 0 16px rgba(0,0,0,0.15)',
+                        border: 'none',
+                        top: 0,
+                        height: '100%',
+                        position: 'fixed',
+                    }
+                }}
+            >
+                <SubOptionsContent />
+            </Drawer>
+        </>
+    );
+};
+
+export default NavigationNew;
+export const drawerWidth = 90;
+
+// ── styled components ─────────────────────────────────────────────────────────
+
+const SubOptionsPanel = styled('div')({
+    position: 'relative',
+    background: '#fff',
+    width: '205px',
+    height: '100%',
+    padding: '20px 16px',
+    paddingTop: '44px', // room for close button
+    "& a": {
+        '& span': { fontSize: "12px", fontWeight: '600', color: '#787878' },
+        '&:hover': { '& span': { color: '#505050' } },
+    },
+    '& .sub-options': {
+        width: '100%', height: '39px', padding: '12px', borderRadius: '6px',
+        marginBottom: '2px',
+        '&:hover': { background: '#F4F4F4' }
+    },
+    '& .sub-options-selected': {
+        width: '100%', height: '39px', padding: '12px', borderRadius: '6px',
+        background: '#F4F4F4', border: '1px solid #E6E6E6', marginBottom: '2px',
+    },
+    '& .sub-title': {
+        fontSize: '14px', fontWeight: '600', lineHeight: '17.07px',
+        color: '#000', marginBottom: '20px'
+    },
+});
+
+const Root = styled('div')({
+    display: 'flex',
+    '& .insights-nav': {
+        background: '#134E9C',
+        width: '86px',
+        display: 'flex',
+        justifyContent: 'space-between',
+        flexDirection: 'column',
+        '& .btn-transparent': {
+            '&:hover': { backgroundColor: '#093267!important', color: '#fff' }
+        }
+    },
+    "& .main_menu": {
+        "& .main-menu": {
+            display: "flex", alignItems: "center",
+            backgroundColor: "#134E9C", border: "none", width: "100%"
+        },
+        "& .hover-effect": {
+            borderLeft: "0", borderRight: "0", borderImageSlice: "1",
+            transition: "background-color 0.3s ease-in-out",
+            "&:hover": { backgroundColor: "#1C3854" },
+        },
+        "& .main-menu>div": { display: "flex", alignItems: "center" },
+        "& .main-menu-icon": { width: "24px", height: "24px", marginLeft: "10px" },
+        "& .main-menu-name": {
+            fontFamily: "Montserrat", fontSize: "14px", fontWeight: "400",
+            lineHeight: "17px", letterSpacing: "0em", textAlign: "left",
+            marginLeft: "10px", color: "#ffffff"
+        },
+        "& .selected-border": { borderLeft: "4px solid #0086FF" },
+        "& .selected-shadow": { background: "linear-gradient(.25turn, #0086FF, 1%, #134E9C)" },
+    },
+});
