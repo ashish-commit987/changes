@@ -1,0 +1,3303 @@
+import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import ReactDOM from "react-dom";
+import Highcharts from "highcharts";
+import Heatmap from "highcharts/modules/heatmap";
+import ChartCard from "../../velocityInsights/buildVelocity/components/ChartCard";
+import DorametricsGenericTable from "../../velocityInsights/buildVelocity/components/DorametricsGenericTable";
+import { Box, Skeleton, Tooltip, Typography } from "@mui/material";
+import dayjs from "dayjs";
+import CustomDateRangePopover from "../../velocityInsights/buildVelocity/components/CustomDateRangePopover";
+import GenericSkeleton from "../../components/genericComponents/Skeletons/GenericSkeleton";
+import InvokeApi from "../../util/apiInvoker";
+import GenerateURL from "../../util/APIUrlProvider";
+import properties from "../../properties/properties";
+
+if (typeof Highcharts === "object") Heatmap(Highcharts);
+
+const BRAND_BLUE = "rgba(0, 134, 255, 1)";
+
+const EmptyChartState = () => {
+  return (
+    <Box
+      sx={{
+        height: 300,
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        color: "#9CA3AF",
+        position: "relative",
+        overflow: "hidden",
+        border: "1px solid #d4d7e1ff",
+        borderRadius: "12px",
+        margin: "8px",
+      }}
+    >
+      <Box>
+        <span className="ri-information-line color-blue font-20"></span>
+      </Box>
+      <Box sx={{ fontSize: "12px", fontWeight: 600, color: "#000000" }}>
+        There is currently no data to display
+      </Box>
+    </Box>
+  );
+};
+
+const MetricCardSkeleton = () => {
+  return (
+    <div
+      style={{
+        display: "flex",
+        width: "100%",
+        background: "#fff",
+        border: "1px solid #E5E7EB",
+        borderRadius: 12,
+        overflow: "hidden",
+        boxShadow: "0px 1px 2px rgba(0,0,0,0.06)",
+      }}
+    >
+      {[1, 2, 3].map((item, idx) => (
+        <div
+          key={item}
+          style={{
+            flex: 1,
+            padding: "12px 36px",
+            borderRight: idx !== 2 ? "1px solid #E5E7EB" : "none",
+            position: "relative",
+          }}
+        >
+          {idx === 0 && (
+            <div
+              style={{
+                position: "absolute",
+                top: 0,
+                left: 0,
+                width: "100%",
+                height: 4,
+                background: "#0B84FE",
+              }}
+            />
+          )}
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+              marginBottom: 30,
+            }}
+          >
+            <Skeleton variant="circular" width={22} height={22} />
+            <Skeleton variant="text" width={220} height={30} />
+            <Skeleton variant="circular" width={18} height={18} />
+          </div>
+          <Skeleton
+            variant="text"
+            width={140}
+            height={54}
+          />
+          <Skeleton variant="text" width={170} height={28} />
+        </div>
+      ))}
+    </div>
+  );
+};
+const DeploymentFrequencyTrendSkeleton = () => {
+  return (
+    <div
+      style={{
+        background: "#ffffff",
+        borderRadius: "16px",
+        padding: "24px 32px 32px 8px",
+        width: "100%",
+        maxWidth: "800px", // Added max-width for better display, adjust as needed
+        boxShadow: "0px 2px 4px rgba(0, 0, 0, 0.05)",
+        border: "1px solid #eaeaea",
+        boxSizing: "border-box",
+        fontFamily: "sans-serif",
+      }}
+    >
+      {/* Main Chart Layout Section */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "stretch",
+        }}
+      >
+        {/* Y-axis Label ("Value") */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            marginRight: "16px",
+            paddingBottom: "40px", // Align with the bottom of the Y-axis ticks
+          }}
+        >
+          <Skeleton
+            variant="rectangular"
+            width={16}
+            height={60}
+            sx={{ borderRadius: "4px" }}
+          />
+        </div>
+
+        {/* Y-axis Tick Values (500 to 0) */}
+        <div
+          style={{
+            width: "40px",
+            display: "flex",
+            flexDirection: "column",
+            justifyContent: "space-between",
+            height: "280px",
+            paddingBottom: "48px", // Space to clear the X-axis labels below
+            marginRight: "16px",
+          }}
+        >
+          {/* 6 labels: 500, 400, 300, 200, 100, 0 */}
+          {[1, 2, 3, 4].map((item) => (
+            <Skeleton
+              key={item}
+              variant="text"
+              width={32}
+              height={24}
+              sx={{ alignSelf: "flex-end", transform: "none" }}
+            />
+          ))}
+        </div>
+
+        {/* Chart Area and X-axis container */}
+        <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
+          {/* Main Graph Area */}
+          <Skeleton
+            variant="rectangular"
+            width="100%"
+            height={280}
+            sx={{
+              borderRadius: "8px",
+              transform: "none",
+            }}
+          />
+
+          {/* X-axis Tick Values (Sep to Feb) */}
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              marginTop: "16px",
+              paddingLeft: "16px",
+              paddingRight: "16px",
+            }}
+          >
+            {/* 6 labels: Sep, Oct, Nov, Dec, Jan, Feb */}
+            {[1, 2, 3, 4, 5, 6].map((month) => (
+              <Skeleton
+                key={month}
+                variant="text"
+                width={36}
+                height={24}
+                sx={{ transform: "none" }}
+              />
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+const DonutChartSkeleton = () => (
+  <Box
+    sx={{
+      width: "100%",
+      display: "flex",
+      flexDirection: "column",
+      alignItems: "center",
+      gap: "28px",
+      mt: 1,
+    }}
+  >
+    {/* Donut Skeleton */}
+    <Box
+      sx={{
+        position: "relative",
+        width: 220,
+        height: 220,
+        borderRadius: "50%",
+        background:
+          "conic-gradient(#E5E7EB 0deg 260deg, #F3F4F6 260deg 360deg)",
+        animation: "pulse 1.5s ease-in-out infinite",
+        "@keyframes pulse": {
+          "0%": { opacity: 0.7 },
+          "50%": { opacity: 1 },
+          "100%": { opacity: 0.7 },
+        },
+      }}
+    >
+      {/* Inner circle */}
+      <Box
+        sx={{
+          position: "absolute",
+          top: "50%",
+          left: "50%",
+          transform: "translate(-50%, -50%)",
+          width: 90,
+          height: 90,
+          borderRadius: "50%",
+          background: "#fff",
+        }}
+      />
+    </Box>
+
+    {/* Legend Skeleton */}
+    <Box
+      sx={{
+        width: "100%",
+        display: "grid",
+        gridTemplateColumns: "1fr 1fr",
+        gap: "16px 24px",
+      }}
+    >
+      {[1, 2, 3, 4].map((item) => (
+        <Box
+          key={item}
+          sx={{
+            height: "40px",
+            border: "1px solid #E5E7EB",
+            borderRadius: "14px",
+            background: "#F8F8F8",
+            px: 2,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+          }}
+        >
+          <Box
+            sx={{
+              display: "flex",
+              alignItems: "center",
+              gap: 1.5,
+            }}
+          >
+            <Skeleton
+              variant="circular"
+              width={18}
+              height={18}
+            />
+
+            <Skeleton
+              variant="text"
+              width={120}
+              height={20}
+            />
+          </Box>
+
+          <Skeleton
+            variant="text"
+            width={20}
+            height={28}
+          />
+        </Box>
+      ))}
+    </Box>
+  </Box>
+);
+
+const BarChartSkeleton = () => (
+  <Box
+    sx={{
+      width: "100%",
+      height: "360px",
+      display: "flex",
+      flexDirection: "column",
+      justifyContent: "space-between",
+      padding: "12px 0",
+    }}
+  >
+    {[1, 2, 3, 4, 5].map((item, index) => (
+      <Box
+        key={item}
+        sx={{
+          display: "flex",
+          alignItems: "center",
+          gap: "16px",
+        }}
+      >
+        {/* Y Axis Label */}
+        <Skeleton
+          variant="text"
+          width={45}
+          height={30}
+        />
+
+        {/* Bar */}
+        <Box
+          sx={{
+            flex: 1,
+            height: "32px",
+            borderRadius: "8px",
+            overflow: "hidden",
+            background: "#F3F4F6",
+          }}
+        >
+          <Skeleton
+            variant="rectangular"
+            width={`${index < 5 ? 100 : 5}%`}
+            height="100%"
+            sx={{
+              borderRadius: "12px",
+            }}
+          />
+        </Box>
+      </Box>
+    ))}
+
+    {/* X-axis */}
+    <Box
+      sx={{
+        display: "flex",
+        justifyContent: "space-between",
+        marginLeft: "110px",
+        marginTop: "10px",
+      }}
+    >
+      {[1, 2, 3, 4, 5, 6].map((i) => (
+        <Skeleton
+          key={i}
+          variant="text"
+          width={28}
+          height={20}
+        />
+      ))}
+    </Box>
+  </Box>
+);
+
+const HeatmapSkeleton = () => (
+  <Box>
+    {/* Column Headers */}
+    <Box sx={{ display: "flex", mb: 2, ml: "120px", gap: 2 }}>
+      {[1, 2, 3, 4, 5].map((i) => (
+        <Skeleton
+          key={i}
+          variant="text"
+          width={120}
+          height={30}
+        />
+      ))}
+    </Box>
+
+    {/* Heatmap Rows */}
+    {[1, 2, 3, 4, 5].map((row) => (
+      <Box
+        key={row}
+        sx={{
+          display: "flex",
+          alignItems: "center",
+          gap: 2,
+          mb: 1.5,
+        }}
+      >
+        {/* Row Label */}
+        <Skeleton
+          variant="text"
+          width={80}
+          height={30}
+          sx={{ mr: 2.5 }}
+        />
+
+        {/* Cells */}
+        {[1, 2, 3, 4, 5].map((cell) => (
+          <Skeleton
+            key={cell}
+            variant="rounded"
+            width={100}
+            height={50}
+            sx={{ borderRadius: "4px" }}
+          />
+        ))}
+      </Box>
+    ))}
+  </Box>
+);
+
+const PercentileChartSkeleton = () => (
+  <GenericSkeleton variant="rect" width="100%" height="380px" count={1} />
+);
+
+
+const ThresholdSkeleton = () => (
+  <Box>
+    {[1, 2, 3, 4].map((item) => (
+      <Box
+        key={item}
+        sx={{
+          display: "flex",
+          alignItems: "center",
+          gap: 1,
+          p: 1,
+          mb: 1,
+          border: "1px solid #E5E7EB",
+          borderRadius: "12px",
+        }}
+      >
+        {/* Rating Badge */}
+        <Skeleton
+          variant="rounded"
+          width={60}
+          height={30}
+          sx={{ borderRadius: "8px", flexShrink: 0 }}
+        />
+
+        {/* Description */}
+        <Skeleton
+          variant="text"
+          width="70%"
+          height={32}
+        />
+      </Box>
+    ))}
+
+    {/* Divider */}
+    <Box sx={{ my: 4 }}>
+      <Skeleton variant="rectangular" width="100%" height={1} />
+    </Box>
+
+    {/* Info Box */}
+    <Box
+      sx={{
+        display: "flex",
+        alignItems: "center",
+        gap: 1,
+        p: 1,
+        border: "1px solid #E5E7EB",
+        borderRadius: "12px",
+      }}
+    >
+      <Skeleton variant="circular" width={32} height={32} />
+      <Box sx={{ flex: 1 }}>
+        <Skeleton variant="text" width="90%" height={30} />
+        <Skeleton variant="text" width="60%" height={30} />
+      </Box>
+    </Box>
+  </Box>
+);
+
+const TableSkeleton = () => (
+  <GenericSkeleton variant="rect" width="100%" height="48px" count={7} />
+);
+
+const MetricTabsSkeleton = () => (
+  <GenericSkeleton variant="rect" width="100%" height="110px" count={1} />
+);
+
+
+const buildDateLabel = (start, end) => {
+  if (!start || !end) return "last 30 days";
+  const s = dayjs(start).startOf("day");
+  const e = dayjs(end).startOf("day");
+  const today = dayjs().startOf("day");
+  const days = e.diff(s, "day");
+  if (s.isSame(today, "day") && e.isSame(today, "day")) return "today";
+  if (s.isSame(today.subtract(1, "day"), "day") && e.isSame(today.subtract(1, "day"), "day")) return "yesterday";
+  if (days === 7) return "last 7 days";
+  if (days === 14) return "last 14 days";
+  if (days === 30) return "last 30 days";
+  if (days === 90) return "last 90 days";
+  if (days === 181) return "last 181 days";
+  if (days === 365) return "last 365 days";
+  return `last ${days} days`;
+}; 
+const METRIC_INDEX_MAP = {
+  deploymentFrequency: "Deployment Frequency",
+  leadTimeToChange: "Lead Time To Change",
+  changeFailureRate: "Change Failure Rate",
+};
+
+// ─── Static data (unchanged) ──────────────────────────────────────────────────
+const CARD_KEY_MAP = {
+  "Deployment Frequency": "deploymentFrequency",
+  "Lead Time To Change": "leadTimeToChange",
+  "Change Failure Rate": "changeFailureRate",
+};
+const LEVEL_THRESHOLD_STYLE = {
+  ELITE: { label: "Elite", color: "rgba(6, 96, 53, 1)", bg: "rgba(230, 251, 234, 1)", border: "rgba(207, 231, 219, 1)" },
+  HIGH: { label: "High", color: "rgba(0, 82, 157, 1)", bg: "rgba(235, 245, 255, 1)", border: "rgba(223, 237, 255, 1)" },
+  MEDIUM: { label: "Medium", color: "rgba(120, 73, 0, 1)", bg: "rgba(252, 246, 225, 1)", border: "rgba(255, 229, 189, 1)" },
+  LOW: { label: "Low", color: "rgba(208, 42, 42, 1)", bg: "rgba(255, 235, 235, 1)", border: "rgba(255, 218, 242, 1)" },
+};
+
+const LEVEL_COLOR_MAP = {
+  ELITE: { color: "rgba(0, 97, 50, 1)", bg: "rgba(230, 251, 234, 1)", border: "rgba(207, 231, 219, 1)" },
+  HIGH: { color: "rgba(0, 85, 162, 1)", bg: "rgba(245, 250, 255, 1)", border: "rgba(223, 237, 255, 1)" },
+  MEDIUM: { color: "rgba(120, 73, 0, 1)", bg: "rgba(252, 246, 225, 1)", border: "rgba(255, 229, 189, 1)" },
+  LOW: { color: "rgba(208, 42, 42, 1)", bg: "rgba(255, 235, 235, 1)", border: "rgba(255, 218, 242, 1)" },
+};
+
+
+const TABS = [
+  { key: "deploymentFrequency", icon: "ri-flashlight-line", title: "Deployment Frequency" },
+  { key: "leadTimeToChange", icon: "ri-time-line", title: "Lead time to change" },
+  { key: "changeFailureRate", icon: "ri-alert-line", title: "Change Failure Rate" },
+];
+
+const MONTHS = ["Sep", "Oct", "Nov", "Dec", "Jan", "Feb"];
+
+const LEVEL_STYLES = {
+  Elite: { color: "rgba(0, 97, 50, 1)", bg: "rgba(230, 251, 234, 1)", borderColor: "rgba(207, 231, 219, 1)" },
+  High: { color: "rgba(0, 85, 162, 1)", bg: "rgba(245, 250, 255, 1)", borderColor: "rgba(223, 237, 255, 1)" },
+  Medium: { color: "rgba(120, 73, 0, 1)", bg: "rgba(252, 246, 225, 1)", borderColor: "rgba(255, 229, 189, 1)" },
+  Low: { color: "rgba(208, 42, 42, 1)", bg: "rgba(255, 235, 235, 1)", borderColor: "rgba(255, 218, 242, 1)" },
+};
+
+const generateRows = () => {
+  const services = ["payment-gateway", "settlement-worker", "invoice-api", "refund-engine", "risk-checker", "auth-service", "billing-worker", "kyc-validator", "fraud-detector", "ledger-api", "notification-svc", "report-engine"];
+  const levels = ["High", "Elite", "Medium", "Low"];
+  const changes = ["+24%", "+67%", "+27%", "+14%", "+8%", "+59%", "+33%", "-12%", "+5%", "+41%", "-7%", "+19%"];
+  const dirs = ["up", "up", "up", "down", "up", "down", "up", "down", "up", "up", "down", "up"];
+  return Array.from({ length: 36 * 6 }, (_, i) => {
+    const si = i % services.length;
+    return {
+      service: services[si], frequency: Math.floor(Math.random() * 400) + 10,
+      level: levels[i % levels.length], changeDir: dirs[si], changeVal: changes[si],
+      lastActivity: `${25 + (i % 2)} Feb 2026, ${10 + (i % 14)}:${i % 2 === 0 ? "44" : "12"}`,
+    };
+  });
+};
+
+const DATA = generateRows();
+
+const getServiceDrawerData = (row, activeTab) => {
+  const metricLabels = { deploymentFrequency: "Deployment Frequency", leadTimeToChange: "Lead Time to Change", changeFailureRate: "Change Failure Rate" };
+  const metricDirections = { deploymentFrequency: "Higher is better", leadTimeToChange: "Lower is better", changeFailureRate: "Lower is better" };
+  return {
+    metricLabel: metricLabels[activeTab], metricValue: row.frequency, metricLevel: row.level,
+    metricDirection: metricDirections[activeTab], lastCalculated: row.lastActivity,
+    lastDeployment: "26 Feb 2026, 12:44", lastFailure: "24 Feb 2026, 11:10",
+  };
+};
+
+
+function TrendChart({ tabKey, data,activeTab }) {
+  if (!data) return <EmptyChartState />;
+
+  const containerRef = useRef(null);
+  const chartRef = useRef(null);
+
+  const fmt = (val) => formatCardValue(val, data.type ?? "INT");
+  const seriesKey = data?.trend?.join(",") ?? "";
+
+  useEffect(() => {
+    if (!containerRef.current) return;
+    if (chartRef.current) chartRef.current.destroy();
+
+    const xCategories = data.months;
+    const trendLen = data.trend.length;
+    const step = Math.max(1, Math.floor(trendLen / xCategories.length));
+    const rawData = xCategories.map(
+      (_, i) => data.trend[i * step] ?? data.trend[trendLen - 1]
+    );
+
+    const trendSeries = rawData.map(v => (v === null || v === undefined) ? 0 : v);
+
+    chartRef.current = Highcharts.chart(containerRef.current, {
+      chart: { type: "areaspline", backgroundColor: "transparent", animation: { duration: 500 }, style: { fontFamily: "inherit" }, marginTop: 10 },
+      title: { text: null }, credits: { enabled: false }, legend: { enabled: false },
+      xAxis: {
+        categories: xCategories, lineColor: "#d1d5db", lineWidth: 1, tickLength: 0,
+        labels: { style: { color: "#6b7280", fontSize: "12px" } },
+      },
+      yAxis: {
+        title: { text: data.yAxisLabel, style: { color: "#9ca3af", fontSize: "11px", fontWeight: 500 }, margin: 12 },
+        gridLineWidth: 0, lineColor: "#d1d5db", lineWidth: 1, min: 0,
+        labels: { style: { color: "#6b7280", fontSize: "11px" }, formatter() { return fmt(this.value); } },
+      },
+      tooltip: {
+        backgroundColor: "#ffffff",
+        borderColor: "transparent",
+        borderRadius: 8,
+        style: { color: "#1e293b", fontSize: "12px" },
+        formatter() {
+          const value =
+            this.point.actualValue !== undefined
+              ? this.point.actualValue
+              : this.y;
+
+         if(activeTab === "deploymentFrequency"){
+            return `<b>${this.x}</b><br/>${"Deployment count"}: <b>${fmt(value)}</b>`;
+          }
+          else if(activeTab === "leadTimeToChange"){
+            return `<b>${this.x}</b><br/>${"Average Lead Time"}: <b>${fmt(value)}</b>`;
+          }
+          else if(activeTab === "changeFailureRate"){
+            return `<b>${this.x}</b><br/>${"Change Failure Rate"}: <b>${fmt(value)}</b>`;
+          }
+        },
+      },
+      plotOptions: {
+        areaspline: {
+          color: BRAND_BLUE,
+          fillColor: { linearGradient: { x1: 0, y1: 0, x2: 0, y2: 1 }, stops: [[0, Highcharts.color(BRAND_BLUE).setOpacity(0.12).get("rgba")], [1, Highcharts.color(BRAND_BLUE).setOpacity(0.01).get("rgba")]] },
+          lineWidth: 1,
+          marker: { enabled: false },
+          states: {
+            hover: { lineWidth: 3 }
+          },
+        },
+      },
+      series: [
+        {
+          type: "areaspline",
+          name: data.chartTitle,
+          data: trendSeries,
+          color: BRAND_BLUE,
+          lineWidth: 2,
+          marker: {
+            enabled: false,
+            radius: 4,
+            states: {
+              hover: {
+                enabled: true,
+                radiusPlus: 2,
+              },
+            },
+          },
+        },
+      ],
+    });
+
+    return () => { if (chartRef.current) { chartRef.current.destroy(); chartRef.current = null; } };
+
+  }, [tabKey, seriesKey]);
+
+  return <div ref={containerRef} style={{ width: "100%", height: "320px" }} />;
+}
+const DonutChart = React.memo(function DonutChart({ levelDistribution }) {
+  if(!levelDistribution) return <EmptyChartState />;
+  const containerRef = useRef(null);
+  const chartRef = useRef(null);
+  useEffect(() => {
+    console.log("DonutChart render");
+    if (!containerRef.current) return;
+    if (chartRef.current) chartRef.current.destroy();
+    chartRef.current = Highcharts.chart(containerRef.current, {
+      chart: { type: "pie", backgroundColor: "transparent", style: { fontFamily: "inherit" }, height: 260, animation: { duration: 600 } },
+      title: { text: null }, credits: { enabled: false }, legend: { enabled: false },
+      tooltip: { backgroundColor: "#fff", borderColor: "#e5e7eb", borderRadius: 8, shadow: true, style: { fontSize: "12px", color: "#374151" }, pointFormat: "<b>{point.percentage:.2f}%</b>" },
+      plotOptions: { pie: { innerSize: "35%", borderWidth: 6, borderColor: "#ffffff", borderRadius: 8, dataLabels: { enabled: true, distance: -30, format: "{point.percentage:.2f}%", style: { fontSize: "11px", fontWeight: 700, color: "#fff", textOutline: "none" }, filter: { property: "percentage", operator: ">", value: 5 } }, states: { hover: { halo: { size: 6, opacity: 0.15 } } } } },
+      series: [{ name: "Level", data: levelDistribution.map((d) => ({ name: d.name, y: d.y, color: d.color })) }],
+    });
+    return () => { if (chartRef.current) { chartRef.current.destroy(); chartRef.current = null; } };
+  }, [levelDistribution]);
+  return <div ref={containerRef} style={{ width: "100%", height: "260px" }} />;
+});
+
+function BarChart({ apps, tooltipUnit = "percentage", activeTab }) {
+
+  if(!apps) return <EmptyChartState />;
+  const containerRef = useRef(null);
+  const chartRef = useRef(null);
+  useEffect(() => {
+    if (!containerRef.current) return;
+    if (chartRef.current) chartRef.current.destroy();
+    const categories = apps.map((a) => a.name);
+    const maxVal = Math.max(...apps.map((a) => a.value ?? 0), 10);
+    const chartMax = Math.ceil(maxVal * 1.0);
+    chartRef.current = Highcharts.chart(containerRef.current, {
+      chart: { type: "bar", backgroundColor: "transparent", height: apps.length * 55 + 120, style: { fontFamily: "inherit" } },
+      title: { text: null }, credits: { enabled: false }, legend: { enabled: false },
+      xAxis: { categories, title: { text: null }, lineColor: "#d1d5db", lineWidth: 1, tickWidth: 0, labels: { style: { color: "#374151", fontSize: "11px", fontWeight: 500 } } },
+      yAxis: { min: 0, max: chartMax, title: { text: "Frequency", style: { color: "#9ca3af", fontSize: "12px" } }, gridLineWidth: 0, lineColor: "#d1d5db", lineWidth: 1, tickColor: "#d1d5db", tickWidth: 1, labels: { style: { color: "#9ca3af", fontSize: "10px" } } },
+      // After
+      tooltip: {
+        backgroundColor: "#ffffff",
+        borderColor: "#e5e7eb",
+        borderRadius: 8,
+        shadow: true,
+        style: { fontSize: "12px" },
+        formatter() {
+          const label = tooltipUnit === "minutes"
+            ? (() => {
+              const total = Math.round(this.y);
+              const d = Math.floor(total / 1440);
+              const h = Math.floor((total % 1440) / 60);
+              const m = total % 60;
+              if (d > 0) return h > 0 ? `${d}d ${h}h` : `${d}d`;
+              if (h > 0 && m > 0) return `${h}h ${m}m`;
+              if (h > 0) return `${h}h`;
+              return `${m}m`;
+            })()
+            : tooltipUnit === "count"
+              ? String(Math.round(this.y))
+              : `${Number(this.y).toFixed(1)}%`;
+          const metricName = tooltipUnit === "minutes" ? "Lead time"
+            : tooltipUnit === "count" ? "Frequency"
+              : "Rate";
+          return `<b>${this.x}</b><br/>${metricName}: <b>${label}</b>`;
+        }
+      },
+      plotOptions: { series: { grouping: false, borderRadius: 6, pointWidth: 22, borderWidth: 0, animation: false } },
+      series: [
+        { name: "Background", data: categories.map(() => chartMax), color: "rgba(244, 244, 244, 1)", enableMouseTracking: false, dataLabels: { enabled: false } },
+        {
+          name: "Value", data: apps.map((app) => ({
+            y:
+              activeTab === "deploymentFrequency" && app.noFailure
+                ? 0
+                : app.value,
+            color:
+              activeTab === "deploymentFrequency" && app.noFailure
+                ? "#d1fae5"
+                : app.color,
+          })), dataLabels: {
+            enabled: true, inside: false, align: "left", x: 8, style: { fontSize: "11px", fontWeight: 600, textOutline: "none" }, formatter() {
+              const app = apps[this.point.index];
+
+              if (
+                activeTab === "deploymentFrequency" &&
+                app.noFailure
+              ) {
+                return "No deployment found";
+              }
+              else if(activeTab === "changeFailureRate" && app.noFailure){
+                return "No failure found";
+              }
+
+              return null;
+            } } },
+      ],
+    });
+    return () => { if (chartRef.current) { chartRef.current.destroy(); chartRef.current = null; } };
+  }, [apps]);
+  return <div ref={containerRef} style={{ width: "100%" }} />;
+}
+
+function HeatmapChart({
+  consistencyData,       
+  months,
+  loading,
+  page,
+  onPageChange,           
+  search,
+  onSearchChange,        
+  pageSize,
+  total,
+}) {
+  const containerRef = useRef(null);
+  const chartRef = useRef(null);
+
+  const rows = consistencyData ?? [];
+
+  const totalPages = Math.ceil(total / pageSize);
+
+  useEffect(() => {
+    if (!containerRef.current) return;
+    if (chartRef.current) chartRef.current.destroy();
+    if (!rows.length) return;
+
+    const seriesData = rows.flatMap((row, yIdx) =>
+      row.values.map((val, xIdx) => [xIdx, yIdx, val])
+    );
+    // REPLACE with:
+    const CELL_MIN = 60;
+    const CELL_MAX = 100;
+    const LABEL_WIDTH = 120;
+    const colCount = months.length;
+    const availableWidth = containerRef.current.offsetWidth - LABEL_WIDTH;
+    const naturalCellWidth = Math.floor(availableWidth / colCount);
+    const cellWidth = Math.min(CELL_MAX, Math.max(CELL_MIN, naturalCellWidth));
+    const chartWidth = colCount * cellWidth + LABEL_WIDTH;
+    const needsScroll = chartWidth > containerRef.current.offsetWidth;
+
+    chartRef.current = Highcharts.chart(containerRef.current, {
+      chart: {
+        type: "heatmap",
+        backgroundColor: "transparent",
+        style: { fontFamily: "inherit" },
+        marginTop: 75,
+        marginBottom: 32,
+        marginRight: 32,
+        marginLeft: LABEL_WIDTH,
+        animation: { duration: 500 },
+        width: chartWidth,
+      },
+      title: { text: null },
+      credits: { enabled: false },
+      legend: { enabled: false },
+      xAxis: {
+        categories: months,
+        lineWidth: 0,
+        tickWidth: 0,
+        opposite: true,
+        labels: {
+          style: { color: "rgba(148, 148, 148, 1)", fontSize: "10px", fontWeight: "600" },
+        },
+      },
+      yAxis: {
+        categories: rows.map((r) => r.app),
+        title: null,
+        reversed: false,
+        lineWidth: 0,
+        gridLineWidth: 0,
+        tickWidth: 0,
+        labels: {
+          style: { color: "rgba(47, 47, 47, 1)", fontSize: "12px", fontWeight: "600" },
+          align: "right",
+        },
+      },
+      colorAxis: { min: 0, minColor: "#F5F5F5", maxColor: "#9E9E9E" },
+      tooltip: {
+        backgroundColor: "#fff",
+        borderColor: "#e5e7eb",
+        borderRadius: 8,
+        clip: true,        
+        data: seriesData,
+        shadow: true,
+        style: { fontSize: "12px", color: "#374151" },
+        formatter() {
+          return `<b>${this.series.yAxis.categories[this.point.y]}</b><br/>${this.series.xAxis.categories[this.point.x]}: <b>${this.point.value}</b>`;
+        },
+      },
+      series: [
+        {
+          name: "Deployments",
+          borderWidth: 6,
+          borderColor: "#ffffff",
+          borderRadius: 8,
+          data: seriesData,
+          dataLabels: {
+            enabled: true,
+            color: "rgba(0, 0, 0, 1)",
+            crop: true,
+            overflow: "justify",
+            style: {
+              fontSize: "11px",
+              fontWeight: "700",
+              textOutline: "none",
+            },
+            formatter() {
+              const v = this.point.value;
+              if (v >= 1000) {
+                this.point.dataLabel?.css({ fontSize: "8px" });
+                return String(v);
+              }
+              if (v >= 100) {
+                this.point.dataLabel?.css({ fontSize: "9px" });
+                return String(v);
+              }
+              return String(v).padStart(2, "0");
+            },
+          },
+        },
+      ],
+    });
+
+    return () => {
+      if (chartRef.current) {
+        chartRef.current.destroy();
+        chartRef.current = null;
+      }
+    };
+  }, [rows, months]);
+
+  const minChartWidth = Math.max(months.length * 60 + 120, 400);
+  const needsScroll = minChartWidth > 600; 
+
+  const CELL_MIN = 60;
+  const CELL_MAX = 100;
+  const LABEL_WIDTH = 120;
+  const colCount = months.length;
+  const cellWidth = Math.min(CELL_MAX, Math.max(CELL_MIN, Math.floor(600 / colCount)));
+  const chartWidth = colCount * cellWidth + LABEL_WIDTH;
+
+  return (
+    <Box>
+      {rows.length === 0 ? (
+        <EmptyChartState />
+      ) : (
+        <>
+          <Box
+            sx={{
+              overflowX: "auto",
+              overflowY: "visible",
+              width: "100%",
+              "&::-webkit-scrollbar": { height: "5px" },
+              "&::-webkit-scrollbar-track": { background: "#f1f5f9", borderRadius: "4px" },
+              "&::-webkit-scrollbar-thumb": { background: "#cbd5e1", borderRadius: "4px" },
+              "&::-webkit-scrollbar-thumb:hover": { background: "#94a3b8" },
+            }}
+          >
+            <div
+              ref={containerRef}
+              style={{
+                width: `${chartWidth}px`,
+                minWidth: `${chartWidth}px`,
+                height: `${Math.max(200, rows.length * 40 + 60)}px`,
+              }}
+            />
+          </Box>
+
+          {totalPages > 1 && (
+            <Box
+              sx={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                mt: "12px",
+                pt: "10px",
+                borderTop: "1px solid #f0f0f0",
+              }}
+            >
+              <Box sx={{ fontSize: "11px", color: "#9ca3af", fontWeight: 500 }}>
+                {`${page * pageSize + 1}–${Math.min((page + 1) * pageSize, total)} of ${total} apps`}
+              </Box>
+
+              <Box sx={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                <button
+                  onClick={() => onPageChange(page - 1)}
+                  disabled={page === 0}
+                  style={{
+                    width: 28, height: 28,
+                    border: "1px solid #e5e7eb", borderRadius: "6px",
+                    background: page === 0 ? "#f9fafb" : "#fff",
+                    cursor: page === 0 ? "not-allowed" : "pointer",
+                    color: page === 0 ? "#d1d5db" : "#374151",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                  }}
+                >
+                  <i className="ri-arrow-left-s-line" style={{ fontSize: "14px" }} />
+                </button>
+
+                {Array.from({ length: totalPages }, (_, i) => i)
+                  .filter((p) => p === 0 || p === totalPages - 1 || Math.abs(p - page) <= 1)
+                  .reduce((acc, p, idx, arr) => {
+                    if (idx > 0 && p - arr[idx - 1] > 1) acc.push("…");
+                    acc.push(p);
+                    return acc;
+                  }, [])
+                  .map((p, idx) =>
+                    p === "…" ? (
+                      <span key={`ellipsis-${idx}`} style={{ width: 28, textAlign: "center", fontSize: "12px", color: "#9ca3af" }}>…</span>
+                    ) : (
+                      <button
+                        key={p}
+                        onClick={() => onPageChange(p)}
+                        style={{
+                          width: 28, height: 28,
+                          border: `1px solid ${p === page ? "rgba(0,134,255,1)" : "#e5e7eb"}`,
+                          borderRadius: "6px",
+                          background: p === page ? "rgba(0,134,255,1)" : "#fff",
+                          color: p === page ? "#fff" : "#374151",
+                          fontWeight: p === page ? 700 : 500,
+                          fontSize: "12px",
+                          cursor: "pointer",
+                          display: "flex", alignItems: "center", justifyContent: "center",
+                          fontFamily: "inherit",
+                        }}
+                      >
+                        {p + 1}
+                      </button>
+                    )
+                  )}
+
+                <button
+                  onClick={() => onPageChange(page + 1)}
+                  disabled={page >= totalPages - 1}
+                  style={{
+                    width: 28, height: 28,
+                    border: "1px solid #e5e7eb", borderRadius: "6px",
+                    background: page >= totalPages - 1 ? "#f9fafb" : "#fff",
+                    cursor: page >= totalPages - 1 ? "not-allowed" : "pointer",
+                    color: page >= totalPages - 1 ? "#d1d5db" : "#374151",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                  }}
+                >
+                  <i className="ri-arrow-right-s-line" style={{ fontSize: "14px" }} />
+                </button>
+              </Box>
+            </Box>
+          )}
+        </>
+      )}
+    </Box>
+  );
+}
+
+function PercentileBarChart({ percentiles }) {
+  if(!percentiles) return <EmptyChartState />;
+  const containerRef = useRef(null);
+  const chartRef = useRef(null);
+  const fmtMinutes = (m) => {
+    if (m >= 1440) { const d = Math.floor(m / 1440); const h = Math.floor((m % 1440) / 60); return h > 0 ? `${d}d ${h}h` : `${d}d`; }
+    const h = Math.floor(m / 60); const min = m % 60;
+    if (h > 0 && min > 0) return `${h}h ${min}m`; if (h > 0) return `${h} hrs`; return `${min}m`;
+  };
+  useEffect(() => {
+    if (!containerRef.current) return;
+    if (chartRef.current) chartRef.current.destroy();
+    const maxVal = Math.max(...percentiles.map((p) => p.minutes));
+    const ceiling = Math.ceil(maxVal / 100) * 100 + 100;
+    const tickStep = Math.ceil(ceiling / 4 / 50) * 50;
+    const tickVals = [];
+    for (let v = 0; v <= ceiling; v += tickStep) tickVals.push(v);
+    chartRef.current = Highcharts.chart(containerRef.current, {
+      chart: { type: "column", backgroundColor: "transparent", style: { fontFamily: "inherit" }, height: 380, animation: { duration: 600 }, marginLeft: 80, marginRight: 20 },
+      title: { text: null }, credits: { enabled: false }, legend: { enabled: false },
+      xAxis: { categories: percentiles.map((p) => p.label), lineColor: "#e5e7eb", lineWidth: 1, tickWidth: 0, gridLineWidth: 0, labels: { style: { color: "#6b7280", fontSize: "13px", fontWeight: 500 }, align: "right" } },
+      yAxis: { min: 0, max: ceiling, tickPositions: tickVals, title: { text: null }, gridLineWidth: 0, lineColor: "#d1d5db", lineWidth: 1, tickColor: "#d1d5db", tickWidth: 1, labels: { style: { color: "#6b7280", fontSize: "11px" }, formatter() { return this.value === 0 ? "0" : fmtMinutes(this.value); } } },
+      tooltip: {
+        backgroundColor: "#ffffff", borderColor: "#e5e7eb", borderRadius: 8, shadow: true, style: { fontSize: "12px", color: "#374151" }, formatter() {
+          const totalMinutes = Math.floor(this.y);
+          const hrs = Math.floor(totalMinutes / 60);
+          const mins = totalMinutes % 60;
+          const formatted = `${hrs}hr ${mins}min`;
+          return `<b>${this.x}</b><br/>Lead time: <b>${formatted}</b>`;
+        } },
+      plotOptions: { column: { borderRadius: 8, pointWidth: 100, groupPadding: 0.15, states: { hover: { brightness: -0.04 } }, dataLabels: { enabled: false } } },
+      series: [{ name: "Lead time", data: percentiles.map((p) => ({ y: p.minutes, color: { linearGradient: { x1: 0, y1: 0, x2: 0, y2: 1 }, stops: [[0, "rgba(0, 134, 255, 0.95)"], [1, "rgba(140, 200, 255, 0.50)"]] } })) }],
+    });
+    return () => { if (chartRef.current) { chartRef.current.destroy(); chartRef.current = null; } };
+  }, [percentiles]);
+  return <div ref={containerRef} style={{ width: "100%" }} />;
+}
+
+function FailedChangesComboChart({ contributorsData }) {
+  if (false) return <ContributorsSkeleton />;
+    if(!contributorsData) return <EmptyChartState />;
+  const containerRef = useRef(null);
+  const chartRef = useRef(null);
+  useEffect(() => {
+    if (!containerRef.current) return;
+    if (chartRef.current) chartRef.current.destroy();
+    const { apps, failures, spline } = contributorsData;
+    const splineStep = (apps.length - 1) / (spline.length - 1);
+    const splineData = spline.map((v, i) => [i * splineStep, v]);
+    chartRef.current = Highcharts.chart(containerRef.current, {
+      chart: { backgroundColor: "transparent", style: { fontFamily: "inherit" }, height: 380, animation: { duration: 600 }, marginLeft: 55, marginRight: 20, marginBottom: 72 },
+      title: { text: null }, credits: { enabled: false }, legend: { enabled: false },
+      xAxis: { categories: apps, lineColor: "#e5e7eb", gridLineWidth: 0, lineWidth: 1, tickWidth: 0, labels: { style: { color: "#6b7280", fontSize: "11px", fontWeight: 500 }, autoRotation: [0], overflow: "justify" } },
+      yAxis: { min: 0, title: { text: null }, gridLineWidth: 0, lineWidth: 1, lineColor: "#d1d5db", tickAmount: 5, labels: { style: { color: "#6b7280", fontSize: "11px" } } },
+      tooltip: { shared: true, backgroundColor: "#ffffff", borderColor: "#e5e7eb", borderRadius: 8, shadow: true, style: { fontSize: "12px", color: "#374151" } },
+      plotOptions: { column: { borderRadius: 6, pointPadding: 0.15, groupPadding: 0.1, color: "rgba(250, 108, 108, 1)", states: { hover: { brightness: -0.05 } }, dataLabels: { enabled: false } }, spline: { color: "#1a1a1a", lineWidth: 1, marker: { enabled: false }, states: { hover: { lineWidth: 2 } } } },
+      series: [
+        { type: "column", name: "Failed changes", data: failures.map((v) => (v === null ? 0 : v)) },
+        { type: "spline", name: "Trend", data: splineData, pointStart: 0, xAxis: 0 },
+      ],
+    });
+    return () => { if (chartRef.current) { chartRef.current.destroy(); chartRef.current = null; } };
+  }, [contributorsData]);
+  return <div ref={containerRef} style={{ width: "100%" }} />;
+}
+
+
+// ─── Small UI components (unchanged) ─────────────────────────────────────────
+
+const InfoBadge = ({ tooltip }) => (
+  <Box sx={{ fontSize: 12, color: "#1A1A2E", fontWeight: 600, display: "flex", alignItems: "center", gap: "6px" }}>
+    <Tooltip title={tooltip} arrow placement="top" enterDelay={300}>
+      <Box component="span" sx={{ display: "flex", alignItems: "center" }}>
+        <i className="ri-information-line font-16 color-tertiary" style={{ cursor: "pointer" }} />
+      </Box>
+    </Tooltip>
+  </Box>
+);
+
+const LegendItem = ({ color, label, count }) => (
+  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", border: "1px solid #e5e7eb", borderRadius: "8px", fontSize: "12px", fontWeight: 600, color: "#374151", gap: "24px" }}>
+    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+      <span style={{ width: "10px", height: "10px", borderRadius: "50%", background: color, flexShrink: 0 }} />
+      {label}
+    </div>
+    <span style={{ color: "#374151", fontWeight: 700 }}>{count}</span>
+  </div>
+);
+
+const RankedList = ({
+  rankedApps = [],
+  loading = false,
+}) => {
+  if (loading) {
+    return (
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          gap: "10px",
+          marginTop: "4px",
+        }}
+      >
+        {[1, 2, 3, 4, 5].map((item) => (
+          <div
+            key={item}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "14px",
+              padding: "8px 16px",
+              border: "1px solid #e5e7eb",
+              borderRadius: "10px",
+              background: "rgba(250, 250, 250, 1)",
+            }}
+          >
+            {/* Rank */}
+            <Skeleton
+              variant="rounded"
+              width={63}
+              height={36}
+              sx={{ borderRadius: "8px", flexShrink: 0 }}
+            />
+
+            {/* Content */}
+            <div style={{ flex: 1 }}>
+              <Skeleton
+                variant="text"
+                width="45%"
+                height={26}
+                style={{ marginBottom: 2 }}
+              />
+
+              <Skeleton
+                variant="text"
+                width="30%"
+                height={20}
+              />
+            </div>
+
+            {/* Value */}
+            <Skeleton
+              variant="text"
+              width={50}
+              height={28}
+            />
+
+            {/* Level Badge */}
+            <Skeleton
+              variant="rounded"
+              width={48}
+              height={26}
+              sx={{ borderRadius: "4px", flexShrink: 0 }}
+            />
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  if ( rankedApps.length === 0) {
+    return (
+      <EmptyChartState />
+    );
+  }
+
+  return (
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        gap: "10px",
+        marginTop: "4px",
+      }}
+    >
+      {rankedApps.map((item) => (
+        <div
+          key={item.rank}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "14px",
+            padding: "8px 16px",
+            border: "1px solid #e5e7eb",
+            borderRadius: "10px",
+            background: "rgba(250, 250, 250, 1)",
+          }}
+        >
+          <div
+            style={{
+              width: "63px",
+              height: "36px",
+              borderRadius: "8px",
+              border: "1px solid #e5e7eb",
+              display: "flex",
+              background:"#ffffff",
+              alignItems: "center",
+              justifyContent: "center",
+              fontSize: "13px",
+              fontWeight: 600,
+              color: "#374151",
+              flexShrink: 0,
+            }}
+          >
+            {item.rank}
+          </div>
+
+          {/* Name + Metric */}
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div
+              style={{
+                fontSize: "13px",
+                fontWeight: 700,
+                color: "#111827",
+              }}
+            >
+              {item.name}
+            </div>
+
+            <div
+              style={{
+                fontSize: "12px",
+                color: "#9ca3af",
+                marginTop: "2px",
+              }}
+            >
+              {item.metric}
+            </div>
+          </div>
+
+          {/* Value */}
+          <div
+            style={{
+              fontSize: "14px",
+              fontWeight: 700,
+              color: "#111827",
+              marginRight: "12px",
+              flexShrink: 0,
+            }}
+          >
+            {item.value}
+          </div>
+
+          {/* Level */}
+          <span
+            style={{
+              background: item.levelBg,
+              color: item.levelColor,
+              border: `1px solid ${item.borderColor}`,
+              padding: "3px 6px",
+              borderRadius: "4px",
+              fontSize: "12px",
+              fontWeight: 700,
+              flexShrink: 0,
+              minWidth: "42px",
+              textAlign: "center",
+            }}
+          >
+            {item.level}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+};
+
+const ThresholdLegend = ({
+  thresholds = [],
+  footerNote,
+  loading = false,
+}) => {
+  if (loading) {
+    return (
+      <>
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            gap: "12px",
+          }}
+        >
+          {[1, 2, 3, 4].map((item) => (
+            <div
+              key={item}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "16px",
+                padding: "10px 14px",
+                border: "1px solid #e5e7eb",
+                borderRadius: "6px",
+              }}
+            >
+              <Skeleton
+                variant="rounded"
+                width={58}
+                height={24}
+                sx={{ borderRadius: "4px", flexShrink: 0 }}
+              />
+
+              <Skeleton variant="text" width="75%" height={24} />
+            </div>
+          ))}
+        </div>
+
+        <div
+          style={{
+            borderTop: "1px solid rgba(230, 230, 230, 1)",
+            marginTop: "40px",
+          }}
+        />
+
+        <div
+          style={{
+            marginTop: "16px",
+            display: "flex",
+            gap: "10px",
+            padding: "10px 12px",
+            border: "1px solid rgba(230, 230, 230, 1)",
+            borderRadius: "6px",
+            alignItems: "center",
+          }}
+        >
+          <Skeleton variant="circular" width={18} height={18} />
+
+          <Skeleton variant="text" width="85%" height={22} />
+        </div>
+      </>
+    );
+  }
+  if ( thresholds.length === 0) {
+    return (
+      <EmptyChartState/>
+    );
+  }
+  return (
+    <>
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          gap: "12px",
+        }}
+      >
+        {thresholds.map((t) => (
+          <div
+            key={t.label}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "16px",
+              padding: "10px 14px",
+              border: "1px solid #e5e7eb",
+              borderRadius: "6px",
+              fontSize: "13px",
+              color: "#374151",
+            }}
+          >
+            <span
+              style={{
+                background: t.bg,
+                color: t.color,
+                border: "1px solid #e5e7eb",
+                padding: "1px 8px",
+                borderRadius: "4px",
+                fontSize: "12px",
+                fontWeight: 600,
+                minWidth: "58px",
+                textAlign: "center",
+                flexShrink: 0,
+              }}
+            >
+              {t.label}
+            </span>
+
+            <span style={{
+              fontSize: "12px",
+              fontWeight: 700,
+            }}>
+              {t.bold}
+            </span>
+          </div>
+        ))}
+      </div>
+
+      <div
+        style={{
+          borderTop: "1px solid rgba(230, 230, 230, 1)",
+          marginTop: "40px",
+        }}
+      />
+
+      <div
+        style={{
+          marginTop: "16px",
+          display: "flex",
+          gap: "10px",
+          padding: "6px 12px",
+          background: "#f9fafb",
+          border: "1px solid rgba(230, 230, 230, 1)",
+          borderRadius: "6px",
+          fontSize: "12px",
+          fontWeight: 600,
+          color: "#2f2f2f",
+          lineHeight: 1.5,
+          alignItems: "center",
+        }}
+      >
+        <span
+          className="ri-information-line font-18"
+          style={{
+            flexShrink: 0,
+            color: "rgba(80, 80, 80, 1)",
+          }}
+        />
+        {footerNote}
+      </div>
+    </>
+  );
+};
+const DRAWER_THRESHOLD_DOTS = [
+  { label: "ELITE", color: "rgba(28, 156, 19, 1)" },
+  { label: "MEDIUM", color: "rgba(254, 161, 17, 1)" },
+  { label: "HIGH", color: "rgba(19, 78, 156, 1)" },
+  { label: "LOW", color: "rgba(229, 55, 55, 1)" },
+  
+];
+
+const LEVEL_DOT_COLORS = {
+  ELITE: "rgba(28, 156, 19, 1)",
+  HIGH: "rgba(19, 78, 156, 1)",
+  MEDIUM: "rgba(254, 161, 17, 1)",
+  LOW: "rgba(229, 55, 55, 1)",
+};
+
+const ThresholdLegendItem = ({ t, style }) => {
+  const [hovered, setHovered] = React.useState(false);
+  const ref = React.useRef(null);
+  const [tooltipPos, setTooltipPos] = React.useState({ top: 100, left: 100 });
+
+  const handleMouseEnter = () => {
+    if (ref.current) {
+      const rect = ref.current.getBoundingClientRect();
+      setTooltipPos({
+        top: rect.top - 90,
+        left: rect.left + rect.width / 2,
+      });
+    }
+    setHovered(true);
+  };
+
+  return (
+    <>
+      <div
+        ref={ref}
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={() => setHovered(false)}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "10px",
+          padding: "10px 14px",
+          border: "1px solid #e5e7eb",
+          borderRadius: "10px",
+          cursor: "default",
+          background: hovered ? "#f9fafb" : "#fff",
+          transition: "background 0.15s",
+        }}
+      >
+        <span style={{
+          width: 14,
+          height: 14,
+          borderRadius: "50%",
+          background: LEVEL_DOT_COLORS[t.level] ?? "#9ca3af",
+          flexShrink: 0,
+        }} />
+        <span style={{
+          fontSize: "13px",
+          fontWeight: 700,
+          color: "#1a1a2e",
+          letterSpacing: "0.3px",
+        }}>
+          {style.label.toUpperCase()}
+        </span>
+      </div>
+
+      {hovered && ReactDOM.createPortal(
+        <div style={{
+          position: "fixed",
+          top: tooltipPos.top,
+          left: tooltipPos.left,
+          transform: "translateX(-50%)",
+          zIndex: 99999,
+          pointerEvents: "none",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          animation: "tooltipFadeIn 0.2s ease forwards",
+        }}>
+          <style>{`
+      @keyframes tooltipFadeIn {
+        from {
+          opacity: 0;
+          transform: translateX(-50%) translateY(6px);
+        }
+        to {
+          opacity: 1;
+          transform: translateX(-50%) translateY(0px);
+        }
+      }
+    `}</style>
+
+          <div style={{
+            background: "#1e3a5f",
+            borderRadius: "10px",
+            padding: "14px 18px",
+            minWidth: "180px",
+            maxWidth: "240px",
+            textAlign: "left",
+            boxShadow: "0 6px 24px rgba(0,0,0,0.22)",
+          }}>
+            <div style={{
+              fontSize: "13px",
+              fontWeight: 700,
+              color: "#ffffff",
+              lineHeight: 1.5,
+            }}>
+              {t.description ?? ""}
+            </div>
+          </div>
+
+          {/* Arrow */}
+          <div style={{
+            width: 0,
+            height: 0,
+            borderLeft: "9px solid transparent",
+            borderRight: "9px solid transparent",
+            borderTop: "9px solid #1e3a5f",
+          }} />
+        </div>,
+        document.body
+      )}
+    </>
+  );
+};
+
+function ServiceInfoDrawer({ open, onClose, appName, loading, error, data, activeTab }) {
+  if (!open) return null;
+
+  const serviceName = data?.service?.name ?? "—";
+  const metricValue = data?.metric ? formatCardValue(data.metric.value, data.metric.type) : "—";
+  const metricLevel = safeLevelKey(data?.metric?.level);
+
+  const direction = data?.metric?.direction?.label ?? "—";
+  const lastCalc = data?.metric?.last_calculated
+    ? dayjs(data.metric.last_calculated).format("DD MMM YYYY, HH:mm")
+    : "—";
+  const lastDeploy = data?.last_deployment
+    ? dayjs(data.last_deployment).format("DD MMM YYYY, HH:mm")
+    : "—";
+  const lastFailure = data?.last_failure
+    ? dayjs(data.last_failure).format("DD MMM YYYY, HH:mm")
+    : "—";
+  const thresholds = data?.thresholds ?? [];
+
+  const levelStyle = LEVEL_STYLES[metricLevel] ?? { color: "#6b7280", bg: "#f3f4f6", borderColor: "#e5e7eb" };
+
+  return (
+    <>
+      <div
+        onClick={onClose}
+        style={{ position: "fixed", inset: 0, background: "rgb(10 10 10 / 29%)", zIndex: 1200, opacity: open ? 1 : 0, pointerEvents: open ? "all" : "none", transition: "opacity 0.25s ease" }}
+      />
+      <div
+        style={{ position: "fixed", top: 0, right: 0, height: "100vh", width: "520px", background: "#fff", zIndex: 1300, boxShadow: "-4px 0 24px rgba(0,0,0,0.10)", transform: open ? "translateX(0)" : "translateX(100%)", transition: "transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)", display: "flex", flexDirection: "column", overflow: "hidden" }}
+      >
+        <div style={{ padding: "20px 24px 16px", borderBottom: "1px solid #f0f0f0" }}>
+          <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between" }}>
+            <div>
+              <div style={{ fontSize: "16px", fontWeight: 700, color: "#2f2f2f" }}>
+                {serviceName}
+              </div>
+              <div style={{ fontSize: "12px", color: "#6b7280", marginTop: "3px" }}>
+                {appName}
+              </div>
+            </div>
+            <button
+              onClick={onClose}
+              style={{ background: "none", border: "none", cursor: "pointer", padding: "4px", borderRadius: "6px", color: "#6b7280", fontSize: "20px", lineHeight: 1, display: "flex", alignItems: "center" }}
+            >
+              <i className="ri-close-line" />
+            </button>
+          </div>
+        </div>
+
+        <div style={{ flex: 1, overflowY: "auto", padding: "20px 24px", display: "flex", flexDirection: "column", gap: "14px" }}>
+          {loading ? (
+            <>
+              <Skeleton variant="rounded" width="100%" height={100} sx={{ borderRadius: "8px" }} />
+              <Skeleton variant="rounded" width="100%" height={64} sx={{ borderRadius: "10px" }} />
+              <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                <Skeleton variant="rounded" width="100%" height={72} sx={{ borderRadius: "10px" }} />
+                <Skeleton variant="rounded" width="100%" height={72} sx={{ borderRadius: "10px" }} />
+              </Box>
+              <Skeleton variant="rounded" width="100%" height={160} sx={{ borderRadius: "10px" }} />
+            </>
+          ) : error ? (
+            <EmptyChartState />
+          ) : (
+            <>
+              <div style={{ border: "1px solid rgba(230,230,230,1)", borderRadius: "8px", padding: "14px 16px", background: "rgba(250,250,250,1)" }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "10px" }}>
+                  <span style={{ fontSize: "12px", fontWeight: 600, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                    {data?.metric_index?.label ?? "Metric"}
+                  </span>
+                  <span style={{ background: levelStyle.bg, color: levelStyle.color, border: `1px solid ${levelStyle.borderColor}`, padding: "2px 10px", borderRadius: "4px", fontSize: "12px", fontWeight: 700 }}>
+                    {metricLevel}
+                  </span>
+                </div>
+                <div style={{ fontSize: "22px", fontWeight: 700, color: "#111827", lineHeight: 1.1 }}>
+                  {metricValue}
+                </div>
+                <div style={{ fontSize: "12px", color: "#6b7280", marginTop: "6px" }}>
+                  Last calculated: {lastCalc}
+                </div>
+              </div>
+
+              {/* Direction */}
+              <div style={{ border: "1px solid #e5e7eb", borderRadius: "10px", padding: "14px 16px" }}>
+                <div style={{ fontSize: "11px", fontWeight: 600, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: "6px" }}>
+                  Metric Direction
+                </div>
+                <div style={{ fontSize: "14px", fontWeight: 600, color: "#2f2f2f" }}>{direction}</div>
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                <div style={{ border: "1px solid #e5e7eb", borderRadius: "10px", padding: "14px 16px" }}>
+                  <div style={{ fontSize: "11px", fontWeight: 600, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: "6px" }}>
+                    Last Deployment
+                  </div>
+                  <div style={{ fontSize: "13px", fontWeight: 600, color: "#2f2f2f" }}>{lastDeploy}</div>
+                </div>
+                <div style={{ border: "1px solid #e5e7eb", borderRadius: "10px", padding: "14px 16px" }}>
+                  <div style={{ fontSize: "11px", fontWeight: 600, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: "6px" }}>
+                    Last Failure
+                  </div>
+                  <div style={{ fontSize: "13px", fontWeight: 600, color: "#2f2f2f" }}>{lastFailure}</div>
+                </div>
+              </div>
+
+              {/* Thresholds from API */}
+                  {thresholds.length > 0 && (
+                    <div style={{ border: "1px solid #e5e7eb", borderRadius: "10px", padding: "16px 20px" }}>
+                      <div style={{ fontSize: "13px", fontWeight: 700, color: "#2f2f2f", marginBottom: "12px" }}>
+                        Threshold Legend
+                      </div>
+                      <div style={{
+                        display: "grid",
+                        gridTemplateColumns: "1fr 1fr",
+                        gap: "10px",
+                      }}>
+                        {thresholds.map((t) => {
+                          const style = LEVEL_THRESHOLD_STYLE[t.level] ?? LEVEL_THRESHOLD_STYLE.LOW;
+                          return (
+                            <ThresholdLegendItem key={t.level} t={t} style={style} />
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+            </>
+          )}
+        </div>
+      </div>
+    </>
+  );
+}
+
+const safeLevelKey = (level) => {
+  if (!level) return "—";
+  return level.charAt(0).toUpperCase() + level.slice(1).toLowerCase();
+};
+
+const formatCardValue = (value, type) => {
+  if (value === null || value === undefined) return "—";
+
+  switch (type) {
+    case "INT":
+      return String(Math.round(value));                    
+
+    case "TIME": {                                         
+      const total = Math.round(value);
+      if (total >= 1440) {
+        const d = Math.floor(total / 1440);
+        const h = Math.floor((total % 1440) / 60);
+        return h > 0 ? `${d}d ${h}h` : `${d}d`;           
+      }
+      const h = Math.floor(total / 60);
+      const m = total % 60;
+      if (h > 0 && m > 0) return `${h}h ${m}m`;
+      if (h > 0) return `${h}h`;
+      return `${m}m`;
+    }
+
+    case "PERCENTAGE":
+      return `${parseFloat(value.toFixed(1))}%`;           
+
+    default:
+      return String(value);
+  }
+};
+const TAB_SUBLABEL = {
+  "Deployment Frequency": "Deployments",
+  "Lead Time To Change": "Average Lead Time",
+  "Change Failure Rate": "Change Failure Rate",
+};
+const deriveTabValues = (raw, tabKey) => {
+  if (!raw?.cards) return null;
+
+  const card = raw.cards.find((c) => CARD_KEY_MAP[c.name] === tabKey);
+  if (!card) return null;
+
+  return {
+    value: formatCardValue(card.value, card.type),
+    label: TAB_SUBLABEL[card.name] ?? card.label,
+    level: card.level,
+    levelStyle: LEVEL_COLOR_MAP[card.level] ?? LEVEL_COLOR_MAP.LOW,
+    rating: card.rating,
+    totalFailures: card.total_failures ?? null,
+  };
+};
+
+
+
+const buildColumns = (viewMode, setViewMode, setSelectedService, setShowDrawer, activeTab, onViewDetails) => [
+  {
+    key: "service",
+    label: viewMode === "app" ? "Service" : "Application",
+    minWidth: 180,
+    render: (val) => (
+      <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+        <i className={viewMode === "app" ? "ri-settings-3-line" : "ri-apps-line"} style={{ fontSize: 18, color: "#8B91A8" }} />
+        <span style={{ fontWeight: 600, color: "#1A1A2E", fontSize: 13 }}>{val}</span>
+      </div>
+    ),
+  },
+  {
+    key: "services",
+    label: "Services",
+    minWidth: 100,
+    render: (val) => (
+      <span style={{ fontWeight: 600, color: "#374151", fontSize: 13 }}>{val}</span>
+    ),
+  },
+  {
+    key: "frequency",
+    label: activeTab === "deploymentFrequency" ? "Deployment Frequency"
+      : activeTab === "leadTimeToChange" ? "Lead Time to Change"
+        : "Change Failure Rate",
+    minWidth: 160,
+    render: (val) => (
+      <span style={{ fontWeight: 600, color: "#374151", fontSize: 13 }}>{val}</span>
+    ),
+  },
+  {
+    key: "level",
+    label: "Level",
+    minWidth: 100,
+    render: (val) => {
+      const s = LEVEL_STYLES[val] ?? { color: "#6b7280", bg: "#f3f4f6", borderColor: "#e5e7eb" };
+      return (
+        <span style={{ display: "inline-block", padding: "3px 14px", borderRadius: 6, fontSize: 12, fontWeight: 700, color: s.color, background: s.bg, border: `1px solid ${s.borderColor}` }}>
+          {val}
+        </span>
+      );
+    },
+  },
+  {
+    key: "lastActivity",
+    label: "Last Activity",
+    minWidth: 180,
+    render: (val) => (
+      <span style={{ fontSize: 13, color: "#6b7280" }}>{val}</span>
+    ),
+  },
+  {
+    key: "_action",
+    label: "Action",
+    align: "right",
+    minWidth: 130,
+    render: (_, row) => (
+      <button
+        style={{ height: 34, padding: "0 16px", fontSize: 12, fontWeight: 700, border: "1px solid rgba(157, 192, 238, 1)", borderRadius: 8, background: "#fff", color: "rgba(18, 77, 155, 1)", cursor: "pointer", fontFamily: "inherit", letterSpacing: 0.3, transition: "all 0.2s ease" }}
+        onMouseEnter={(e) => { e.currentTarget.style.background = "#0086FF"; e.currentTarget.style.color = "#fff"; }}
+        onMouseLeave={(e) => { e.currentTarget.style.background = "#fff"; e.currentTarget.style.color = "rgba(18, 77, 155, 1)"; }}
+        onClick={() => onViewDetails(row)}
+      >
+        View Details
+      </button>
+    ),
+  },
+];
+
+const DoraMetrics = ({
+  startDate,
+  endDate,
+  onDateRangeChange,
+  metricGroup: propMetricGroup = "Dora Metrics",
+  isLoading = false,
+  isEmpty = false,
+  isTrendLoading,
+  isLevelDistLoading,
+  isBarChartLoading,
+  isRankedListLoading,
+  isThresholdLoading,
+  isHeatmapLoading,
+  isPercentileLoading,
+  isContributorsLoading,
+  isTableLoading,
+  isTabsLoading,
+  isTrendEmpty,
+  isLevelDistEmpty,
+  isBarChartEmpty,
+  isRankedListEmpty,
+  isHeatmapEmpty,
+  isPercentileEmpty,
+  isContributorsEmpty,
+  isTableEmpty,
+}) => {
+  const resolve = (granular, global) => (granular !== undefined ? granular : global);
+
+  const metricGroup = useMemo(() => {
+    if (!propMetricGroup) return "Dora Metrics";
+    const name = propMetricGroup.trim();
+    if (name.toLowerCase() === "pmd") return "Pmd";
+    if (name.toLowerCase() === "owasp java") return "OWASP Java";
+    if (name.toLowerCase() === "code quality") return "Code Quality";
+    if (name.toLowerCase() === "dora metrics") return "Dora Metrics";
+    return name;
+  }, [propMetricGroup]);
+ 
+  const [appFilter, setAppFilter] = useState("all");
+  const [activeTab, setActiveTab] = useState("deploymentFrequency_0");
+  const [hoveredTab, setHoveredTab] = useState(null);
+  const [selectedService, setSelectedService] = useState(null);
+  const [dateRangeAnchor, setDateRangeAnchor] = useState(null);
+
+  const [tabMetrics, setTabMetrics] = useState(null);
+  const [tabsError, setTabsError] = useState(null);
+  const [noDataAlert, setNoDataAlert] = useState(null); 
+
+  const CARD_KEY_MAP = useMemo(() => {
+    const keys = ["deploymentFrequency", "leadTimeToChange", "changeFailureRate"];
+    const map = {};
+    if (tabMetrics?.cards?.length > 0) {
+      tabMetrics.cards.forEach((card, index) => {
+        const key = keys[index % keys.length];
+        map[card.name] = `${key}_${index}`;
+      });
+    } else {
+      map["Deployment Frequency"] = "deploymentFrequency_0";
+      map["Lead Time To Change"] = "leadTimeToChange_1";
+      map["Change Failure Rate"] = "changeFailureRate_2";
+    }
+    return map;
+  }, [tabMetrics]);
+
+  const METRIC_INDEX_MAP = useMemo(() => {
+    const keys = ["deploymentFrequency", "leadTimeToChange", "changeFailureRate"];
+    const map = {};
+    if (tabMetrics?.cards?.length > 0) {
+      tabMetrics.cards.forEach((card, index) => {
+        const key = keys[index % keys.length];
+        map[`${key}_${index}`] = card.name;
+      });
+    } else {
+      map["deploymentFrequency_0"] = "Deployment Frequency";
+      map["leadTimeToChange_1"] = "Lead Time To Change";
+      map["changeFailureRate_2"] = "Change Failure Rate";
+      map["deploymentFrequency"] = "Deployment Frequency";
+      map["leadTimeToChange"] = "Lead Time To Change";
+      map["changeFailureRate"] = "Change Failure Rate";
+    }
+    return map;
+  }, [tabMetrics]);
+
+  const TABS = useMemo(() => {
+    const keys = ["deploymentFrequency", "leadTimeToChange", "changeFailureRate"];
+    const icons = ["ri-flashlight-line", "ri-time-line", "ri-alert-line"];
+    if (tabMetrics?.cards?.length > 0) {
+      return tabMetrics.cards.map((card, index) => {
+        const key = keys[index % keys.length];
+        const icon = icons[index % icons.length];
+        return {
+          key: `${key}_${index}`,
+          originalKey: key,
+          title: card.name,
+          icon: card.icon || icon,
+        };
+      });
+    } else {
+      return [
+        { key: "deploymentFrequency_0", originalKey: "deploymentFrequency", icon: "ri-flashlight-line", title: "Deployment Frequency" },
+        { key: "leadTimeToChange_1", originalKey: "leadTimeToChange", icon: "ri-time-line", title: "Lead time to change" },
+        { key: "changeFailureRate_2", originalKey: "changeFailureRate", icon: "ri-alert-line", title: "Change Failure Rate" },
+      ];
+    }
+  }, [tabMetrics]);
+
+  const activeTabOriginalKey = useMemo(() => {
+    const tabObj = TABS.find((t) => t.key === activeTab);
+    return tabObj ? tabObj.originalKey : activeTab.split("_")[0];
+  }, [TABS, activeTab]);
+
+  useEffect(() => {
+    if (TABS && TABS.length > 0) {
+      const exists = TABS.some((t) => t.key === activeTab);
+      if (!exists) {
+        setActiveTab(TABS[0].key);
+      }
+    }
+  }, [tabMetrics, TABS, activeTab]);
+
+  const deriveTabValues = useCallback((raw, tabKey) => {
+    if (!raw?.cards) return null;
+
+    const card = raw.cards.find((c) => CARD_KEY_MAP[c.name] === tabKey);
+    if (!card) return null;
+
+    return {
+      value: formatCardValue(card.value, card.type),
+      label: TAB_SUBLABEL[card.name] ?? card.label ?? card.name,
+      level: card.level,
+      levelStyle: LEVEL_COLOR_MAP[card.level] ?? LEVEL_COLOR_MAP.LOW,
+      rating: card.rating,
+      totalFailures: card.total_failures ?? null,
+    };
+  }, [CARD_KEY_MAP]);
+  
+
+  const dateLabel = buildDateLabel(startDate, endDate);
+
+  const handleDateRangeClick = (e) => setDateRangeAnchor(e.currentTarget);
+  const handleDateRangeClose = () => setDateRangeAnchor(null);
+
+  const [trendData, setTrendData] = useState(null);
+  const [trendError, setTrendError] = useState(null);
+  const [trendLoading, setTrendLoading] = useState(false);
+
+  const [thresholdData, setThresholdData] = useState(null);
+  const [thresholdError, setThresholdError] = useState(false);
+  const [thresholdFetching, setThresholdFetching] = useState(false);
+
+  const [levelDistData, setLevelDistData] = useState(null);
+  const [levelDistError, setLevelDistError] = useState(false);
+  const [levelDistFetching, setLevelDistFetching] = useState(false);
+
+  const [rankingsData, setRankingsData] = useState(null);
+  const [rankingsError, setRankingsError] = useState(false);
+  const [rankingsFetching, setRankingsFetching] = useState(false);
+
+  const [worstRankingsData, setWorstRankingsData] = useState(null);
+  const [worstRankingsError, setWorstRankingsError] = useState(false);
+  const [worstRankingsFetching, setWorstRankingsFetching] = useState(false);
+
+  const [consistencyData, setConsistencyData] = useState(null);
+  const [consistencyError, setConsistencyError] = useState(false);
+  const [consistencyLoading, setConsistencyLoading] = useState(false);
+  const [consistencyPage, setConsistencyPage] = useState(0);
+  const [consistencySearch, setConsistencySearch] = useState("");
+
+  const [percentilesData, setPercentilesData] = useState(null);
+  const [percentilesError, setPercentilesError] = useState(false);
+  const [percentilesLoading, setPercentilesLoading] = useState(false);
+
+  const [contributorsData, setContributorsData] = useState(null);
+  const [contributorsError, setContributorsError] = useState(false);
+  const [contributorsFetching, setContributorsFetching] = useState(false);
+
+  const [tableData, setTableData] = useState(null);
+  const [tableError, setTableError] = useState(false);
+  const [tableFetching, setTableFetching] = useState(false);
+  const [tableTotal, setTableTotal] = useState(0);
+  const [tablePage, setTablePage] = useState(0);      
+  const [tableSearch, setTableSearch] = useState("");
+  const [tableLevel, setTableLevel] = useState("all");
+  const PAGE_SIZE = 10;
+
+  const [viewMode, setViewMode] = useState("org");  
+  const [selectedApp, setSelectedApp] = useState(null);    
+  const scope = viewMode === "app" ? "service" : "application";
+
+  const [serviceOptions, setServiceOptions] = useState([]);
+  const [serviceOptsFetching, setServiceOptsFetching] = useState(false);
+
+  const [appTableData, setAppTableData] = useState(null);
+  const [appTableError, setAppTableError] = useState(false);
+  const [appTableFetching, setAppTableFetching] = useState(false);
+  const [appTableTotal, setAppTableTotal] = useState(0);
+  const [appTablePage, setAppTablePage] = useState(0);
+  const [appTableSearch, setAppTableSearch] = useState("");
+  const [appTableLevel, setAppTableLevel] = useState("all");
+  const [appTableService, setAppTableService] = useState("all");
+
+  const [svcDetail, setSvcDetail] = useState(null);
+  const [svcDetailError, setSvcDetailError] = useState(false);
+  const [svcDetailLoading, setSvcDetailLoading] = useState(false);
+  const [showDrawer, setShowDrawer] = useState(false);
+
+  const [appFilterOptions, setAppFilterOptions] = useState([]);
+  const [appFilterOptsFetching, setAppFilterOptsFetching] = useState(false);
+  const [tableAppFilter, setTableAppFilter] = useState("all");
+
+  const fetchAllChartsRef = useRef(null);
+
+
+  const fetchTabMetrics = useCallback(() => {
+    setTabMetrics(null);
+    setTabsError(null);
+    setNoDataAlert(null);
+
+    setTrendData(null); setTrendError(null);
+    setThresholdData(null); setThresholdError(false);
+    setLevelDistData(null); setLevelDistError(false);
+    setRankingsData(null); setRankingsError(false);
+    setWorstRankingsData(null); setWorstRankingsError(false);
+    setConsistencyData(null); setConsistencyError(false);
+    setPercentilesData(null); setPercentilesError(false);
+    setContributorsData(null); setContributorsError(false);
+    setTableData(null); setTableError(false);
+    setAppTableData(null); setAppTableError(false);
+
+    setTrendLoading(true);
+    setThresholdFetching(true);
+    setLevelDistFetching(true);
+    setRankingsFetching(true);
+    setWorstRankingsFetching(true);
+    setConsistencyLoading(true);
+    setPercentilesLoading(true);
+    setContributorsFetching(true);
+    setTableFetching(true);
+    setAppTableFetching(true);
+
+    const start = startDate ?? dayjs().subtract(30, "day").format("YYYY-MM-DD");
+    const end = endDate ?? dayjs().format("YYYY-MM-DD");
+    const application = viewMode === "app" && selectedApp ? selectedApp : "all";
+    const scope = viewMode === "app" ? "service" : "application";
+
+    const qs = `?application=${application}&services=all&scope=${scope}&start_date=${start}&end_date=${end}`;
+    const url = GenerateURL(
+      { metric_group: metricGroup },
+      properties.api.dora_metrics.overview
+    ) + qs;
+
+    InvokeApi(
+      { endPoint: url, httpMethod: "GET", httpHeaders: { "Content-Type": "application/json" } },
+      (response) => {
+        setTabMetrics(response);
+      },
+      (error) => {
+        const status = error?.status ?? error?.statusCode ?? error?.response?.status;
+        if (status === 400) {
+          const msg =
+            error?.data?.message ??
+            error?.data?.detail ??
+            error?.response?.data?.message ??
+            error?.message ??
+            "No data available for the selected date range.";
+          setNoDataAlert(msg);
+        } else {
+          console.error("[DoraMetrics] tab metrics fetch failed:", error);
+          setTabsError(error?.message ?? "Failed to load metrics");
+        }
+      }
+    );
+  }, [startDate, endDate, viewMode, selectedApp, metricGroup]);
+  
+  useEffect(() => {
+    fetchTabMetrics();
+  }, [fetchTabMetrics]);
+
+  const fetchTrend = useCallback((metricIndex) => {
+    setTrendData(null);
+    setTrendError(null);
+    setTrendLoading(true);
+
+    const start = startDate ?? dayjs().subtract(30, "day").format("YYYY-MM-DD");
+    const end = endDate ?? dayjs().format("YYYY-MM-DD");
+
+    const qs = `?application=${appFilter}&services=all&scope=${scope}&start_date=${start}&end_date=${end}`;
+
+    const url = GenerateURL(
+      { metric_group: metricGroup, metric_index: metricIndex },
+      properties.api.dora_metrics.trend
+    ) + qs;
+
+    InvokeApi(
+      { endPoint: url, httpMethod: "GET", httpHeaders: { "Content-Type": "application/json" } },
+      (response) => {
+        setTrendData(response);
+        setTrendLoading(false);
+      },
+      (error) => {
+        console.error("[DoraMetrics] trend fetch failed:", error);
+        setTrendError(error?.message ?? "Failed to load trend");
+        setTrendLoading(false);
+      }
+    );
+  }, [startDate, endDate, appFilter, viewMode, metricGroup, scope]);
+
+
+  const buildTrendChartData = (raw) => {
+    if (!raw?.trend?.length) return null;
+
+    return {
+      trend: raw.trend.map((p) => p.value),
+      months: raw.trend.map((p) => p.label),
+      type: raw.trend[0]?.type ?? "INT",
+      chartTitle: raw.metric_index?.label ?? "",
+      yAxisLabel: raw.metric_index?.label ?? "Value",
+    };
+  };
+
+
+  const fetchThresholds = useCallback((tabKey) => {
+    setThresholdData(null);
+    setThresholdError(false);
+    setThresholdFetching(true);
+
+    const start = startDate ?? dayjs().subtract(30, "day").format("YYYY-MM-DD");
+    const end = endDate ?? dayjs().format("YYYY-MM-DD");
+
+    const qs = `?start_date=${start}&end_date=${end}`;
+    const url = GenerateURL(
+      { metric_group: metricGroup, metric_index: METRIC_INDEX_MAP[tabKey] },
+      properties.api.dora_metrics.thresholds
+    ) + qs;
+
+    InvokeApi(
+      { endPoint: url, httpMethod: "GET", httpHeaders: { "Content-Type": "application/json" } },
+      (response) => {
+        setThresholdData(response);
+        setThresholdFetching(false);
+      },
+      (error) => {
+        console.error("[DoraMetrics] thresholds fetch failed:", error);
+        setThresholdError(true);
+        setThresholdFetching(false);
+      }
+    );
+  }, [startDate, endDate, appFilter, viewMode, metricGroup, METRIC_INDEX_MAP]);
+
+
+  const buildThresholdRows = (raw) => {
+    if (!raw?.thresholds?.length) return null;
+
+    return {
+      thresholds: raw.thresholds.map((item) => {
+        const style = LEVEL_THRESHOLD_STYLE[item.level] ?? LEVEL_THRESHOLD_STYLE.LOW;
+        return {
+          level: item.level,           
+          description: item.description, 
+          label: style.label,
+          color: style.color,
+          bg: style.bg,
+          text: raw.metric_index.name,
+          bold: item.description,
+        };
+      }),
+      footerNote: raw.metric_index?.description || {
+        "Deployment Frequency": "Deployment Frequency is measured as the number of successful deployments per day. Higher is better.",
+        "Lead Time To Change": "Lead Time to Change measures the time from first commit to production. Lower is better.",
+        "Change Failure Rate": "Change Failure Rate is the percentage of deployments causing a production failure. Lower is better.",
+      }[raw.metric_index?.name ?? raw.metric_index?.label ?? ""] || "",
+    };
+  };
+
+  const fetchLevelDist = useCallback((tabKey) => {
+    setLevelDistData(null);
+    setLevelDistError(false);
+    setLevelDistFetching(true);
+
+    const start = startDate ?? dayjs().subtract(30, "day").format("YYYY-MM-DD");
+    const end = endDate ?? dayjs().format("YYYY-MM-DD");
+
+    const qs = `?application=${appFilter}&services=all&scope=${scope}&start_date=${start}&end_date=${end}`;
+
+    const url = GenerateURL(
+      { metric_group: metricGroup, metric_index: METRIC_INDEX_MAP[tabKey] },
+      properties.api.dora_metrics.level_distribution
+    ) + qs;
+
+    InvokeApi(
+      { endPoint: url, httpMethod: "GET", httpHeaders: { "Content-Type": "application/json" } },
+      (response) => { setLevelDistData(response); setLevelDistFetching(false); },
+      (error) => {
+        console.error("[DoraMetrics] level_distribution fetch failed:", error);
+        setLevelDistError(true);
+        setLevelDistFetching(false);
+      }
+    );
+  }, [startDate, endDate, appFilter, viewMode, metricGroup, METRIC_INDEX_MAP, scope]);
+
+  const LEVEL_DIST_COLORS = {
+    ELITE: "rgba(28, 156, 19, 1)",
+    HIGH: "rgba(19, 78, 156, 1)",
+    MEDIUM: "rgba(254, 161, 17, 1)",
+    LOW: "rgba(229, 55, 55, 1)",
+  };
+
+  const buildLevelDistData = (raw) => {
+    if (!raw?.distribution?.length) return null;
+
+    const filtered = raw.distribution.filter((l) => l.count >= 0);
+    if (!filtered.length) return null;
+
+    return filtered.map((l) => ({
+      name: safeLevelKey(l.level),
+      y: l.count,
+      color: LEVEL_DIST_COLORS[l.level] ?? "#9ca3af",
+    }));
+  };
+
+  const fetchRankings = useCallback((tabKey) => {
+    setRankingsData(null);
+    setRankingsError(false);
+    setRankingsFetching(true);
+
+    const start = startDate ?? dayjs().subtract(30, "day").format("YYYY-MM-DD");
+    const end = endDate ?? dayjs().format("YYYY-MM-DD");
+
+    const qs = `?ranking_type=best&limit=10&application=${appFilter}&services=all&scope=${scope}&start_date=${start}&end_date=${end}`;
+
+    const url = GenerateURL(
+      { metric_group: metricGroup, metric_index: METRIC_INDEX_MAP[tabKey] },
+      properties.api.dora_metrics.rankings
+    ) + qs;
+
+    InvokeApi(
+      { endPoint: url, httpMethod: "GET", httpHeaders: { "Content-Type": "application/json" } },
+      (response) => { setRankingsData(response); setRankingsFetching(false); },
+      (error) => {
+        console.error("[DoraMetrics] rankings fetch failed:", error);
+        setRankingsError(true);
+        setRankingsFetching(false);
+      }
+    );
+  }, [startDate, endDate, appFilter, viewMode, metricGroup, METRIC_INDEX_MAP, scope]);
+
+  const RANKING_LEVEL_COLORS = {
+    ELITE: "rgba(28, 156, 19, 0.75)",
+    HIGH: "rgba(19, 78, 156, 0.75)",
+    MEDIUM: "rgba(254, 161, 17, 0.75)",
+    LOW: "rgba(229, 55, 55, 0.75)",
+  };
+
+  const buildRankingsChartData = (raw, mode = "org") => {
+    if (!raw?.applications?.length) return null;
+
+    return raw.applications.map((r) => ({
+      name: mode === "app" ? r.service : r.application,
+      value: r.has_data ? (r.value ?? 0) : 0,
+      color: RANKING_LEVEL_COLORS[r.level] ?? "rgba(0, 134, 255, 0.75)",
+      noFailure: !r.has_data,
+    }));
+  };
+
+  const fetchWorstRankings = useCallback((tabKey) => {
+    setWorstRankingsData(null);
+    setWorstRankingsError(false);
+    setWorstRankingsFetching(true);
+
+    const start = startDate ?? dayjs().subtract(30, "day").format("YYYY-MM-DD");
+    const end = endDate ?? dayjs().format("YYYY-MM-DD");
+
+    const qs = `?ranking_type=worst&limit=10&application=${appFilter}&services=all&scope=${scope}&start_date=${start}&end_date=${end}`;
+
+    const url = GenerateURL(
+      { metric_group: metricGroup, metric_index: METRIC_INDEX_MAP[tabKey] },
+      properties.api.dora_metrics.rankings
+    ) + qs;
+
+    InvokeApi(
+      { endPoint: url, httpMethod: "GET", httpHeaders: { "Content-Type": "application/json" } },
+      (response) => { setWorstRankingsData(response); setWorstRankingsFetching(false); },
+      (error) => {
+        console.error("[DoraMetrics] worst rankings fetch failed:", error);
+        setWorstRankingsError(true);
+        setWorstRankingsFetching(false);
+      }
+    );
+  }, [startDate, endDate, appFilter, viewMode, metricGroup, METRIC_INDEX_MAP, scope]);
+
+  const buildRankedListData = (raw, mode = "org") => {
+    if (!raw?.applications?.length) return null;
+
+    const METRIC_LABEL = {
+      deploymentFrequency: "Deployment Frequency",
+      leadTimeToChange: "Lead Time to Change",
+      changeFailureRate: "Change Failure Rate",
+    };
+
+    return raw.applications.map((r, idx) => {
+      const levelKey = safeLevelKey(r.level);  // ← was r.level.charAt(0) + ...
+      const style = LEVEL_STYLES[levelKey] ?? { color: "#6b7280", bg: "#f3f4f6", borderColor: "#e5e7eb" };
+
+      return {
+        rank: idx + 1,
+        name: mode === "app" ? r.service : r.application,
+        metric: `${METRIC_LABEL[activeTab]} `,
+        value: r.has_data ? formatCardValue(r.value, r.type) : "—",
+        level: levelKey,
+        levelBg: style.bg,
+        levelColor: style.color,
+        borderColor: style.borderColor,
+      };
+    });
+  };
+
+  const CONSISTENCY_PAGE_SIZE = 7;  
+  const fetchConsistency = useCallback((tabKey, page = 0, search = "") => {
+    setConsistencyData(null);
+    setConsistencyError(false);
+    setConsistencyLoading(true);
+
+    const start = startDate ?? dayjs().subtract(30, "day").format("YYYY-MM-DD");
+    const end = endDate ?? dayjs().format("YYYY-MM-DD");
+    const offset = page * CONSISTENCY_PAGE_SIZE;
+
+    const qs = `?application=${appFilter}&services=all&scope=${scope}`
+      + `&start_date=${start}&end_date=${end}`
+      + `&limit=${CONSISTENCY_PAGE_SIZE}&offset=${offset}`
+      + (search ? `&search=${encodeURIComponent(search)}` : "");
+
+    const url = GenerateURL(
+      { metric_group: metricGroup, metric_index: METRIC_INDEX_MAP[tabKey] },
+      properties.api.dora_metrics.consistency
+    ) + qs;
+
+    InvokeApi(
+      { endPoint: url, httpMethod: "GET", httpHeaders: { "Content-Type": "application/json" } },
+      (response) => {
+        setConsistencyData(response);
+        setConsistencyLoading(false);
+      },
+      (error) => {
+        console.error("[DoraMetrics] consistency fetch failed:", error);
+        setConsistencyError(true);
+        setConsistencyLoading(false);
+      }
+    );
+  }, [startDate, endDate, appFilter, viewMode, metricGroup, METRIC_INDEX_MAP, scope]);
+
+
+  const buildConsistencyData = (raw, mode = "org") => {
+    if (!raw?.rows?.length || !raw?.buckets?.length) return null;
+
+    return {
+      months: raw.buckets.map((b) => b.label),
+      consistencyData: raw.rows.map((row) => ({
+        app: mode === "app" ? (row.service ?? row.application) : row.application,
+        values: row.cells.map((c) => c.value ?? 0),
+      })),
+      total: raw.count ?? 0,         
+    };
+  };
+
+  const fetchPercentiles = useCallback(() => {
+    setPercentilesData(null);
+    setPercentilesError(false);
+    setPercentilesLoading(true);
+
+    const start = startDate ?? dayjs().subtract(30, "day").format("YYYY-MM-DD");
+    const end = endDate ?? dayjs().format("YYYY-MM-DD");
+
+    const qs = `?application=${appFilter}&services=all&scope=${scope}&start_date=${start}&end_date=${end}`;
+
+    const leadTimeKey = Object.keys(METRIC_INDEX_MAP).find(k => k.startsWith("leadTimeToChange"));
+    const metricIndex = leadTimeKey ? METRIC_INDEX_MAP[leadTimeKey] : "Lead Time To Change";
+
+    const url = GenerateURL(
+      { metric_group: metricGroup, metric_index: metricIndex },
+      properties.api.dora_metrics.percentiles
+    ) + qs;
+
+    InvokeApi(
+      { endPoint: url, httpMethod: "GET", httpHeaders: { "Content-Type": "application/json" } },
+      (response) => {
+        setPercentilesData(response);
+        setPercentilesLoading(false);
+      },
+      (error) => {
+        console.error("[DoraMetrics] percentiles fetch failed:", error);
+        setPercentilesError(true);
+        setPercentilesLoading(false);
+      }
+    );
+  }, [startDate, endDate, appFilter, viewMode, metricGroup, METRIC_INDEX_MAP, scope]);
+
+  const buildPercentilesData = (raw) => {
+    if (!raw?.percentiles) return null;
+
+    const toHrMin = (seconds) => {
+      if (seconds == null) return null;
+      const totalMinutes = Math.floor(seconds / 60);
+      const hrs = Math.floor(totalMinutes / 60);
+      const mins = totalMinutes % 60;
+      return `${hrs}hr ${mins}min`;
+    };
+
+    const { p50, p75, p90 } = raw.percentiles;
+
+    return [
+      { label: "p50", minutes: p50 / 60, display: toHrMin(p50) },
+      { label: "p75", minutes: p75 / 60, display: toHrMin(p75) },
+      { label: "p90", minutes: p90 / 60, display: toHrMin(p90) },
+    ].filter((p) => p.minutes != null);
+  };
+
+  const fetchContributors = useCallback(() => {
+    setContributorsData(null);
+    setContributorsError(false);
+    setContributorsFetching(true);
+
+    const start = startDate ?? dayjs().subtract(30, "day").format("YYYY-MM-DD");
+    const end = endDate ?? dayjs().format("YYYY-MM-DD");
+
+    const qs = `?application=${appFilter}&services=all&scope=${scope}&start_date=${start}&end_date=${end}`;
+
+    const failureRateKey = Object.keys(METRIC_INDEX_MAP).find(k => k.startsWith("changeFailureRate"));
+    const metricIndex = failureRateKey ? METRIC_INDEX_MAP[failureRateKey] : "Change Failure Rate";
+
+    const url = GenerateURL(
+      { metric_group: metricGroup, metric_index: metricIndex },
+      properties.api.dora_metrics.contributors
+    ) + qs;
+
+    InvokeApi(
+      { endPoint: url, httpMethod: "GET", httpHeaders: { "Content-Type": "application/json" } },
+      (response) => {
+        setContributorsData(response);
+        setContributorsFetching(false);
+      },
+      (error) => {
+        console.error("[DoraMetrics] contributors fetch failed:", error);
+        setContributorsError(true);
+        setContributorsFetching(false);
+      }
+    );
+  }, [startDate, endDate, appFilter, metricGroup, METRIC_INDEX_MAP, scope]);
+
+
+  const buildContributorsData = (raw, mode = "org") => {
+    if (!raw?.contributors?.length) return null;
+
+    return {
+      apps: raw.contributors.map((c) => mode === "app" ? c.service : c.application),
+      failures: raw.contributors.map((c) => parseFloat(c.value.toFixed(2))),
+      spline: raw.contributors.map((c) => c.cumulative_percentage),
+    };
+  };
+  const fetchAppFilterOptions = useCallback(() => {
+    setAppFilterOptsFetching(true);
+
+    const start = startDate ?? dayjs().subtract(30, "day").format("YYYY-MM-DD");
+    const end = endDate ?? dayjs().format("YYYY-MM-DD");
+
+    const qs = `?scope=application&start_date=${start}&end_date=${end}`;
+    const url = GenerateURL(
+      { metric_group: metricGroup },
+      properties.api.dora_metrics.entities
+    ) + qs;
+
+    InvokeApi(
+      { endPoint: url, httpMethod: "GET", httpHeaders: { "Content-Type": "application/json" } },
+      (response) => {
+        const opts = (response?.entities ?? response?.results ?? [])
+          .map((r) => r.name ?? r.application ?? r.value)
+          .filter(Boolean);
+        setAppFilterOptions(["all", ...opts]);
+        setAppFilterOptsFetching(false);
+      },
+      () => { setAppFilterOptsFetching(false); }
+    );
+  }, [startDate, endDate, metricGroup]);
+
+  useEffect(() => {
+    if (viewMode === "org") {
+      fetchAppFilterOptions();
+    }
+  }, [fetchAppFilterOptions, viewMode]);
+
+  const fetchServiceOptions = useCallback((appName) => {
+    setServiceOptsFetching(true);
+
+    const start = startDate ?? dayjs().subtract(30, "day").format("YYYY-MM-DD");
+    const end = endDate ?? dayjs().format("YYYY-MM-DD");
+
+    const qs = `?scope=service&application=${appName}&start_date=${start}&end_date=${end}`;
+    const url = GenerateURL(
+      { metric_group: metricGroup },
+      properties.api.dora_metrics.entities
+    ) + qs;
+
+    InvokeApi(
+      { endPoint: url, httpMethod: "GET", httpHeaders: { "Content-Type": "application/json" } },
+      (response) => {
+        const opts = (response?.entities ?? response?.results ?? [])
+          .map((r) => r.name ?? r.service ?? r.value)
+          .filter(Boolean);
+        setServiceOptions(["all", ...opts]);
+        setServiceOptsFetching(false);
+      },
+      () => { setServiceOptsFetching(false); }
+    );
+  }, [startDate, endDate, metricGroup]);
+
+  const fetchAppTable = useCallback((appName, page = 0, search = "", level = "all", service = "all") => {
+    setAppTableError(false);
+    setAppTableFetching(true);
+
+    const start = startDate ?? dayjs().subtract(30, "day").format("YYYY-MM-DD");
+    const end = endDate ?? dayjs().format("YYYY-MM-DD");
+    const offset = page * PAGE_SIZE;
+
+    const qs = `?application=${appName}&services=${service}&scope=service&start_date=${start}&end_date=${end}&limit=${PAGE_SIZE}&offset=${offset}&level=${level}&search=${search}`;
+    const url = GenerateURL(
+      { metric_group: metricGroup, metric_index: METRIC_INDEX_MAP[activeTab] },
+      properties.api.dora_metrics.table  
+    ) + qs;
+
+    InvokeApi(
+      { endPoint: url, httpMethod: "GET", httpHeaders: { "Content-Type": "application/json" } },
+      (response) => {
+        setAppTableData(response);
+        setAppTableTotal(response?.pagination?.total_count ?? response?.count ?? 0);
+        setAppTableFetching(false);
+      },
+      (error) => {
+        console.error("[DoraMetrics] app table fetch failed:", error);
+        setAppTableError(true);
+        setAppTableFetching(false);
+      }
+    );
+  }, [startDate, endDate, activeTab, metricGroup, METRIC_INDEX_MAP]);
+
+  const fetchSvcDetail = useCallback((appName, serviceName) => {
+    setSvcDetail(null);
+    setSvcDetailError(false);
+    setSvcDetailLoading(true);
+    setShowDrawer(true);   
+
+    const start = startDate ?? dayjs().subtract(30, "day").format("YYYY-MM-DD");
+    const end = endDate ?? dayjs().format("YYYY-MM-DD");
+
+    const qs = `?application=${appName}&services=${serviceName}&start_date=${start}&end_date=${end}&scope=service&service=${serviceName}`;
+    const url = GenerateURL(
+      { metric_group: metricGroup, metric_index: METRIC_INDEX_MAP[activeTab] },
+      properties.api.dora_metrics.serviceDetail
+    ) + qs;
+
+    InvokeApi(
+      { endPoint: url, httpMethod: "GET", httpHeaders: { "Content-Type": "application/json" } },
+      (response) => {
+        setSvcDetail(response);
+        setSvcDetailLoading(false);
+      },
+      (error) => {
+        console.error("[DoraMetrics] svc detail fetch failed:", error);
+        setSvcDetailError(true);
+        setSvcDetailLoading(false);
+      }
+    );
+  }, [startDate, endDate, activeTab, metricGroup, METRIC_INDEX_MAP]);
+
+  const fetchTable = useCallback((page = 0, search = "", level = "all", application = "all") => {
+    setTableError(false);
+    setTableFetching(true);
+
+    const start = startDate ?? dayjs().subtract(30, "day").format("YYYY-MM-DD");
+    const end = endDate ?? dayjs().format("YYYY-MM-DD");
+    const offset = page * PAGE_SIZE;
+
+    const qs = `?limit=${PAGE_SIZE}&offset=${offset}&level=${level}&search=${search}&application=${application}&services=all&scope=${scope}&start_date=${start}&end_date=${end}`;
+
+    const url = GenerateURL(
+      { metric_group: metricGroup, metric_index: METRIC_INDEX_MAP[activeTab] },
+      properties.api.dora_metrics.table
+    ) + qs;
+
+    InvokeApi(
+      { endPoint: url, httpMethod: "GET", httpHeaders: { "Content-Type": "application/json" } },
+      (response) => {
+        setTableData(response);
+        setTableTotal(response?.pagination?.total_count ?? response?.count ?? 0);
+        setTableFetching(false);
+      },
+      (error) => {
+        console.error("[DoraMetrics] table fetch failed:", error);
+        setTableError(true);
+        setTableFetching(false);
+      }
+    );
+  }, [startDate, endDate, activeTab, appFilter, viewMode, metricGroup, METRIC_INDEX_MAP, scope]);
+
+  const fetchAllCharts = useCallback((currentTab) => {
+    fetchTrend(METRIC_INDEX_MAP[currentTab]);
+    fetchThresholds(currentTab);
+    fetchLevelDist(currentTab);
+    fetchRankings(currentTab);
+    fetchWorstRankings(currentTab);
+
+    if (currentTab.startsWith("deploymentFrequency")) {
+      setConsistencyPage(0);
+      setConsistencySearch("");
+      fetchConsistency(currentTab, 0, ""); 
+    }
+    if (currentTab.startsWith("leadTimeToChange")) fetchPercentiles();
+    if (currentTab.startsWith("changeFailureRate")) fetchContributors();
+
+    if (viewMode === "org") {
+      setTablePage(0); setTableSearch(""); setTableLevel("all"); setTableAppFilter("all");
+      fetchTable(0, "", "all", "all");
+    } else if (viewMode === "app" && selectedApp) {
+      setAppTablePage(0); setAppTableSearch(""); setAppTableLevel("all"); setAppTableService("all");
+      fetchAppTable(selectedApp, 0, "", "all", "all");
+    }
+  }, [fetchTrend, fetchThresholds, fetchLevelDist, fetchRankings, fetchWorstRankings,
+    fetchConsistency, fetchPercentiles, fetchContributors, fetchTable, fetchAppTable,
+    viewMode, selectedApp, METRIC_INDEX_MAP]);
+
+  fetchAllChartsRef.current = fetchAllCharts;
+
+  
+
+  const buildTableRows = (raw) => {
+    if (!raw?.results?.length) return [];
+
+    return raw.results.map((r) => ({
+      service: r.service ?? r.application,
+      services: r.services,
+      frequency: r.has_data ? formatCardValue(r.value, r.type) : "—",
+      level: safeLevelKey(r.level),  
+      lastActivity: r.last_activity
+        ? dayjs(r.last_activity).format("DD MMM YYYY, HH:mm")
+        : "—",
+      failed: r.failed_total?.failed ?? null,
+      total: r.failed_total?.total ?? null,
+      _raw: r,
+    }));
+  };
+
+  const handleTableSearch = useCallback((val) => {
+    setTableSearch(val);
+    setTablePage(0);
+    fetchTable(0, val, tableLevel, tableAppFilter);
+  }, [fetchTable, tableLevel, tableAppFilter]);
+
+  const handleTableLevelFilter = useCallback((val) => {
+    setTableLevel(val);
+    setTablePage(0);
+    fetchTable(0, tableSearch, val, tableAppFilter);
+  }, [fetchTable, tableSearch, tableAppFilter]);
+
+  const handleTablePageChange = useCallback((newPage) => {
+    setTablePage(newPage);
+    fetchTable(newPage, tableSearch, tableLevel, tableAppFilter);
+  }, [fetchTable, tableSearch, tableLevel, tableAppFilter]);
+
+  const handleTableAppFilter = useCallback((val) => {
+    setTableAppFilter(val);
+    setTablePage(0);
+    fetchTable(0, tableSearch, tableLevel, val);  
+  }, [fetchTable, tableSearch, tableLevel]);
+
+  const handleAppTableServiceFilter = useCallback((val) => {
+    setAppTableService(val);
+    setAppTablePage(0);
+    fetchAppTable(selectedApp, 0, appTableSearch, appTableLevel, val);  
+  }, [fetchAppTable, selectedApp, appTableSearch, appTableLevel]);
+
+  const loading = {
+    tabs: resolve(isTabsLoading, isLoading),
+    trend: resolve(isTrendLoading, isLoading),
+    levelDist: resolve(isLevelDistLoading, isLoading),
+    barChart: resolve(isBarChartLoading, isLoading),
+    rankedList: resolve(isRankedListLoading, isLoading),
+    threshold: resolve(isThresholdLoading, isLoading),
+    heatmap: resolve(isHeatmapLoading, isLoading),
+    percentile: resolve(isPercentileLoading, isLoading),
+    contributors: resolve(isContributorsLoading, isLoading),
+    table: resolve(isTableLoading, isLoading),
+  };
+
+  const empty = {
+    trend: resolve(isTrendEmpty, isEmpty),
+    levelDist: resolve(isLevelDistEmpty, isEmpty),
+    barChart: resolve(isBarChartEmpty, isEmpty),
+    rankedList: resolve(isRankedListEmpty, isEmpty),
+    heatmap: resolve(isHeatmapEmpty, isEmpty),
+    percentile: resolve(isPercentileEmpty, isEmpty),
+    contributors: resolve(isContributorsEmpty, isEmpty),
+    table: resolve(isTableEmpty, isEmpty),
+  };
+
+ 
+  const handleDateRangeApply = (range) => {
+    if (!range?.startDate) {
+      onDateRangeChange?.(dayjs().subtract(30, "day").format("YYYY-MM-DD"), dayjs().format("YYYY-MM-DD"));
+    } else {
+      onDateRangeChange?.(range.startDate, range.endDate);
+    }
+    handleDateRangeClose();
+  };
+
+  const handleViewApp = (row) => {
+    const appName = row.service;
+    setSelectedApp(appName);
+    setAppFilter(appName);          
+    setAppTablePage(0);
+    setAppTableSearch("");
+    setAppTableLevel("all");
+    setAppTableService("all");
+    setViewMode("app");
+    fetchServiceOptions(appName);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const handleViewServiceDetail = (row) => {
+    fetchSvcDetail(selectedApp, row.service);  
+  };
+
+  const handleBack = () => {
+    setViewMode("org");
+    setSelectedApp(null);
+    setAppFilter("all");            
+    setSvcDetail(null);
+    setShowDrawer(false);
+  };
+
+  const handleCloseDrawer = () => setShowDrawer(false);
+
+  const renderSlot = (loadingKey, emptyKey, skeleton, content) => {
+    if (loading[loadingKey]) return skeleton;
+    if (empty[emptyKey]) return <EmptyChartState />;
+    return content;
+  };
+
+  const buildAppTableRows = (raw) => {
+    if (!raw?.results?.length) return [];
+
+    return raw.results.map((r) => ({
+      service: r.service,
+      services: r.services,
+      frequency: r.has_data ? formatCardValue(r.value, r.type) : "—",
+      level: safeLevelKey(r.level), 
+      lastActivity: r.last_activity
+        ? dayjs(r.last_activity).format("DD MMM YYYY, HH:mm")
+        : "—",
+      _raw: r,
+    }));
+  };
+
+  const isFirstRender = useRef(true);
+
+  useEffect(() => {
+    if (!tabMetrics || noDataAlert) return;
+    fetchAllChartsRef.current?.(activeTab);
+  }, [tabMetrics]); 
+  useEffect(() => {
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      return;
+    }
+    if (!tabMetrics || noDataAlert) return;
+    fetchAllChartsRef.current?.(activeTab);
+  }, [activeTab]);
+  const orgColumns = buildColumns(viewMode, setViewMode, setSelectedService, setShowDrawer, activeTabOriginalKey, handleViewApp);
+
+  const appColumns = buildColumns("app", setViewMode, setSelectedService, setShowDrawer, activeTabOriginalKey, handleViewServiceDetail);
+
+  return (
+    <div style={{ fontFamily: "montserrat", color: "#111827" }}>
+      {viewMode === "org" ? (
+        <>
+          <div className="d-flex align-center" style={{ marginBottom: "8px", marginTop: "25px" }}>
+            <span className="ri-earth-line font-20 color-icon-secondary" />
+            <span className="font-14 font-weight-600 color-icon-secondary ml-8">Organizational Overview</span>
+          </div>
+          <div style={{ marginTop: "14px", borderBottom: "1px solid #e5e7eb", paddingBottom: "24px", fontSize: "14px", fontWeight: 500 }}>
+            <span>Showing details of organisation for <strong>{dayjs(startDate).format("DD-MM-YYYY")}</strong> to <strong>{dayjs(endDate).format("DD-MM-YYYY")} ({dateLabel})</strong></span>
+          </div>
+        </>
+      ) : (
+        <>
+          <div style={{ marginTop: "31px", marginBottom: "8px" }}>
+            <button onClick={handleBack} style={{ display: "inline-flex", alignItems: "center", gap: "8px", padding: "8px 12px", border: "1px solid #d1d5db", borderRadius: "20px", background: "#fff", cursor: "pointer", fontSize: "12px", fontWeight: 600, color: "#2f2f2f" }}>
+              <i className="ri-arrow-left-s-line" style={{ fontSize: "16px" }} />
+              BACK
+            </button>
+          </div>
+            
+          {/* Breadcrumb */}
+            <div style={{ display: "flex", alignItems: "center", gap: "6px", marginTop: "12px", fontSize: "14px", color: "#6b7280" }}>
+              <i className={viewMode === "org" ? "ri-earth-line" : "ri-apps-line"} style={{ fontSize: "15px" }} />
+              <span onClick={handleBack} style={{ cursor: "pointer" }}>{`${viewMode === "org" ? "Organisation" : "App"}`}</span>
+              <i className="ri-arrow-right-s-line" />
+              <span style={{ color: "#111827", fontWeight: 700 }}>{selectedApp}</span>
+            </div>
+            
+          <div style={{ marginTop: "8px", borderBottom: "1px solid #e5e7eb", paddingBottom: "24px", fontSize: "14px", fontWeight: 500 }}>
+            <span>Showing Details of Application <strong>"{selectedApp}"</strong> for <strong>{dateLabel}</strong></span>
+          </div>
+        </>
+      )}
+  
+      {tabsError && (
+        <Box
+          sx={{
+            display: "flex",
+            alignItems: "center",
+            gap: "10px",
+            padding: "10px 16px",
+            border: "1px solid rgba(255, 218, 242, 1)",
+            borderRadius: "8px",
+            background: "rgba(255, 235, 235, 1)",
+            mt: "16px",
+            mb: "8px",
+            fontSize: "13px",
+            fontWeight: 600,
+            color: "rgba(229, 55, 55, 1)",
+          }}
+        >
+          <span className="ri-alert-line font-18" style={{ flexShrink: 0 }} />
+          No data is available for the selected date range. Please choose a different date range.
+        </Box>
+      )}
+
+      {(loading.tabs || (tabMetrics === null && !tabsError)) ? (
+        <Box sx={{ mt: "15px", mb: "20px" }}>
+          <MetricCardSkeleton />
+        </Box>
+      ) : (
+        <div style={{ marginTop: "15px", display: "grid", gridTemplateColumns: "repeat(3, 1fr)", border: "1px solid #e5e7eb", borderRadius: "8px", overflow: "hidden", marginBottom: "20px", background: "#fff", boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}>
+          {TABS.map((t, idx) => {
+            const liveData = noDataAlert ? null : deriveTabValues(tabMetrics, t.key);
+            const isActive = activeTab === t.key;
+
+            return (
+              <Box
+                key={t.key}
+                onClick={() => !noDataAlert && setActiveTab(t.key)}
+                style={{
+                  padding: "10px 24px",
+                  cursor: noDataAlert ? "default" : "pointer",
+                  borderRight: idx < 2 ? "1px solid #d9d9d9" : "none",
+                  borderTop: `4px solid ${isActive && !noDataAlert ? BRAND_BLUE : "transparent"}`,
+                  borderBottom: isActive && !noDataAlert ? "4px solid #fff" : "4px solid transparent",
+                  background: "#fff",
+                  transition: "all 0.2s ease",
+                  position: "relative",
+                  boxShadow: "0px 8px 16px -6px rgba(0, 0, 0, 0.2)"
+                }}
+                sx={{
+                  "&:hover": {
+                    backgroundColor: "#F5F9FF !important",
+                  },
+                }}
+              >
+                
+                <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "14px", color: isActive || hoveredTab === t.key ? "rgba(47,47,47,1)" : "rgba(120,120,120,1)", fontWeight: isActive || hoveredTab === t.key ? 600 : 500, fontSize: "14px" }}>
+                  <span className={t.icon} style={{ fontSize: "20px" }} />
+                  {t.title}
+                </div>
+
+                {tabsError ? (
+                  <div style={{ fontSize: "12px", color: "#2f2f2f", marginTop: "28px" }}>--</div>
+                ) : (
+                  <>
+                    <div style={{ display: "flex", alignItems: "center", gap: "10px", marginTop: "28px" }}>
+                      <span style={{ fontSize: "24px", fontWeight: 600, color: isActive || hoveredTab === t.key ? "rgba(47,47,47,1)" : "rgba(120,120,120,1)", lineHeight: 1 }}>
+                        {liveData?.value ?? "—"}
+                      </span>
+                      {liveData?.level && liveData?.levelStyle && (
+                        <span style={{ background: liveData.levelStyle.bg, color: liveData.levelStyle.color, border: `1px solid ${liveData.levelStyle.border}`, padding: "2px 8px", borderRadius: "4px", fontSize: "11px", fontWeight: 700 }}>
+                          {liveData.level}
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ fontSize: "12px", color: "rgba(120,120,120,1)", marginTop: "4px" }}>
+                      {t.key.startsWith("changeFailureRate") && liveData?.totalFailures != null
+                        ? `${liveData.totalFailures} Total Failures`
+                        : liveData?.label ?? "—"
+                      }
+                    </div>
+                  </>
+                )}
+              </Box>
+            );
+          })}
+        </div>
+      )}
+
+      {!tabsError && (() => {
+        const FALLBACK_DESCRIPTIONS = {
+          deploymentFrequency: "Higher deployment frequency means faster delivery of features and fixes to users.",
+          leadTimeToChange: "Lower lead time means changes are reaching users faster after being committed.",
+          changeFailureRate: "Lower change failure rate indicates more stable and reliable deployments.",
+        };
+        const card = tabMetrics?.cards?.find(c => CARD_KEY_MAP[c.name] === activeTab);
+        const description = card?.description || FALLBACK_DESCRIPTIONS[activeTabOriginalKey];
+        return description ? (
+          <div style={{ display: "flex", alignItems: "center", gap: "10px", padding: "6px 12px", border: `1px solid ${BRAND_BLUE}`, borderRadius: "8px", background: "rgba(245, 250, 255, 1)", marginBottom: "20px", fontSize: "12px", color: BRAND_BLUE, fontWeight: 600 }}>
+            <span className="ri-information-line font-16" style={{ flexShrink: 0 }} />
+            {description}
+          </div>
+        ) : null;
+      })()}
+
+      {noDataAlert ? (
+        <>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px" }}>
+            <ChartCard icon="ri-bar-chart-fill" title="Deployment Frequency Trend" subtitle="Historical chart uses month-wise data at org/application level." tooltip="Track deployment frequency over time.">
+              <EmptyChartState />
+            </ChartCard>
+            <ChartCard icon="ri-bar-chart-fill" title="Threshold legend" subtitle="Use backend-provided rating metadata wherever available." tooltip="Deploy count split across trigger types.">
+              <EmptyChartState />
+            </ChartCard>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px", marginTop: "24px" }}>
+            <ChartCard icon="ri-bar-chart-fill" title="Level distribution" subtitle="Levels are backend-provided and treated as the source of truth." tooltip="Distribution of applications across Elite, High, Medium and Low performance levels.">
+              <EmptyChartState />
+            </ChartCard>
+            <ChartCard icon="ri-bar-chart-fill" title="Most frequently deploying applications" subtitle="Ranking basis is tied only to the selected metric and active filters." tooltip="Ranking basis is tied only to the selected metric and active filters.">
+              <EmptyChartState />
+            </ChartCard>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px", marginTop: "20px" }}>
+            <ChartCard icon="ri-bar-chart-fill" title="Applications with lowest deployment frequency" subtitle="Attention list uses the opposite sorting direction for this metric." tooltip="Attention list uses the opposite sorting direction for this metric.">
+              <EmptyChartState />
+            </ChartCard>
+            <ChartCard icon="ri-bar-chart-fill" title="Application deployment consistency" subtitle="Cell intensity represents deployment count for the period." tooltip="Darker cells indicate higher deployment counts for that month.">
+              <EmptyChartState />
+            </ChartCard>
+          </div>
+          <div style={{ marginTop: "20px" }}>
+            <DorametricsGenericTable
+              icon="ri-apps-line"
+              title="Applications metric table"
+              subtitle="Columns change based on the selected DORA metric."
+              tooltip="Per-application DORA metrics for the selected time range."
+              data={[]}
+              columns={orgColumns}
+              loading={false}
+              pageSize={PAGE_SIZE}
+              externalPagination={true}
+              currentPage={1}
+              totalPages={0}
+              onPageChange={() => { }}
+              onSearch={() => { }}
+              onFilterChange={() => { }}
+              searchable
+              searchKeys={["service"]}
+              filters={[
+                { key: "level", label: "Level", options: ["all", "Elite", "High", "Medium", "Low"] },
+                { key: "application", label: "Application", options: ["all"] },
+              ]}
+              onSecondaryFilterChange={() => { }}
+              emptyMessage="No data available for the selected date range."
+            />
+          </div>
+        </>
+      ) : tabsError ? (
+        <>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px" }}>
+            <ChartCard icon="ri-bar-chart-fill" title={activeTabOriginalKey === "deploymentFrequency" ? "Deployment Frequency Trend" : activeTabOriginalKey === "leadTimeToChange" ? "Average Lead Time Trend" : "Change Failure Rate Trend"} subtitle="Historical chart uses month-wise data at org/application level." tooltip="Track deployment frequency over time.">
+              <EmptyChartState />
+            </ChartCard>
+            <ChartCard icon="ri-bar-chart-fill" title="Threshold legend" subtitle="Use backend-provided rating metadata wherever available." tooltip="Deploy count split across trigger types.">
+              <EmptyChartState />
+            </ChartCard>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px", marginTop: "24px" }}>
+            <ChartCard icon="ri-bar-chart-fill" title="Level distribution" subtitle="Levels are backend-provided and treated as the source of truth." tooltip="Distribution of applications across Elite, High, Medium and Low performance levels.">
+              <EmptyChartState />
+            </ChartCard>
+            <ChartCard icon="ri-bar-chart-fill" title={activeTabOriginalKey === "deploymentFrequency" ? "Most frequently deploying applications" : activeTabOriginalKey === "leadTimeToChange" ? "Fastest applications by lead time" : "Lowest failure-rate applications"} subtitle="Ranking basis is tied only to the selected metric and active filters." tooltip="Ranking basis is tied only to the selected metric and active filters.">
+              <EmptyChartState />
+            </ChartCard>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px", marginTop: "20px" }}>
+            <ChartCard icon="ri-bar-chart-fill" title="Applications with lowest deployment frequency" subtitle="Attention list uses the opposite sorting direction for this metric." tooltip="Attention list uses the opposite sorting direction for this metric.">
+              <EmptyChartState />
+            </ChartCard>
+            <ChartCard icon="ri-bar-chart-fill" title={activeTabOriginalKey === "deploymentFrequency" ? "Application deployment consistency" : activeTabOriginalKey === "leadTimeToChange" ? "Lead-time percentiles" : "Biggest contributors to failed changes"} subtitle="" tooltip="">
+              <EmptyChartState />
+            </ChartCard>
+          </div>
+          <div style={{ marginTop: "20px" }}>
+            <DorametricsGenericTable
+              icon="ri-apps-line"
+              title="Applications metric table"
+              subtitle="Columns change based on the selected DORA metric."
+              tooltip="Per-application DORA metrics for the selected time range."
+              data={[]}
+              columns={orgColumns}
+              loading={false}
+              pageSize={PAGE_SIZE}
+              externalPagination={true}
+              currentPage={1}
+              totalPages={0}
+              onPageChange={() => { }}
+              onSearch={() => { }}
+              onFilterChange={() => { }}
+              searchable
+              searchKeys={["service"]}
+              filters={[
+                { key: "level", label: "Level", options: ["all", "Elite", "High", "Medium", "Low"] },
+                { key: "application", label: "Application", options: ["all"] },
+              ]}
+              onSecondaryFilterChange={() => { }}
+              emptyMessage="Failed to load data."
+            />
+          </div>
+        </>
+      ) : (
+        <>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px" }}>
+            <ChartCard
+              icon="ri-bar-chart-fill"
+              title={
+                activeTabOriginalKey === "deploymentFrequency" ? "Deployment Frequency Trend" :
+                  activeTabOriginalKey === "leadTimeToChange" ? "Average Lead Time Trend" :
+                    "Change Failure Rate Trend"
+              }
+              subtitle="Historical chart uses month-wise data at org/application level."
+              tooltip="Track deployment frequency over time."
+            >
+              { trendLoading ? (
+                <DeploymentFrequencyTrendSkeleton />
+              ) : trendError ? (
+                <EmptyChartState />
+              ) : (
+                <TrendChart
+                  key={`${activeTab}-${trendData ? "live" : "empty"}`}
+                  tabKey={activeTab}
+                  data={buildTrendChartData(trendData)}
+                  activeTab={activeTabOriginalKey}
+                />
+              )}
+            </ChartCard>
+
+            <ChartCard
+              icon="ri-bar-chart-fill"
+              title="Threshold legend"
+              subtitle="Use backend-provided rating metadata wherever available."
+              tooltip="Deploy count split across trigger types."
+            >
+               {thresholdFetching ? (
+                  <ThresholdSkeleton />
+                ) : thresholdError ? (
+                  <EmptyChartState />
+                ) : (() => {
+                  const rows = buildThresholdRows(thresholdData);
+                  return rows
+                    ? <ThresholdLegend thresholds={rows.thresholds} footerNote={rows.footerNote} />
+                    : <EmptyChartState />;
+                })()}
+            </ChartCard>
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px", marginTop: "24px" }}>
+
+            <ChartCard
+              icon="ri-bar-chart-fill"
+              title="Level distribution"
+              subtitle="Levels are backend-provided and treated as the source of truth."
+              tooltip="Distribution of applications across Elite, High, Medium and Low performance levels."
+            >
+              {levelDistFetching ? (
+                <DonutChartSkeleton />
+              ) : levelDistError ? (
+                <EmptyChartState />
+              ) : (
+                <>
+                  <DonutChart levelDistribution={buildLevelDistData(levelDistData)} />
+                  {buildLevelDistData(levelDistData)?.length > 0 && (
+                    <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginTop: "12px" }}>
+                      {buildLevelDistData(levelDistData).map((d) => (
+                        <Box key={d.name} sx={{ height: "31px", border: "1px solid #D9D9D9", borderRadius: "6px", background: "#F8F8F8", padding: "0 16px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                          <Box sx={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                            <Box sx={{ width: "12px", height: "12px", borderRadius: "50%", background: d.color }} />
+                            <Typography sx={{ fontSize: "12px", fontWeight: 700, color: "#000", textTransform: "uppercase", lineHeight: 1 }}>
+                              {d.name}
+                            </Typography>
+                          </Box>
+                          <Typography sx={{ fontSize: "12px", fontWeight: 700, color: "#222" }}>
+                            {d.y}
+                          </Typography>
+                        </Box>
+                      ))}
+                    </Box>
+                  )}
+                </>
+              )}
+            </ChartCard>
+
+            <ChartCard
+              icon="ri-bar-chart-fill"
+              title={
+                activeTabOriginalKey === "deploymentFrequency" ? "Most frequently deploying applications" :
+                  activeTabOriginalKey === "leadTimeToChange" ? "Fastest applications by lead time" :
+                    "Lowest failure-rate applications"
+              }
+              subtitle="Ranking basis is tied only to the selected metric and active filters."
+              tooltip="Ranking basis is tied only to the selected metric and active filters."
+            >
+              {rankingsFetching ? (
+                <BarChartSkeleton />
+              ) : rankingsError ? (
+                <EmptyChartState />
+              ) : (
+                <BarChart
+                  apps={buildRankingsChartData(rankingsData, viewMode)}
+                  tooltipUnit={
+                    activeTabOriginalKey === "leadTimeToChange" ? "minutes" :
+                      activeTabOriginalKey === "changeFailureRate" ? "percentage" :
+                        "count"
+                  }
+                          activeTab={activeTabOriginalKey}
+                />
+              )}
+            </ChartCard>
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px", marginTop: "20px" }}>
+            <ChartCard
+              icon="ri-bar-chart-fill"
+              title="Applications with lowest deployment frequency"
+              subtitle="Attention list uses the opposite sorting direction for this metric."
+              tooltip="Attention list uses the opposite sorting direction for this metric."
+            >
+              {worstRankingsFetching ? (
+                <RankedList loading={true} />
+              ) : worstRankingsError ? (
+                <EmptyChartState />
+              ) : (
+                <RankedList rankedApps={buildRankedListData(worstRankingsData, viewMode) ?? []} />
+              )}
+            </ChartCard>
+
+            {activeTabOriginalKey === "leadTimeToChange" ? (
+              <ChartCard icon="ri-bar-chart-fill" title="Lead-time percentiles" subtitle="Use percentiles to avoid average-only interpretation." tooltip="p50 is the median; p75 and p90 reveal the long tail of your pipeline.">
+                {percentilesLoading ? (
+                  <PercentileChartSkeleton />
+                ) : percentilesError ? (
+                  <EmptyChartState />
+                ) : (() => {
+                  const built = buildPercentilesData(percentilesData);
+                  return built ? <PercentileBarChart percentiles={built} /> : <EmptyChartState />;
+                })()}
+              </ChartCard>
+            ) : activeTabOriginalKey === "changeFailureRate" ? (
+              <ChartCard icon="ri-bar-chart-fill" title="Biggest contributors to failed changes" subtitle="Shown only when failed-change counts are available." tooltip="Shown only when failed-change counts are available.">
+                {contributorsFetching ? (
+                  <BarChartSkeleton />
+                ) : contributorsError ? (
+                  <EmptyChartState />
+                ) : (() => {
+                  const built = buildContributorsData(contributorsData, viewMode);
+                  return built ? <FailedChangesComboChart contributorsData={built} /> : <EmptyChartState />;
+                })()}
+              </ChartCard>
+            ) : (
+              <ChartCard icon="ri-bar-chart-fill" title="Application deployment consistency" subtitle="Cell intensity represents deployment count for the period." tooltip="Darker cells indicate higher deployment counts for that month.">
+                        {consistencyLoading ? (
+                          <HeatmapSkeleton />
+                        ) : consistencyError ? (
+                          <EmptyChartState />
+                        ) : (() => {
+                          const built = buildConsistencyData(consistencyData, viewMode);
+                          return built ? (
+                            <HeatmapChart
+                              consistencyData={built.consistencyData}
+                              months={built.months}
+                              total={built.total}
+                              page={consistencyPage}
+                              pageSize={CONSISTENCY_PAGE_SIZE}
+                              search={consistencySearch}
+                              onPageChange={(newPage) => {
+                                setConsistencyPage(newPage);
+                                fetchConsistency(activeTab, newPage, consistencySearch);
+                              }}
+                              onSearchChange={(val) => {
+                                setConsistencySearch(val);
+                                setConsistencyPage(0);
+                                fetchConsistency(activeTab, 0, val);
+                              }}
+                            />
+                          ) : <EmptyChartState />;
+                        })()}
+              </ChartCard>
+            )}
+          </div>
+
+          <div style={{ marginTop: "20px" }}>
+            {viewMode === "org" ? (
+              <DorametricsGenericTable
+                icon="ri-apps-line"
+                title="Applications metric table"
+                subtitle="Columns change based on the selected DORA metric."
+                tooltip="Per-application DORA metrics for the selected time range."
+                data={tableError ? [] : buildTableRows(tableData)}
+                columns={orgColumns}
+                loading={tableFetching}
+                pageSize={PAGE_SIZE}
+                externalPagination={true}
+                currentPage={tablePage + 1}
+                totalPages={Math.ceil(tableTotal / PAGE_SIZE)}
+                onPageChange={(page) => handleTablePageChange(page - 1)}
+                onSearch={handleTableSearch}
+                onFilterChange={handleTableLevelFilter}
+                searchable
+                searchKeys={["service"]}
+                filters={[
+                  { key: "level", label: "Level", options: ["all", "Elite", "High", "Medium", "Low"] },
+                  { key: "application", label: "Application", options: appFilterOptsFetching ? ["all"] : appFilterOptions },
+                ]}
+                onSecondaryFilterChange={handleTableAppFilter}
+                emptyMessage={tableError ? "Failed to load data." : "No applications found."}
+              />
+            ) : (
+              <DorametricsGenericTable
+                icon="ri-settings-3-line"
+                title={`Services metric table of Application "${selectedApp}"`}
+                subtitle="Select a service to filter or click View Details for a breakdown."
+                tooltip="Per-service DORA metrics for the selected application."
+                data={appTableError ? [] : buildAppTableRows(appTableData)}
+                columns={appColumns}
+                loading={appTableFetching}
+                pageSize={PAGE_SIZE}
+                totalCount={appTableTotal}
+                currentPage={appTablePage + 1}
+                onPageChange={(page) => {
+                  const zeroBasedPage = page - 1;
+                  setAppTablePage(zeroBasedPage);
+                  fetchAppTable(selectedApp, zeroBasedPage, appTableSearch, appTableLevel, appTableService);
+                }}
+                onSearch={(v) => { setAppTableSearch(v); setAppTablePage(0); fetchAppTable(selectedApp, 0, v, appTableLevel, appTableService); }}
+                onFilterChange={(v) => { setAppTableLevel(v); setAppTablePage(0); fetchAppTable(selectedApp, 0, appTableSearch, v, appTableService); }}
+                externalPagination={true}
+                totalPages={Math.ceil(appTableTotal / PAGE_SIZE)}
+                searchable
+                searchKeys={["service"]}
+                filters={[
+                  { key: "level", label: "Level", options: ["Elite", "High", "Medium", "Low"] },
+                  { key: "service", label: "Service", options: serviceOptsFetching ? ["all"] : serviceOptions },
+                ]}
+                onSecondaryFilterChange={handleAppTableServiceFilter}
+                emptyMessage={appTableError ? "Failed to load data." : "No services found."}
+              />
+            )}
+          </div>
+        </>
+      )}
+
+      <CustomDateRangePopover anchorEl={dateRangeAnchor} open={Boolean(dateRangeAnchor)} onClose={handleDateRangeClose} onApply={handleDateRangeApply} />
+      <ServiceInfoDrawer
+        open={showDrawer}
+        onClose={handleCloseDrawer}
+        appName={selectedApp}
+        loading={svcDetailLoading}
+        error={svcDetailError}
+        data={svcDetail}
+        activeTab={activeTabOriginalKey}
+      />
+    </div>
+  );
+};
+
+export default DoraMetrics;
