@@ -1,0 +1,1683 @@
+import React, { useEffect, useRef, useState } from 'react';
+import { makeStyles } from '@mui/styles';
+import properties from '../../properties/properties';
+import InvokeApi, { PostData } from '../../util/apiInvoker';
+import { useDebounce } from '../../hooks/useDebounce';
+import GenerateURL, { GenerateSearchURL } from '../../util/APIUrlProvider';
+import Tooltip from '@mui/material/Tooltip';
+import Button from '../../components/genericComponents/Button';
+import { Link, useNavigate } from 'react-router-dom';
+import { Loading } from '../../views/utils/Loading';
+import { Error as ErrorComponent } from '../../views/utils/Error';
+import { getCommonFunctions } from '../../views/serviceRevamp/add/ci_flow/SourceDetails';
+import { Input } from '../../components/genericComponents/Input';
+import { ValidateDataSet, VALIDATION_TYPE_REQUIRED } from '../../util/Validator';
+import StepProgressDetailed from '../../components/genericComponents/StepProgress';
+import Dialog from '@mui/material/Dialog';
+import { useSnackbar } from 'notistack';
+import { showErrorHandlerUpdated } from '../../util/util';
+import GenericSkeleton from '../../components/genericComponents/Skeletons/GenericSkeleton';
+import { useCustomSnackbar } from '../../contexts/SnackbarContext';
+
+const CATEGORY_ICONS = {
+    "Authentication_Identity_Management": "ri-apps-line",
+    "AUTHORIZATION": "ri-key-line",
+    "CICD": "ri-task-line",
+    "Build_System": "ri-code-line",
+    "Security_Compliance": "ri-safe-line",
+    "Pipeline_Execution_Workflow_Control": "ri-flow-chart",
+    "BP_Versioning_Management": "ri-folder-history-line",
+    "Notifications_Alerts": "ri-alarm-warning-line",
+    "Task_Queue_Routing": "ri-task-line",
+    "Queue_Monitoring": "ri-eye-line",
+    "Worker_Autoscaling": "ri-artboard-2-line",
+    "network_connectivity": "ri-router-line",
+    "Service_level_settings": "ri-tools-line",
+    "Audit": "ri-file-search-line",
+    "Queue_Monitoring": "ri-mac-line",
+    "Webhook": "ri-webhook-line",
+    "Database": "ri-database-2-line",
+    "AI_configurations": "ri-pencil-ai-2-line",
+    "Application_level_settings": "ri-apps-2-line",
+    "Streaming_configuration": "ri-broadcast-line",
+    "Deployment_CD_Configuration": "ri-alarm-warning-line",
+    "INFRASTRUCTURE": "ri-settings-4-line",
+    "INTEGRATIONS": "ri-settings-4-line",
+    "NOTIFICATIONS": "ri-settings-4-line",
+    "SECURITY": "ri-settings-4-line"
+};
+
+const SystemSetting = () => {
+    const classes = useStyles();
+    const navigate = useNavigate();
+    const { showSnackbar } = useCustomSnackbar();
+    // const { enqueueSnackbar } = useSnackbar();
+    // const showSnackbar = (variant, message, description) => {
+    //     enqueueSnackbar([message, description].filter(Boolean).join(' '), { variant });
+    // };
+    const navigateBack = () => {
+        if (window.history.length > 1) {
+            navigate(-1);
+        } else {
+            navigate('/');
+        }
+    };
+    const [state, setstate] = useState({
+        available_settings: [],
+        selected_tab: 1,
+        tab_list: [],
+        data: {},
+        error: {},
+        show_dialog: false,
+        search_query: '',
+        selected_sub_category: null,
+        sub_category_fields: [],
+        loading_sub_category: false,
+        forward_sub_category: null,
+        has_settings_configured: null,
+    })
+    const inherits = {}
+    const [single_item, set_single_item] = useState({});
+    const commonFunctions = getCommonFunctions(state, setstate, inherits);
+    const debouncedSearchQuery = useDebounce(state.search_query, 1000);
+
+    useEffect(() => {
+        fetchSystemSettingsData(debouncedSearchQuery);
+    }, [debouncedSearchQuery, single_item.count]);
+
+    const lastAutoSelectedQueryRef = useRef('');
+
+    useEffect(() => {
+        if (!state.search_query) {
+            lastAutoSelectedQueryRef.current = '';
+            return;
+        }
+
+        if (state.search_query === lastAutoSelectedQueryRef.current) {
+            return;
+        }
+
+        const matchedCategory = state.available_settings.find(cat => cat.id === state.selected_tab);
+        const matchedSubCategoryIds = new Set(
+            (matchedCategory?.types || matchedCategory?.settingstype_set || [])
+                .map(t => t.id)
+        );
+
+        const filtered = (single_item.available_input_fields || []).filter(subCat => {
+            if (matchedSubCategoryIds.has(subCat.id)) return true;
+            const query = state.search_query.toLowerCase();
+            if (subCat.name && subCat.name.toLowerCase().includes(query)) return true;
+            if (subCat.description && subCat.description.toLowerCase().includes(query)) return true;
+            return false;
+        });
+
+        // Close the current sub-category view if it is no longer a match for the search query
+        // or if the search query matches the sub-category's name/description (partial/full match on parent)
+        if (state.selected_sub_category) {
+            const isCurrentlySelectedMatched = filtered.some(subCat => subCat.id === state.selected_sub_category.id);
+            const query = state.search_query.toLowerCase().trim();
+            const matchesSubCatName = state.selected_sub_category.name && state.selected_sub_category.name.toLowerCase().includes(query);
+            const matchesSubCatDesc = state.selected_sub_category.description && state.selected_sub_category.description.toLowerCase().includes(query);
+
+            if (!isCurrentlySelectedMatched || matchesSubCatName || matchesSubCatDesc) {
+                setstate(prev => ({
+                    ...prev,
+                    selected_sub_category: null,
+                    forward_sub_category: null
+                }));
+                return;
+            }
+        }
+
+        if (filtered.length === 1) {
+            const autoSelectSubCat = filtered[0];
+            const query = state.search_query.toLowerCase().trim();
+            const matchesSubCatName = autoSelectSubCat.name && autoSelectSubCat.name.toLowerCase().includes(query);
+            const matchesSubCatDesc = autoSelectSubCat.description && autoSelectSubCat.description.toLowerCase().includes(query);
+
+            if (!matchesSubCatName && !matchesSubCatDesc) {
+                if (!state.selected_sub_category || state.selected_sub_category.id !== autoSelectSubCat.id) {
+                    lastAutoSelectedQueryRef.current = state.search_query;
+                    setstate(prev => ({
+                        ...prev,
+                        selected_sub_category: autoSelectSubCat,
+                        forward_sub_category: null
+                    }));
+                    FetchSubCategoryFields(autoSelectSubCat.id);
+                }
+            }
+        }
+    }, [state.search_query, single_item.available_input_fields, state.selected_tab, state.available_settings, state.selected_sub_category]);
+
+    const sidebarScrollRef = useRef(null);
+    const contentScrollRef = useRef(null);
+
+    useEffect(() => {
+        const attachScrollHide = (el) => {
+            if (!el) return () => { };
+            let timer;
+            const onScroll = () => {
+                el.classList.add('is-scrolling');
+                clearTimeout(timer);
+                timer = setTimeout(() => el.classList.remove('is-scrolling'), 1500);
+            };
+            el.addEventListener('scroll', onScroll, { passive: true });
+            return () => {
+                el.removeEventListener('scroll', onScroll);
+                clearTimeout(timer);
+            };
+        };
+        const cleanup1 = attachScrollHide(sidebarScrollRef.current);
+        const cleanup2 = attachScrollHide(contentScrollRef.current);
+        return () => { cleanup1(); cleanup2(); };
+    }, []);
+    function fetchSystemSettingsData(searchQuery = '') {
+        let endPointUrl = GenerateURL({}, properties.api.system_settings_type);
+        if (searchQuery) {
+            endPointUrl = GenerateSearchURL({ q: searchQuery }, endPointUrl);
+        }
+
+        var requestInfo = {
+            endPoint: endPointUrl,
+            httpMethod: "GET",
+            httpHeaders: { "Content-Type": "application/json" }
+        }
+
+        setstate(new_state => ({
+            ...new_state,
+            data_loading: true
+        }))
+
+        InvokeApi(requestInfo, fetchSystemSettingsDataSuccess, fetchSystemSettingsDataFailed);
+    }
+    function fetchSystemSettingsDataSuccess(response) {
+        console.log(response, "ahcvgdsvcgsdvcsd")
+
+        var tab_list_arr = [];
+        if (response && response.length > 0) {
+            tab_list_arr = response.map(single_item => {
+                console.log("ashishh", single_item.code);
+                return ({ order: single_item.id, tabName: single_item.name, description: single_item?.description, icon: CATEGORY_ICONS[single_item.code] || "ri-settings-3-line" })
+
+            });
+        }
+
+        let targetTab = state.selected_tab;
+        let isTabPresent = tab_list_arr.some(item => item.order === targetTab);
+        if (!isTabPresent && tab_list_arr.length > 0) {
+            targetTab = tab_list_arr[0].order;
+        }
+
+        if (tab_list_arr.length > 0 && targetTab) {
+            FetchSingleSettingData(targetTab);
+        }
+
+        const activeTabInfo = tab_list_arr.find(item => item.order === targetTab);
+        setstate(new_state => ({
+            ...new_state,
+            available_settings: response || [],
+            data_loading: false,
+            tab_list: tab_list_arr,
+            selected_tab: targetTab,
+            current_tab_name: activeTabInfo ? activeTabInfo.tabName : "N/A",
+            current_tab_description: activeTabInfo ? activeTabInfo.description : "",
+            forward_sub_category: null,
+            has_settings_configured: new_state.has_settings_configured !== null ? new_state.has_settings_configured : (response && response.length > 0)
+        }));
+
+    }
+    function fetchSystemSettingsDataFailed(error) {
+        setstate(new_state => ({
+            ...new_state,
+            error: error,
+            data_loading: false
+        }))
+    }
+
+    const updateSelectedTab = (tab_order) => {
+        FetchSingleSettingData(tab_order)
+        var find_current_tab_name = state.tab_list.find(item => item.order === tab_order)
+
+        setstate(new_state => ({
+            ...new_state,
+            selected_tab: tab_order,
+            current_tab_name: find_current_tab_name.tabName ? find_current_tab_name.tabName : "N/A",
+            current_tab_description: find_current_tab_name.description ? find_current_tab_name.description : "",
+            validations: {},
+            error: {},
+            data: {},
+            selected_sub_category: null,
+            forward_sub_category: null,
+        }));
+    }
+    function FetchSingleSettingData(id) {
+        var requestInfo = {
+            endPoint: GenerateURL({ id: id }, properties.api.system_settings_type_detail),
+            httpMethod: "GET",
+            httpHeaders: { "Content-Type": "application/json" }
+        }
+        InvokeApi(requestInfo, FetchSingleSettingDataSuccess, FetchSingleSettingDataFailed);
+
+        set_single_item(new_state => ({
+            ...new_state,
+            single_item_data_loading: true,
+            single_item_data_loading_force: false,
+            single_item_data_loading_async: false,
+            error_in_single_item: false,
+        }))
+
+    }
+    function FetchSubCategoryFields(id) {
+        var requestInfo = {
+            // This hits the specific sub-category config API
+            endPoint: GenerateURL({ id: id }, properties.api.get_single_setting_data),
+            httpMethod: "GET",
+            httpHeaders: { "Content-Type": "application/json" }
+        }
+
+        InvokeApi(requestInfo, FetchSubCategoryFieldsSuccess, FetchSubCategoryFieldsFailed);
+
+        setstate(prev => ({
+            ...prev,
+            loading_sub_category: true
+        }));
+    }
+
+    function FetchSubCategoryFieldsSuccess(response) {
+        var question_arr = {};
+        var validations_arr = {};
+        response.forEach(variable => {
+            if (variable.data_type === "multiple-select") {
+                question_arr[variable.key] = safeParseMultipleSelect(variable.value);
+            } else {
+                question_arr[variable.key] = (variable.value !== undefined && variable.value !== null) ? variable.value : (variable.data_type === "boolean" ? "false" : "");
+            }
+
+            if (variable.required) {
+                validations_arr[variable.key] = [VALIDATION_TYPE_REQUIRED];
+            }
+        });
+
+        setstate(prev => ({
+            ...prev,
+            loading_sub_category: false,
+            sub_category_fields: response,
+            data: question_arr,
+            validations: validations_arr
+        }));
+    }
+
+    function FetchSubCategoryFieldsFailed(error) {
+        setstate(prev => ({
+            ...prev,
+            loading_sub_category: false,
+            error: error
+        }));
+    }
+
+    function FetchSingleSettingDataSuccess(response) {
+        console.log(response,)
+
+        let typesList = [];
+        if (response) {
+            if (Array.isArray(response)) {
+                typesList = response;
+            } else if (response.types && Array.isArray(response.types)) {
+                typesList = response.types;
+            } else if (response.settingstype_set && Array.isArray(response.settingstype_set)) {
+                typesList = response.settingstype_set;
+            } else {
+                typesList = [response];
+            }
+        }
+
+        var question_arr = {};
+        var validations_arr = {}
+        if (typesList && typesList.length > 0) {
+            typesList.forEach(item => {
+                if (item.key) {
+                    question_arr[item.key] = item.value
+                    if (item.required) {
+                        validations_arr[item.key] = [VALIDATION_TYPE_REQUIRED]
+                    }
+                }
+            })
+        }
+
+        set_single_item(new_state => ({
+            ...new_state,
+            single_item_data_loading: false,
+            single_item_data_loading_force: false,
+            single_item_data_loading_async: false,
+            error_in_single_item: false,
+            available_input_fields: typesList
+        }));
+        console.log(response)
+
+        let data_type;
+        let data_obj = {}
+        if (typesList && typesList.length > 0) {
+            typesList.forEach((item) => {
+                if (item.data_type == "multiple-select") {
+                    data_type = "multiple-select"
+                    data_obj[item.key] = getValueForCustomTag(item.value)
+                }
+            })
+        }
+
+        if (data_type == "multiple-select") {
+            setstate((new_state) => ({
+                ...new_state,
+                data: {
+                    ...new_state.data,
+                    ...question_arr,
+                    ...data_obj
+                }
+            }))
+        } else {
+            setstate(new_state => ({
+                ...new_state,
+                data: {
+                    ...new_state.data,
+                    ...question_arr,
+                },
+                validations: {
+                    ...validations_arr,
+                    ...new_state.validations
+                }
+            }));
+        }
+
+    }
+
+    function getValueForCustomTag(data) {
+        let input = JSON.parse(data)
+        let arr = []
+        input.forEach((item) => {
+            arr.push(item)
+        })
+        return arr;
+    }
+
+    function FetchSingleSettingDataFailed(error) {
+        set_single_item(new_state => ({
+            ...new_state,
+            single_item_data_loading: false,
+            single_item_data_loading_force: false,
+            single_item_data_loading_async: false,
+        }))
+    }
+
+    function getValue(data) {
+        console.log(data)
+        let arr = []
+        data.forEach((item) => {
+            arr.push(item.id)
+        })
+        console.log(arr, "string_formatstring_format")
+        let string_format = JSON.stringify(arr);
+        console.log(string_format, "string_formatstring_format")
+        return string_format;
+    }
+
+
+    function safeParseMultipleSelect(value) {
+        if (Array.isArray(value)) return value;
+
+        try {
+            const parsed = JSON.parse(value);
+            return Array.isArray(parsed) ? parsed : [];
+        } catch (e) {
+            console.error("Invalid JSON in multiple-select value:", value);
+            return [];
+        }
+    }
+
+    function validateAndSaveData(id, url) {
+
+        var result = ValidateDataSet(state.data, state.validations);
+        if (url) {
+            var post_url = GenerateURL({ id: id }, properties.api.force_update_system_settings + "?force_update=true");
+        } else {
+            var post_url = GenerateURL({ id: id }, properties.api.force_update_system_settings + "?force_update=false");
+        }
+
+        if (result.valid) {
+            var basic_details = {};
+            basic_details = { ...state.data }
+            var keys_arr = Object.keys(basic_details);
+            const fieldsToUpdate = state.sub_category_fields;
+            fieldsToUpdate.forEach((element, index) => {
+                console.log(element, "ascbhbchsdh")
+                if (keys_arr.includes(element.key)) {
+                    const val = basic_details[element.key];
+                    if (element.data_type === "multiple-select") {
+                        try {
+                            element.value = JSON.stringify(val || []);
+                        } catch (e) {
+                            element.value = "[]";
+                        }
+                    } else {
+                        element.value = val;
+                    }
+                }
+
+
+            });
+            console.log(fieldsToUpdate, "fieldsToUpdate")
+            showSnackbar("info", "Applying changes...")
+            PostData(post_url, fieldsToUpdate, onSaveSuccess, onSaveFail);
+            set_single_item(new_state => ({
+                ...new_state,
+                single_item_data_loading_force: url ? true : false,
+                single_item_data_loading_async: !url ? true : false,
+            }))
+            handleClickClose();
+        } else {
+            let error_msg = showErrorHandlerUpdated({ ...result.error })
+            showSnackbar("error", "Unable to apply changes", error_msg)
+            setstate(new_state => ({
+                ...new_state,
+                error: {
+                    ...new_state.error,
+                    ...result.error
+                },
+
+            }));
+        }
+    }
+    function onSaveFail(response) {
+        let error_msg = showErrorHandlerUpdated(response)
+        showSnackbar("error", "Unable to apply changes", error_msg)
+        set_single_item(new_state => ({
+            ...new_state,
+            single_item_data_loading: false,
+            single_item_data_loading_force: false,
+            single_item_data_loading_async: false,
+            show_save_msg: "failed",
+            success_msg: null,
+            error_in_save_msg: "Unable to update settings"
+        }))
+
+    }
+    function onSaveSuccess(response) {
+        showSnackbar("success", "Changes applied successfully.", "Kindly re-login to see the changes.");
+        set_single_item(new_state => ({
+            ...new_state,
+            single_item_data_loading: false,
+            single_item_data_loading_force: false,
+            single_item_data_loading_async: false,
+            task_id: response.task_id ? response.task_id : null,
+            show_save_msg: "success",
+            success_msg: response.detail ? response.detail : "System Settings Updated Successfully"
+        }))
+    }
+
+    function refreshState() {
+        set_single_item(new_state => ({
+            ...new_state,
+            count: new_state.count + 1,
+            task_id: null
+        }));
+    }
+    const handleClose = () => {
+        set_single_item({ ...single_item, show_save_msg: null, });
+
+    };
+
+
+
+    function getBpVersioningList(list) {
+        console.log(list, "cdbdshbchsdvhdsv")
+        var optionList = [];
+
+        list.forEach((item) => {
+            var option = { id: item, label: item }
+            optionList.push(option)
+        })
+        console.log(optionList, "cdbdshbchsdvhdsv")
+        return optionList;
+    }
+
+    function onChangeHandlerForKeyValue(key, value) {
+
+        var updatedValue = JSON.stringify(value)
+
+        setstate({
+            ...state,
+            data: {
+                ...state.data,
+                [key]: updatedValue
+            },
+            error: {
+                ...state.error,
+                [key]: null,
+            }
+        });
+    }
+
+    // const onKeyValueChangeHandler = (k, v) => {
+    //     console.log(k, v, "qawbaghvcgvdc")
+    //     setstate(prevState => ({
+    //         ...prevState,
+    //         data: { ...prevState.data, [k]: v },
+    //         error: { ...prevState.error, [k]: null }
+    //     }));
+    // }
+
+    const onKeyValueChangeHandler = (e) => {
+        const k = e.target.name;
+        let v = e.target.value;
+
+        console.log("onKeyValueHandler Debugging:", { key: k, value: v });
+
+
+        if (Array.isArray(v) && v.length > 0 && typeof v[0] === "string") {
+            v[0] = v[0].replace(" (New Label)", "");
+        }
+
+        setstate((new_state) => ({
+            ...new_state,
+            data: {
+                ...new_state.data,
+                [k]: v,
+            },
+            error: { ...new_state.error, [k]: "" },
+        }));
+    }
+
+    // const handleClickOpen = () => {
+    //     setstate({ ...state, show_dialog: true });
+    // };
+
+    const handleClickClose = () => {
+        setstate({ ...state, show_dialog: false, });
+    };
+
+    const handleHistoryBack = () => {
+        if (state.selected_sub_category) {
+            const currentSub = state.selected_sub_category;
+            setstate(prev => ({
+                ...prev,
+                selected_sub_category: null,
+                forward_sub_category: currentSub,
+                sub_category_fields: [],
+                search_query: '',
+            }));
+        }
+    };
+
+    const handleHistoryForward = () => {
+        if (state.forward_sub_category) {
+            const targetSub = state.forward_sub_category;
+            setstate(prev => ({
+                ...prev,
+                selected_sub_category: targetSub,
+                forward_sub_category: null,
+            }));
+            FetchSubCategoryFields(targetSub.id);
+        }
+    };
+
+    const onChangeShowDialog = (e) => {
+        var key = e.target.name;
+        var value = e.target.value;
+
+        if (value === "true") {
+            console.log(typeof (value), "fdsafdasfs")
+            // handleClickOpenDialog();
+            setstate({
+                ...state,
+                show_dialog: true,
+                data: {
+                    ...state.data,
+                    [key]: value
+                },
+                error: {
+                    ...state.error,
+                    [key]: null,
+                }
+            });
+        } else {
+
+            console.log(value, "fdsafdasfs")            // handleClickCloseDialog();
+            setstate({
+                ...state,
+                show_dialog: false,
+                data: {
+                    ...state.data,
+                    [key]: value
+                },
+                error: {
+                    ...state.error,
+                    [key]: null,
+                }
+            });
+        }
+    }
+
+    const input_values_list = [
+        {
+            type: "$BRANCH_NAME",
+            example: "master"
+        },
+        {
+            type: "$COMPONENT_NAME",
+            example: "service"
+        },
+        {
+            type: "$ENV_MASTER",
+            example: "Dev"
+        },
+        {
+            type: "$PROJECT_ENV_NAME",
+            example: "dev-1"
+        },
+        {
+            type: "$REPO_NAME",
+            example: "okts"
+        },
+        {
+            type: "$BUILD_NUMBER",
+            example: "2"
+        },
+        {
+            type: "$GIT_PROVIDER",
+            example: "GitHub"
+        },
+        {
+            type: "$DATE_TIME",
+            example: "20240714T2225"
+        },
+        {
+            type: "$COMMIT_SHA",
+            example: "193wag7"
+        }
+    ]
+
+    function getCurrentCustomTagPattern(list) {
+        let arr = [];
+
+        try {
+            // Case 1: It's already an array
+            if (Array.isArray(list)) {
+                arr = list.map(item => (typeof item === 'string' ? item : item?.id || ""));
+            } else {
+                // Case 2: It's a JSON string of an array
+                const parsed = JSON.parse(list || '[]');
+                arr = Array.isArray(parsed)
+                    ? parsed.map(item => (typeof item === 'string' ? item : item?.id || ""))
+                    : [];
+            }
+        } catch (err) {
+            console.error("Invalid input to getCurrentCustomTagPattern:", list, err);
+            return "";
+        }
+
+        // Build the pattern preview string from examples
+        return arr
+            .map((item) => {
+                const match = input_values_list.find(entry => entry.type === item);
+                return match ? match.example : item;
+            })
+            .join("-");
+    }
+
+    console.log(state.data, "tyughbnm ==============>")
+
+    const isBackDisabled = !state.selected_sub_category;
+    const isForwardDisabled = !state.forward_sub_category;
+    const isInitialLoading = state.data_loading && state.available_settings.length === 0 && !state.search_query;
+
+    return (
+        <div className={classes.root}>
+            {/* <div className="main-div d-flex-top">
+                <div className="">
+                    <p className="main-heading">BP System Global Settings </p>
+                    <p className="sub-heading">Displaying overall system properties required to run the system</p>
+                </div>
+            </div> */}
+            <div className={`card ${classes.settings_card}`}>
+                <div className={`card-body pb-0 ${classes.settings_card_body}`}>
+                    {
+                        isInitialLoading ?
+                            <div className={classes.loading_sidebar}>
+                                {/* Back Button Placeholder */}
+                                <div className={classes.loading_back_row}>
+                                    <div className={classes.no_flex}>
+                                        <GenericSkeleton variant="circle" width={20} height={20} />
+                                    </div>
+                                    <div className={classes.no_flex}>
+                                        <GenericSkeleton width="40px" height={18} />
+                                    </div>
+                                </div>
+                                {/* Search Bar Placeholder */}
+                                <div className={classes.loading_search_row}>
+                                    <div className={classes.skeleton_radius}>
+                                        <GenericSkeleton width="280px" height={36} />
+                                    </div>
+                                    <div className={`${classes.skeleton_radius} ${classes.skeleton_search_offset}`}>
+                                        <GenericSkeleton width="280px" height={52} />
+                                    </div>
+                                </div>
+
+                                <div className="pd-20">
+                                    <div className={`${classes.skeleton_section_label} ${classes.no_flex}`}>
+                                        <GenericSkeleton width="120px" height={12} />
+                                    </div>
+                                    {[...Array(7)].map((_, i) => (
+                                        <div key={i} className={classes.skeleton_item_row}>
+                                            <div className={classes.no_flex}>
+                                                <GenericSkeleton variant="circle" width={30} height={30} />
+                                            </div>
+                                            <div className={`${classes.skeleton_radius} ${classes.no_flex}`}>
+                                                <GenericSkeleton width="280px" height={28} />
+                                            </div>
+                                            <div className={classes.skeleton_text_group}>
+                                                <div className={`${classes.skeleton_radius} ${classes.no_flex}`}>
+                                                    <GenericSkeleton
+                                                        width="580px"
+                                                        height={14}
+                                                    />
+                                                </div>
+
+                                                <div className={`${classes.skeleton_radius} ${classes.no_flex}`}>
+                                                    <GenericSkeleton
+                                                        width="380px"
+                                                        height={6}
+                                                    />
+                                                </div>
+                                            </div>
+
+                                        </div>
+
+                                    ))}
+
+                                </div>
+
+
+                            </div>
+                            :
+                            state.error_msg ?
+                                <ErrorComponent error={state.error_msg} />
+                                :
+                                single_item.task_id ?
+                                    <StepProgressDetailed
+                                        task_id={single_item.task_id}
+                                        placeholders={{}}
+                                        refresh={refreshState}
+                                        variant="SAME_PAGE_REDIRECT" />
+                                    :
+                                    (state.has_settings_configured !== false || state.search_query) ?
+                                        <div className={`d-grid ${classes.settings_grid}`}>
+                                            <div className={classes.settings_sidebar}>
+                                                <div
+                                                    className={`back-btn ${classes.back_button}`}
+                                                    onClick={navigateBack}
+                                                >
+                                                    <i className={`ri-arrow-left-line ${classes.back_icon}`}></i>
+                                                    <span>BACK</span>
+                                                </div>
+                                                <div className={classes.search_bar}>
+                                                    <div className={classes.search_wrap}>
+                                                        <span
+                                                            className={`ri-search-line ${classes.search_icon}`}
+                                                        />
+                                                        <input
+                                                            type="text"
+                                                            placeholder="Search"
+                                                            className={classes.search_input}
+                                                            value={state.search_query}
+                                                            onChange={(e) => setstate(prev => ({ ...prev, search_query: e.target.value }))}
+                                                        />
+                                                    </div>
+                                                </div>
+                                                <div ref={sidebarScrollRef} className={`${classes.default_scroll} ${classes.sidebar_scroll}`}>
+                                                    <div className={classes.sidebar_title}>
+                                                        System Properties
+                                                    </div>
+                                                    {(() => {
+                                                        if (state.tab_list.length === 0) {
+                                                            return <p style={{ padding: '20px', color: '#888', fontSize: '12px', textAlign: 'center' }}>No matching categories found</p>;
+                                                        }
+
+                                                        return (
+                                                            <div className={classes.category_list}>
+                                                                {state.tab_list.map(tab => {
+                                                                    const isActive = tab.order === state.selected_tab;
+                                                                    return (
+                                                                        <div
+                                                                            key={tab.order}
+                                                                            className={`${classes.category_item} ${isActive ? classes.category_item_active : ''}`}
+                                                                            onClick={() => updateSelectedTab(tab.order)}
+                                                                        >
+                                                                            <i className={`${tab.icon} ${classes.category_icon}`} />
+                                                                            <span>{tab.tabName}</span>
+                                                                        </div>
+                                                                    );
+                                                                })}
+                                                            </div>
+                                                        );
+                                                    })()}
+                                                </div>
+                                            </div>
+                                            <div className={`p-relative ${classes.content_panel}`}>
+                                                <div className={`pd-10 ${classes.content_header}`}>
+                                                    <div className={classes.nav_button_group}>
+                                                        <button
+                                                            className={`${classes.nav_button} ${classes.nav_button_prev} ${isBackDisabled ? classes.disabled_nav_button : ''}`}
+                                                            onClick={handleHistoryBack}
+                                                            disabled={isBackDisabled}
+                                                        >
+                                                            <i className={`ri-arrow-left-line ${classes.nav_button_icon}`}></i>
+                                                        </button>
+                                                        <button
+                                                            className={`${classes.nav_button} ${classes.nav_button_next} ${isForwardDisabled ? classes.disabled_nav_button : ''}`}
+                                                            onClick={handleHistoryForward}
+                                                            disabled={isForwardDisabled}
+                                                        >
+                                                            <i className={`ri-arrow-right-line ${classes.nav_button_icon}`}></i>
+                                                        </button>
+                                                    </div>
+                                                    <div>
+                                                        <p className={classes.content_title}>
+                                                            {state.selected_sub_category ? state.selected_sub_category.name : state.current_tab_name}
+                                                        </p>
+                                                        <p className={classes.content_description}>
+                                                            {state.selected_sub_category ? state.selected_sub_category.description : state.current_tab_description}
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                                {
+                                                    single_item.single_item_data_loading ?
+                                                        <div className={classes.content_loading_state}>
+                                                            <div className={`${classes.skeleton_section_label} ${classes.no_flex}`}>
+                                                                <GenericSkeleton width="120px" height={12} />
+                                                            </div>
+                                                            {[...Array(7)].map((_, i) => (
+                                                                <div key={i} className={classes.skeleton_item_row}>
+                                                                    <div className={`${classes.skeleton_circle_offset} ${classes.no_flex}`}>
+                                                                        <GenericSkeleton variant="circle" width={40} height={40} />
+                                                                    </div>
+                                                                    <div className={`${classes.skeleton_radius} ${classes.no_flex}`}>
+                                                                        <GenericSkeleton width="650px" height={35} />
+                                                                    </div>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                        :
+                                                        single_item.error_in_single_item ?
+                                                            <div className='' >
+                                                                <p style={{ padding: '20px', color: '#888', fontSize: '12px', textAlign: 'center' }}>No matching categories found</p>
+                                                            </div>
+                                                            :
+                                                            (() => {
+                                                                const filteredSubCategories = (() => {
+                                                                    if (!state.search_query) {
+                                                                        return single_item.available_input_fields || [];
+                                                                    }
+                                                                    const matchedCategory = state.available_settings.find(cat => cat.id === state.selected_tab);
+                                                                    const matchedSubCategoryIds = new Set(
+                                                                        (matchedCategory?.types || matchedCategory?.settingstype_set || [])
+                                                                            .map(t => t.id)
+                                                                    );
+                                                                    return (single_item.available_input_fields || []).filter(subCat => {
+                                                                        if (matchedSubCategoryIds.has(subCat.id)) return true;
+                                                                        const query = state.search_query.toLowerCase();
+                                                                        if (subCat.name && subCat.name.toLowerCase().includes(query)) return true;
+                                                                        if (subCat.description && subCat.description.toLowerCase().includes(query)) return true;
+                                                                        return false;
+                                                                    });
+                                                                })();
+
+                                                                if (filteredSubCategories.length === 0) {
+                                                                    return <p style={{ padding: '20px', color: '#888', fontSize: '12px', textAlign: 'center' }}>No matching categories found</p>;
+                                                                }
+
+                                                                return (
+                                                                    <>
+                                                                        <div ref={contentScrollRef} className={`p-relative ${classes.default_scroll} ${classes.content_scroll}`}>
+                                                                            {!state.selected_sub_category ? (
+                                                                                // LEVEL 2: Table of Sub-Category Names
+                                                                                <div className={classes.configurations_container}>
+                                                                                    <div className={classes.configurations_title}>
+                                                                                        Configurations
+                                                                                    </div>
+                                                                                    <table className={classes.sub_category_table}>
+                                                                                        <thead>
+                                                                                            <tr>
+                                                                                                <th className={classes.table_header_name}>NAME</th>
+                                                                                                <th className={classes.table_header_desc}>DESCRIPTION</th>
+                                                                                                <th className={classes.table_header_action}></th>
+                                                                                            </tr>
+                                                                                        </thead>
+                                                                                        <tbody>
+                                                                                            {(() => {
+                                                                                                const query = state.search_query?.toLowerCase().trim();
+                                                                                                const isUniqueSubCatMatch = query && filteredSubCategories.length === 1;
+
+                                                                                                return filteredSubCategories.map((subCat, index) => {
+                                                                                                    const isSubCatMatched = isUniqueSubCatMatch;
+                                                                                                    return (
+                                                                                                        <tr
+                                                                                                            key={index}
+                                                                                                            className={`${classes.sub_category_row} ${isSubCatMatched ? classes.pulseMatchedRow : ''}`}
+                                                                                                            onClick={() => {
+                                                                                                                setstate(prev => ({
+                                                                                                                    ...prev,
+                                                                                                                    selected_sub_category: subCat,
+                                                                                                                    forward_sub_category: null
+                                                                                                                }));
+                                                                                                                lastAutoSelectedQueryRef.current = state.search_query; FetchSubCategoryFields(subCat.id);
+                                                                                                            }}
+                                                                                                        >
+                                                                                                            <td className={classes.sub_category_cell_name}>
+                                                                                                                {subCat.name}
+                                                                                                            </td>
+                                                                                                            <td className={classes.sub_category_cell_desc}>
+                                                                                                                {subCat.description}
+                                                                                                            </td>
+                                                                                                            <td className={classes.sub_category_cell_action}>
+                                                                                                                <i className={`ri-arrow-right-s-line ${classes.sub_category_row_icon}`}></i>
+                                                                                                            </td>
+                                                                                                        </tr>
+                                                                                                    );
+                                                                                                });
+                                                                                            })()}
+                                                                                        </tbody>
+                                                                                    </table>
+                                                                                </div>
+                                                                            ) : (
+                                                                                // LEVEL 3: Actual Configuration Page
+                                                                                <div className={classes.fields_panel}>
+                                                                                    {state.loading_sub_category ? (
+                                                                                        <div className={classes.sub_category_loading_state}>
+                                                                                            <div className={classes.field_skeleton}>
+                                                                                                <GenericSkeleton count={8} height={45} />
+                                                                                            </div>
+                                                                                        </div>
+                                                                                    ) : (
+                                                                                        <>
+                                                                                            {state.sub_category_fields && state.sub_category_fields.length > 0 ? (() => {
+                                                                                                const query = state.search_query?.toLowerCase().trim();
+                                                                                                const matchedFields = query ? state.sub_category_fields.filter(variable => variable.labels?.toLowerCase().includes(query)) : [];
+                                                                                                const isUniqueFieldMatch = matchedFields.length === 1;
+
+                                                                                                return state.sub_category_fields.map((variable, index) => {
+                                                                                                    const isFieldMatched = isUniqueFieldMatch && variable.labels?.toLowerCase().includes(query);
+                                                                                                    return (
+                                                                                                        <div key={index} className={`${classes.field_row} ${isFieldMatched ? classes.pulseMatchedField : ''} ${variable.data_type === "json" ? classes.json_field_row : ''} ${variable.data_type === "multiple-select" ? "auto-complete-dropdown auto-complete-dropdown-42 auto-complete-dropdown-ticketing" : ''}`}>
+                                                                                                            <Input
+                                                                                                                type={variable.key == "LDAP_MANAGER_PASSWORD" || variable.key == "OKTA_CLIENT_SECRET" ? "password" : (variable.data_type === "boolean" || variable.data_type === "select") ? 'select' : variable.data_type === "json" ? "textarea" : variable.data_type === "checkbox" ? "checkbox" : variable.data_type === "multiple-select" ? "auto-complete-freesolo-v2" : variable.data_type === "password" ? "password" : "text"}
+                                                                                                                mandatorySign={variable.required}
+                                                                                                                name={variable.key}
+                                                                                                                label={variable.labels}
+                                                                                                                subHeading={"(" + variable.key + ")"}
+                                                                                                                list={variable.data_type === "boolean" ? variable.possible_value ?
+                                                                                                                    variable.possible_value.split(',').map(item => ({ id: item.trim(), label: item.trim() }))
+                                                                                                                    : [{ id: 'true', label: 'true' }, { id: 'false', label: 'false' }]
+                                                                                                                    : variable.data_type === "checkbox" || variable.data_type === "multiple-select" ? getBpVersioningList(variable.values_list) : variable.data_type === "select" ? variable.values_list : []
+                                                                                                                }
+                                                                                                                placeholder={variable.labels}
+                                                                                                                disable={false}
+                                                                                                                rows={variable.data_type === "json" ? 4 : null}
+                                                                                                                count={variable.data_type === "multiple-select" ? 10 : null}
+                                                                                                                onChangeHandler={variable.data_type === "integer" ? commonFunctions.onChangeHandlerNumber : variable.data_type === "checkbox" ? onChangeHandlerForKeyValue : variable.data_type === "multiple-select" ? onKeyValueChangeHandler : commonFunctions.onChangeHandler}
+                                                                                                                data={state.data}
+                                                                                                                error={state.error}
+                                                                                                                info={variable?.description}
+                                                                                                            />
+                                                                                                        </div>
+                                                                                                    );
+                                                                                                });
+                                                                                            })() : (
+                                                                                                <p style={{ padding: '20px', color: '#888', fontSize: '12px', textAlign: 'center' }}>No matching categories found</p>
+                                                                                            )}
+                                                                                        </>
+                                                                                    )}
+                                                                                </div>
+                                                                            )}
+                                                                        </div>
+                                                                    </>
+                                                                );
+                                                            })()
+                                                }
+                                                {(() => {
+                                                    if (!state.selected_sub_category) return null;
+                                                    if (state.loading_sub_category) return null;
+                                                    const query = state.search_query?.toLowerCase().trim();
+                                                    const hasMatchingFields = query
+                                                        ? (state.sub_category_fields || []).some(variable => variable.labels?.toLowerCase().includes(query))
+                                                        : (state.sub_category_fields || []).length > 0;
+
+                                                    if (!hasMatchingFields) return null;
+
+                                                    return (
+                                                        <div className={`footer pd-10 text-right ${classes.action_footer}`}>
+                                                            <button
+                                                                onClick={() => { validateAndSaveData(state.selected_sub_category ? state.selected_sub_category.id : state.selected_tab, "force") }}
+                                                                disabled={single_item.single_item_data_loading_force}
+                                                                className={`${classes.action_button} ${classes.action_button_secondary} ${single_item.single_item_data_loading_force ? classes.disabled_action_button : ''}`}
+                                                            >
+                                                                {single_item.single_item_data_loading_force ? 'Applying...' : 'Apply Immediately'}
+                                                            </button>
+                                                            <button
+                                                                onClick={() => { validateAndSaveData(state.selected_sub_category ? state.selected_sub_category.id : state.selected_tab) }}
+                                                                disabled={single_item.single_item_data_loading_async}
+                                                                className={`${classes.action_button} ${classes.action_button_primary} ${single_item.single_item_data_loading_async ? classes.disabled_action_button : ''}`}
+                                                            >
+                                                                {single_item.single_item_data_loading_async ? 'Applying...' : 'Apply Async'}
+                                                            </button>
+                                                        </div>
+                                                    );
+                                                })()}
+                                            </div>
+
+                                        </div>
+                                        :
+                                        <div className={`d-flex align-center justify-center ${classes.empty_state}`}>
+                                            <div
+                                                className={`text-center alert alert-primary border-style-dashed bg-white ${classes.empty_state_card}`}>
+                                                <div className="text-box">
+                                                    <p className="main-text  font-14"> No settings Configured</p>
+                                                    <Link to={"/system-settings/add"}>
+                                                        <button className="btn btn-primary">
+                                                            Configure Settings
+                                                        </button>
+                                                    </Link>
+                                                </div>
+                                            </div>
+                                        </div>
+                    }
+                </div>
+            </div>
+            {
+                state.show_dialog &&
+                <Dialog
+                    open={state.show_dialog}
+                    onClose={handleClickClose}
+                    aria-labelledby="alert-dialog-title"
+                    aria-describedby="alert-dialog-description"
+                >
+                    <div className={`d-flex align-center space-between ${classes.dialog_header}`}>
+                        <div className="d-flex align-center">
+                            <i className={`ri-information-line text-center ${classes.dialog_header_icon}`} />
+                            <p className='font-12 ml-5 color-white'>Important Information</p>
+                        </div>
+                        <button className="btn btn-transparent" onClick={handleClickClose}>
+                            <span className={`ri-close-line font-24 ${classes.dialog_close_icon}`}></span>
+                        </button>
+                    </div>
+                    <div className="card ">
+
+                        <div className="card-body d-flex">
+                            <div className="m-auto">
+                                <div className={classes.dialog_feature_header}>
+                                    {/* <div className={classes.dialog_feature_icon_wrap}>
+
+                            </div> */}
+                                    <i className={`ri-flashlight-line text-center ${classes.dialog_feature_icon}`}></i>
+                                    <p className={classes.dialog_feature_title}>Hyperbuild is a premium feature of BuildPiper</p>
+                                </div>
+
+                                <div className={classes.dialog_body_text}>
+
+                                    <p className="font-12 text-center mb-5">
+                                        This is a premium feature and not part of the current subscription. However you are eligible for a free trial till December 2023.
+                                    </p>
+
+
+                                </div>
+                            </div>
+                        </div>
+                        <div className="card-footer border-top pd-10 space-between d-flex align-center">
+                            <button className="btn btn-outline-dark-grey" onClick={handleClickClose}>
+                                Cancel
+                            </button>
+
+                            <div className=''>
+                                <Button className='btn  btn-primary' onClick={() => { validateAndSaveData(state.selected_sub_category ? state.selected_sub_category.id : state.selected_tab, "force") }} isLoading={single_item.single_item_data_loading_force}>Apply immediately</Button>
+                                <Button className='btn  btn-primary' onClick={() => { validateAndSaveData(state.selected_sub_category ? state.selected_sub_category.id : state.selected_tab) }} isLoading={single_item.single_item_data_loading_async}>Apply Async</Button>
+                            </div>
+                            {/* <Link className="btn btn-primary-v2" >
+                      Confirm
+                    </Link> */}
+                        </div>
+                    </div>
+                </Dialog>
+            }
+        </div>
+    )
+}
+
+export default SystemSetting;
+
+const useStyles = makeStyles(theme => ({
+    '@keyframes rowPulseHighlight': {
+        '0%': {
+            backgroundColor: 'transparent',
+        },
+        '50%': {
+            backgroundColor: 'rgba(0, 134, 255, 0.08)',
+        },
+        '100%': {
+            backgroundColor: 'transparent',
+        },
+    },
+    pulseMatchedRow: {
+        animation: '$rowPulseHighlight 0.6s 3 ease-in-out',
+        '& td:first-child': {
+            position: 'relative',
+            // '&::before': {
+            //     content: '""',
+            //     position: 'absolute',
+            //     left: 0,
+            //     top: '6px',
+            //     bottom: '6px',
+            //     width: '4px',
+            //     backgroundColor: '#0086FF',
+            //     borderRadius: '2px',
+            //     zIndex: 1,
+            // },
+        },
+    },
+    pulseMatchedField: {
+        position: 'relative',
+        animation: '$rowPulseHighlight 0.6s 3 ease-in-out',
+        // '&::before': {
+        //     content: '""',
+        //     position: 'absolute',
+        //     left: 0,
+        //     top: '6px',
+        //     bottom: '6px',
+        //     width: '4px',
+        //     backgroundColor: '#0086FF',
+        //     borderRadius: '2px',
+        //     zIndex: 1,
+        // },
+    },
+    root: {
+        flexGrow: 1,
+        margin: '0',
+        backgroundColor: '#ffffff',
+        minHeight: 'calc(100vh - 50px)',
+        display: 'flex',
+        flexDirection: 'column',
+        '& .min-height-400': {
+            minHeight: '400px'
+        },
+    },
+    settings_card: {
+        border: 'none',
+        boxShadow: 'none',
+        borderRadius: 0,
+        margin: 0,
+        backgroundColor: '#ffffff',
+    },
+    settings_card_body: {
+        backgroundColor: '#ffffff',
+        padding: 0,
+    },
+    loading_sidebar: {
+        width: '380px',
+        backgroundColor: '#ffffff',
+        height: 'calc(100vh - 50px)',
+        borderRight: '1px solid #E6E6E6',
+    },
+    loading_back_row: {
+        padding: '20px 14px',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '8px',
+    },
+    loading_search_row: {
+        padding: '0 12px 12px 12px',
+        borderBottom: '1px solid #f0f0f0',
+        display: 'flex',
+        alignItems: 'flex-end',
+    },
+    no_flex: {
+        flex: 'none',
+    },
+    skeleton_radius: {
+        '& .MuiSkeleton-root': {
+            borderRadius: '4px',
+        },
+    },
+    skeleton_search_offset: {
+        marginLeft: '110px',
+    },
+    skeleton_section_label: {
+        marginBottom: '20px',
+    },
+    skeleton_item_row: {
+        display: 'flex',
+        alignItems: 'center',
+        gap: '12px',
+        marginBottom: '18px',
+    },
+    skeleton_text_group: {
+        display: 'flex',
+        flexDirection: 'column',
+        marginLeft: '50px',
+        gap: '10px',
+    },
+    skeleton_circle_offset: {
+        marginLeft: '12px',
+    },
+    settings_grid: {
+        gridTemplateColumns: '380px 1fr',
+        height: 'calc(100vh - 50px)',
+    },
+    settings_sidebar: {
+        backgroundColor: '#ffffff',
+    },
+    back_button: {
+        padding: '12px 14px 20px 14px',
+        cursor: 'pointer',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '6px',
+        color: '#505050',
+        fontFamily: 'Montserrat, sans-serif',
+        fontWeight: 600,
+        fontSize: '12px',
+        textTransform: 'uppercase',
+    },
+    back_icon: {
+        fontSize: '18px',
+    },
+    search_bar: {
+        padding: '0 12px 12px',
+        borderBottom: '1px solid #E6E6E6',
+    },
+    search_wrap: {
+        position: 'relative',
+        display: 'flex',
+        alignItems: 'center',
+    },
+    search_icon: {
+        position: 'absolute',
+        left: '10px',
+        top: '50%',
+        transform: 'translateY(-50%)',
+        color: '#939393',
+        fontSize: '24px',
+        lineHeight: 1,
+        pointerEvents: 'none',
+        zIndex: 1,
+    },
+    search_input: {
+        width: '100%',
+        padding: '6px 10px 6px 40px',
+        border: '1px solid #E6E6E6',
+        borderRadius: '4px',
+        fontSize: '12px',
+        outline: 'none',
+        backgroundColor: '#FFFFFF',
+        color: '#2F2F2F',
+        '&::-webkit-input-placeholder': { color: '#939393 !important' },
+        '&::-moz-placeholder': { color: '#939393 !important' },
+        '&:-ms-input-placeholder': { color: '#939393 !important' },
+        '&:-moz-placeholder': { color: '#939393 !important' },
+        '&::placeholder': {
+            color: '#939393 !important'
+        }
+    },
+    sidebar_scroll: {
+        maxHeight: 'calc(100vh - 165px)',
+        overflowY: 'auto',
+    },
+    sidebar_title: {
+        padding: '12px 14px 8px 14px',
+        fontFamily: 'Montserrat, sans-serif',
+        fontWeight: 600,
+        fontSize: '12px',
+        lineHeight: '100%',
+        letterSpacing: '0%',
+        color: '#000000',
+    },
+    category_list: {
+        padding: '0 8px 12px',
+    },
+    category_item: {
+        alignItems: 'center',
+        backgroundColor: 'transparent',
+        borderRadius: '8px',
+        color: '#2F2F2F',
+        cursor: 'pointer',
+        display: 'flex',
+        fontFamily: 'Montserrat, sans-serif',
+        fontSize: '12px',
+        fontWeight: 500,
+        gap: '12px',
+        minHeight: '44px',
+        padding: '10px 14px',
+        transition: 'background-color 0.15s ease, color 0.15s ease',
+        '&:hover': {
+            backgroundColor: '#F5F7F9',
+        },
+    },
+    category_item_active: {
+        backgroundColor: '#0086FF',
+        color: '#FFFFFF',
+        fontWeight: 600,
+        '&:hover': {
+            backgroundColor: '#0076E5',
+        },
+    },
+    category_icon: {
+        color: 'inherit',
+        flexShrink: 0,
+        fontSize: '18px',
+        width: '20px',
+    },
+    content_panel: {
+        height: '100%',
+        borderLeft: '1px solid #E6E6E6',
+        display: 'flex',
+        flexDirection: 'column',
+        overflow: 'hidden',
+    },
+    content_header: {
+        padding: '20px 30px',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '20px',
+    },
+    nav_button_group: {
+        display: 'flex',
+        height: 'fit-content',
+        border: '1px solid #E6E6E6',
+        borderRadius: '8px',
+        overflow: 'hidden',
+        backgroundColor: '#ffffff',
+    },
+    nav_button: {
+        width: '32px',
+        height: '40px',
+        backgroundColor: '#ffffff',
+        cursor: 'pointer',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        border: 'none',
+        outline: 'none',
+        opacity: 1,
+        transition: 'background-color 0.2s',
+        '&:hover': {
+            backgroundColor: '#F5F5F5',
+        },
+    },
+    nav_button_prev: {
+        borderRight: '1px solid #E6E6E6',
+    },
+    nav_button_next: {
+    },
+    disabled_nav_button: {
+        cursor: 'not-allowed',
+        opacity: 0.5,
+    },
+    nav_button_icon: {
+        fontSize: '14px',
+        color: '#2F2F2F',
+    },
+    content_title: {
+        fontFamily: 'Montserrat, sans-serif',
+        fontWeight: 600,
+        fontSize: '16px',
+        lineHeight: '100%',
+        letterSpacing: '0%',
+        color: '#2F2F2F',
+        marginBottom: '4px',
+        textTransform: 'capitalize',
+    },
+    content_description: {
+        fontFamily: 'Montserrat, sans-serif',
+        fontWeight: 400,
+        fontSize: '12px',
+        lineHeight: '100%',
+        letterSpacing: '0%',
+        color: '#000000',
+    },
+    content_scroll: {
+        flex: 1,
+        overflowY: 'auto',
+    },
+    content_loading_state: {
+        padding: '20px 30px',
+        boxSizing: 'border-box',
+    },
+    configurations_title: {
+        padding: '20px 30px',
+        fontFamily: 'Montserrat, sans-serif',
+        fontWeight: 600,
+        fontSize: '14px',
+        lineHeight: '150%',
+        textAlign: 'left',
+        color: '#2F2F2F',
+        height: '21px',
+        display: 'flex',
+        alignItems: 'center',
+    },
+    configurations_container: {
+        width: '100%',
+        boxSizing: 'border-box',
+    },
+    sub_category_table: {
+        width: '100%',
+        borderCollapse: 'collapse',
+        marginTop: '10px',
+    },
+    table_header_name: {
+        padding: '12px 30px',
+        fontFamily: 'Montserrat, sans-serif',
+        fontWeight: 600,
+        fontSize: '13px',
+        color: '#2F2F2F',
+        textAlign: 'left',
+        letterSpacing: '0.05em',
+        borderBottom: '1px solid #E6E6E6',
+        backgroundColor: '#FCFCFC',
+        width: '30%',
+    },
+    table_header_desc: {
+        padding: '12px 30px',
+        fontFamily: 'Montserrat, sans-serif',
+        fontWeight: 600,
+        fontSize: '13px',
+        color: '#2F2F2F',
+        textAlign: 'left',
+        letterSpacing: '0.05em',
+        borderBottom: '1px solid #E6E6E6',
+        backgroundColor: '#FCFCFC',
+        width: '65%',
+    },
+    table_header_action: {
+        padding: '12px 30px',
+        borderBottom: '1px solid #E6E6E6',
+        backgroundColor: '#FCFCFC',
+        width: '5%',
+    },
+    sub_category_row: {
+        cursor: 'pointer',
+        borderBottom: '1px solid #F0F0F0',
+        transition: 'background-color 0.2s',
+        '&:hover': {
+            backgroundColor: '#F9F9F9',
+        },
+    },
+    sub_category_cell_name: {
+        padding: '16px 30px',
+        fontFamily: 'Montserrat, sans-serif',
+        fontWeight: 600,
+        fontSize: '12px',
+        color: '#2F2F2F',
+        textAlign: 'left',
+        verticalAlign: 'middle',
+    },
+    sub_category_cell_desc: {
+        padding: '16px 30px',
+        fontFamily: 'Montserrat, sans-serif !important',
+        fontWeight: '500 !important',
+        fontSize: '12px !important',
+        color: '#4F4F4F !important',
+        textAlign: 'left',
+        verticalAlign: 'middle',
+        lineHeight: '1.5',
+    },
+    sub_category_cell_action: {
+        padding: '16px 30px',
+        textAlign: 'right',
+        verticalAlign: 'middle',
+    },
+    sub_category_row_icon: {
+        fontSize: '18px',
+        color: '#939393',
+    },
+    fields_panel: {
+        padding: '0px',
+    },
+    sub_category_loading_state: {
+        width: '100%',
+        padding: '20px 30px',
+        boxSizing: 'border-box',
+    },
+    field_skeleton: {
+        '& .MuiSkeleton-root': {
+            marginBottom: '15px',
+            borderRadius: '4px',
+        },
+    },
+    field_row: {
+        padding: '14px 30px',
+        position: 'relative',
+    },
+    json_field_row: {
+        '& textarea': {
+            resize: 'none',
+        },
+    },
+    empty_fields_text: {
+        padding: '30px',
+    },
+    action_footer: {
+        backgroundColor: '#ffffff',
+        width: '100%',
+        display: 'flex',
+        gap: '12px',
+        justifyContent: 'flex-end',
+        flexShrink: 0,
+        paddingTop: '30px',
+        paddingRight: '25px',
+        marginBottom: '35px',
+    },
+    action_button: {
+        width: 'auto',
+        height: '40px',
+        gap: '6px',
+        borderRadius: '6px',
+        fontFamily: 'Montserrat, sans-serif',
+        fontWeight: 600,
+        fontSize: '12px',
+        lineHeight: '100%',
+        letterSpacing: '0%',
+        textAlign: 'center',
+        textTransform: 'uppercase',
+        cursor: 'pointer',
+        opacity: 1,
+    },
+    action_button_secondary: {
+        whiteSpace: 'nowrap',
+        padding: '8px 16px',
+        border: '1px solid #9DC0EE',
+        backgroundColor: '#FFFFFF',
+        color: '#124D9B',
+    },
+    action_button_primary: {
+        padding: '11px 16px',
+        border: 'none',
+        backgroundColor: '#0086FF',
+        color: '#FFFFFF',
+        boxShadow: '0px 2px 1px 0px #00000040',
+    },
+    disabled_action_button: {
+        cursor: 'not-allowed',
+        opacity: 0.7,
+    },
+    empty_state: {
+        height: '400px',
+        width: '100%',
+    },
+    empty_state_card: {
+        width: '360px',
+        marginBottom: '20px',
+    },
+    dialog_header: {
+        backgroundColor: '#124d9b',
+        padding: '10px',
+    },
+    dialog_header_icon: {
+        color: '#FFFFFF',
+        fontSize: '20px',
+    },
+    dialog_close_icon: {
+        color: '#FFFFFF',
+        fontSize: '18px',
+    },
+    dialog_feature_header: {
+        backgroundColor: '#f8f8f8',
+        borderBottom: '1px solid #dedede',
+        padding: '30px 20px',
+    },
+    dialog_feature_icon_wrap: {
+        width: '50px',
+        height: '50px',
+        borderRadius: '25px',
+        backgroundColor: '#FFFFFF',
+    },
+    dialog_feature_icon: {
+        fontSize: '50px',
+        fill: '#007eff',
+        boxShadow: '2px 2px 2px 2px rgba(256, 256, 256, 0.3)',
+        textAlign: 'center',
+        width: '100%',
+    },
+    dialog_feature_title: {
+        fontSize: '14px',
+        fontWeight: 700,
+        textAlign: 'center',
+    },
+    dialog_body_text: {
+        padding: '30px 20px',
+    },
+    default_scroll: {
+        scrollbarWidth: 'thin',
+        scrollbarColor: 'transparent transparent',
+        '&::-webkit-scrollbar': {
+            width: '6px !important',
+            height: '6px !important',
+        },
+        '&::-webkit-scrollbar-track': {
+            boxShadow: 'none !important',
+            background: 'transparent !important',
+        },
+        '&::-webkit-scrollbar-thumb': {
+            backgroundColor: 'transparent !important',
+            borderRadius: '4px !important',
+            transition: 'background-color 0.4s ease !important',
+        },
+        '&.is-scrolling': {
+            scrollbarColor: '#b0b0b0 transparent',
+        },
+        '&.is-scrolling::-webkit-scrollbar-thumb': {
+            backgroundColor: '#b0b0b0 !important',
+        },
+        '&:hover': {
+            scrollbarColor: '#b0b0b0 transparent',
+        },
+        '&:hover::-webkit-scrollbar-thumb': {
+            backgroundColor: '#b0b0b0 !important',
+        },
+    }
+}));
