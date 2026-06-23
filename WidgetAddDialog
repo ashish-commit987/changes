@@ -1,0 +1,714 @@
+import { Dialog, Grid } from '@mui/material';
+import { styled } from '@mui/styles';
+import React, { useEffect, useMemo, useState } from 'react';
+import PropTypes from 'prop-types';
+import { Input } from '../../../components/genericComponents/Input';
+import { ValidateDataSet, VALIDATION_TYPE_REQUIRED } from '../../../util/Validator';
+import { getCommonFunctions } from '../../serviceRevamp/add/ci_flow/SourceDetails';
+import GenerateURL from '../../../util/APIUrlProvider';
+import properties from '../../../properties/properties';
+import InvokeApi from '../../../util/apiInvoker';
+import { Loading } from '../../utils/Loading';
+import { showErrorHandlerUpdated } from '../../../util/util';
+
+const WidgetAddDialog = (props) => {
+    const [state, setState] = useState({
+        data: {
+            name: '',
+            description: '',
+            metric_type: '',
+            metric_ids: [],
+            metric_source: '',
+            metric_group: '',
+            metric_index: ''
+        },
+        error: {},
+        showLeftPanel: true,
+        metric_list: [],
+        metric_loading: false,
+        metric_load_error: null,
+        metric_source_list: [],
+        metric_group_list: [],
+        metric_index_list: [],
+        validations: {
+            name: [VALIDATION_TYPE_REQUIRED],
+            description: [VALIDATION_TYPE_REQUIRED],
+            metric_type: [VALIDATION_TYPE_REQUIRED],
+            metric_index: [VALIDATION_TYPE_REQUIRED],
+            metric_source: [VALIDATION_TYPE_REQUIRED],
+            metric_group: [VALIDATION_TYPE_REQUIRED]
+        }
+    });
+
+    const [loadingState, setLoadingState] = useState({
+        metric_source: false,
+        metric_group: false,
+        metric_index: false
+    });
+
+    const inherits = props.inherits ? props.inherits : {};
+    const commonFunctions = getCommonFunctions(state, setState, inherits);
+    const showInfoSection = JSON.parse(localStorage.getItem('show_widget_other_info'));
+
+    useEffect(() => {
+        if (!props.open) {
+            return;
+        }
+
+        const editData = props.single_metric_data_for_edit || {};
+        const editMetricIndex = editData.metric_index || (editData.metric_ids && editData.metric_ids.length > 0 ? editData.metric_ids[0] : '');
+
+        setState((prevState) => ({
+            ...prevState,
+            data: {
+                name: '',
+                description: '',
+                metric_type: '',
+                metric_ids: [],
+                metric_source: '',
+                metric_group: '',
+                metric_index: editMetricIndex,
+                ...editData
+            },
+            error: {},
+            showLeftPanel: true
+        }));
+
+        fetchMetricSource();
+
+        if (editData.metric_source) {
+            fetchMetricGroupPerSource(editData.metric_source);
+        }
+        if (editData.metric_group) {
+            fetchMetricPerMetricGroup(editData.metric_group);
+        } else {
+            fetchMetrics();
+        }
+    }, [props.open, props.single_metric_data_for_edit]);
+
+    const metricTypeList = useMemo(() => {
+        const uniqueTypes = new Set(
+            state.metric_list
+                .map((metric) => metric.metric_type)
+                .filter(Boolean)
+        );
+
+        return Array.from(uniqueTypes).map((type) => ({
+            id: type,
+            label: type
+        }));
+    }, [state.metric_list]);
+
+    function fetchMetrics() {
+        const requestInfo = {
+            endPoint: GenerateURL({}, properties.api.supported_metrices),
+            httpMethod: 'GET',
+            httpHeaders: { 'Content-Type': 'application/json' }
+        };
+
+        setState((prevState) => ({
+            ...prevState,
+            metric_loading: true,
+            metric_load_error: null
+        }));
+
+        InvokeApi(requestInfo, handleMetricsSuccess, handleMetricsFailure);
+    }
+
+    function handleMetricsSuccess(response) {
+        const metrics = Array.isArray(response) ? response : response?.results || [];
+        const metricList = metrics.map((metric) => ({
+            id: metric.id,
+            label: metric.name || metric.code || String(metric.id),
+            metric_type: metric.metric_type || metric.type || null
+        }));
+
+        setState((prevState) => ({
+            ...prevState,
+            metric_list: metricList,
+            metric_loading: false,
+            metric_load_error: null
+        }));
+    }
+
+    function handleMetricsFailure(error) {
+        setState((prevState) => ({
+            ...prevState,
+            metric_list: [],
+            metric_loading: false,
+            metric_load_error: showErrorHandlerUpdated(error)
+        }));
+    }
+
+    function handleCloseLeftStrip() {
+        if (state.data.dont_show_again) {
+            localStorage.setItem('show_widget_other_info', 'true');
+        }
+
+        setState((prevState) => ({
+            ...prevState,
+            showLeftPanel: false
+        }));
+    }
+
+    function onChangeDoNotShow(event) {
+        const key = event.target.name;
+        setState((prevState) => ({
+            ...prevState,
+            data: {
+                ...prevState.data,
+                [key]: !prevState.data[key]
+            },
+            error: {
+                ...prevState.error,
+                [key]: ''
+            }
+        }));
+    }
+
+    function onMetricSelectionChange(name, selectedIds) {
+        const selectedTypes = new Set(
+            state.metric_list
+                .filter((metric) => selectedIds.includes(metric.id))
+                .map((metric) => metric.metric_type)
+                .filter(Boolean)
+        );
+
+        setState((prevState) => ({
+            ...prevState,
+            data: {
+                ...prevState.data,
+                [name]: selectedIds,
+                ...(selectedTypes.size === 1
+                    ? { metric_type: Array.from(selectedTypes)[0] }
+                    : {})
+            },
+            error: {
+                ...prevState.error,
+                [name]: '',
+                ...(selectedTypes.size === 1 ? { metric_type: '' } : {})
+            }
+        }));
+    }
+
+    function validateAndSaveWidget() {
+        const result = ValidateDataSet(state.data, state.validations);
+
+        if (!result.valid) {
+            setState((prevState) => ({
+                ...prevState,
+                error: {
+                    ...prevState.error,
+                    ...(result.error || {})
+                }
+            }));
+            return;
+        }
+
+        props.handleAddSingleMetric({
+            id: state.data.id,
+            name: state.data.name,
+            description: state.data.description,
+            metric_type: state.data.metric_type,
+            metric_ids: state.data.metric_ids,
+            metric_source: state.data.metric_source,
+            metric_group: state.data.metric_group
+        });
+    }
+
+    function onChangeHandler(k, v) {
+        if (k === 'metric_source') {
+            if (v) {
+                fetchMetricGroupPerSource(v);
+            }
+            setState((prevState) => ({
+                ...prevState,
+                data: {
+                    ...prevState.data,
+                    metric_source: v,
+                    metric_group: '',
+                    metric_index: '',
+                    metric_ids: []
+                },
+                metric_group_list: v ? prevState.metric_group_list : [],
+                metric_index_list: [],
+                metric_list: []
+            }));
+            return;
+        }
+
+        if (k === 'metric_group') {
+            if (v) {
+                fetchMetricPerMetricGroup(v);
+            }
+            setState((prevState) => ({
+                ...prevState,
+                data: {
+                    ...prevState.data,
+                    metric_group: v,
+                    metric_index: '',
+                    metric_ids: []
+                },
+                metric_index_list: [],
+                metric_list: []
+            }));
+            return;
+        }
+
+        if (k === 'metric_index') {
+            const selectedMetric = state.metric_list.find((m) => m.id === v);
+            const autoMetricType = selectedMetric?.metric_type || '';
+
+            setState((prevState) => ({
+                ...prevState,
+                data: {
+                    ...prevState.data,
+                    metric_index: v,
+                    metric_ids: v ? [v] : [],
+                    ...(autoMetricType ? { metric_type: autoMetricType } : {})
+                },
+                error: {
+                    ...prevState.error,
+                    metric_index: '',
+                    metric_ids: '',
+                    ...(autoMetricType ? { metric_type: '' } : {})
+                }
+            }));
+            return;
+        }
+
+        setState((prevState) => ({
+            ...prevState,
+            data: {
+                ...prevState.data,
+                [k]: v
+            },
+            error: {
+                ...prevState.error,
+                [k]: ''
+            }
+        }));
+    }
+
+    function fetchMetricSource() {
+        let requestInfo = {
+            endPoint: GenerateURL({}, properties.api.monitoring_resource_get + '?all=true'),
+            httpMethod: "GET",
+            httpHeaders: { "Content-Type": "application/json" },
+        };
+        setLoadingState((prevState) => ({
+            ...prevState,
+            metric_source: true
+        }));
+
+        InvokeApi(requestInfo,
+            (response) => {
+                let list = response?.results && response.results?.length > 0 ?
+                    response.results.map((ele) => ({ id: ele.id, label: ele.name }))
+                    : []
+
+                console.log("kla", response);
+                setLoadingState((prevState) => ({
+                    ...prevState,
+                    metric_source: false,
+                }))
+                setState((prevState) => ({
+                    ...prevState,
+                    metric_source_list: list,
+                }))
+            },
+            (error) => {
+                setState((prevState) => ({
+                    ...prevState,
+                    error: {
+                        ...prevState.error,
+                        metric_source: showErrorHandlerUpdated(error)
+                    }
+                }))
+                setLoadingState((prevState) => ({
+                    ...prevState,
+                    metric_source: false,
+                }))
+            }
+        )
+    }
+
+    function fetchMetricGroupPerSource(monitoringSourceId) {
+        let requestInfo = {
+            endPoint: GenerateURL({ monitoring_source_id: monitoringSourceId }, properties.api.load_metric_group_per_source),
+            httpMethod: "GET",
+            httpHeaders: { "Content-Type": "application/json" },
+        };
+        setLoadingState((prevState) => ({
+            ...prevState,
+            metric_group: true
+        }));
+
+        InvokeApi(requestInfo,
+            (response) => {
+                let list = response && response?.length > 0 ?
+                    response.map((ele) => ({ id: ele.id, label: ele.name }))
+                    : []
+
+                console.log("kla", response);
+                setLoadingState((prevState) => ({
+                    ...prevState,
+                    metric_group: false,
+                }))
+                setState((prevState) => ({
+                    ...prevState,
+                    metric_group_list: list,
+                }))
+            },
+            (error) => {
+                setState((prevState) => ({
+                    ...prevState,
+                    error: {
+                        ...prevState.error,
+                        metric_group: showErrorHandlerUpdated(error)
+                    }
+                }))
+                setLoadingState((prevState) => ({
+                    ...prevState,
+                    metric_group: false,
+                }))
+            }
+        )
+    }
+
+    function fetchMetricPerMetricGroup(metricGroupId) {
+        let requestInfo = {
+            endPoint: GenerateURL({ metric_group_id: metricGroupId }, properties.api.load_metric_per_metric_group),
+            httpMethod: "GET",
+            httpHeaders: { "Content-Type": "application/json" },
+        };
+        setLoadingState((prevState) => ({
+            ...prevState,
+            metric_index: true
+        }));
+
+        InvokeApi(requestInfo,
+            (response) => {
+                let list = response && response?.length > 0 ?
+                    response.map((metric) => ({
+                        id: metric.id,
+                        label: metric.name || metric.code || String(metric.id),
+                        metric_type: metric.metric_type || metric.type || null
+                    }))
+                    : []
+
+                console.log("kla", response);
+                setLoadingState((prevState) => ({
+                    ...prevState,
+                    metric_index: false,
+                }))
+                setState((prevState) => ({
+                    ...prevState,
+                    metric_index_list: list,
+                    metric_list: list
+                }))
+            },
+            (error) => {
+                setState((prevState) => ({
+                    ...prevState,
+                    error: {
+                        ...prevState.error,
+                        metric_ids: showErrorHandlerUpdated(error)
+                    }
+                }))
+                setLoadingState((prevState) => ({
+                    ...prevState,
+                    metric_index: false,
+                }))
+            }
+        )
+    }
+
+    return (
+        <StyledDialog
+            fullWidth
+            maxWidth="lg"
+            open={props.open}
+            onClose={props.handleClose}
+            className="dialog-align-corner"
+            aria-labelledby="widget-dialog-title"
+        >
+            <div
+                className="d-grid ml-auto dialog-sub-component"
+                style={showInfoSection
+                    ? { gridTemplateColumns: 'var(--space-650)' }
+                    : { gridTemplateColumns: 'var(--space-396) var(--space-650)' }}
+            >
+                {!showInfoSection &&
+                    <div className={state.showLeftPanel ? 'left-panel-dialog bg-white position-relative' : 'left-panel-dialog-down'}>
+                        <div className="d-flex align-center space-between left-panel-header pd-10" style={{ padding: 'var(--space-10) var(--space-20)' }}>
+                            <p>Information</p>
+                            <button className="btn btn-icon-only" onClick={handleCloseLeftStrip}>
+                                <span className="ri-close-line color-icon-secondary"></span>
+                            </button>
+                        </div>
+                        <div className="pd-10" style={{ padding: 'var(--space-10) var(--space-20)' }}>
+                            <p className="font-16 font-weight-600 color-primary mb-10">What is a Widget?</p>
+                            <p className="font-12 color-icon-secondary" style={{ color: 'var(--color-grey-900)' }}>
+                                A Widget groups one or more monitoring metrics into a reusable view within a Monitoring Template.
+                                <br /><br />
+                                Give the widget a clear name and description, choose its metric type, and select the metrics that it should display.
+                            </p>
+                        </div>
+                        <div className="checkbox-only-divi" style={{ padding: 'var(--space-10) var(--space-20)' }}>
+                            <Input
+                                type="simple-checkbox"
+                                name="dont_show_again"
+                                label="Don't show this again"
+                                data={state.data}
+                                error={state.error}
+                                onChangeHandler={onChangeDoNotShow}
+                            />
+                        </div>
+                    </div>
+                }
+                <div className="right-panel-dialog bg-white">
+                    <div className="font-18 font-weight-600 color-white d-flex align-center space-between" style={{ backgroundColor: 'var(--color-tertiary-500)', padding: 'var(--space-13-5) var(--space-20)' }}>
+                        <p id="widget-dialog-title">Add Widget</p>
+                        <button
+                            className="btn float-cancel-button"
+                            style={showInfoSection ? { left: 'var(--space-396)' } : state.showLeftPanel ? {} : { left: 'var(--space-396)' }}
+                            onClick={props.handleClose}
+                        >
+                            <span className="ri-close-line"></span>
+                        </button>
+                    </div>
+
+                    <div className="right-panel-form">
+                        <span style={{ fontWeight: 'var(--font-weight-600)', fontSize: 'var(--font-16)', color: 'var(--color-content-primary)' }}>
+                            Fill the following details
+                        </span>
+                        <Grid
+                            container
+                            spacing={2}
+                            style={{ marginTop: 'var(--space-8)' }}
+                            sx={{
+                                '& .MuiGrid-item': {
+                                    paddingTop: 'var(--space-8) !important'
+                                },
+                                '& .label-controller': {
+                                    fontSize: 'var(--font-12) !important',
+                                    fontWeight: 'var(--font-weight-600) !important'
+                                },
+                                '& [class^="ri-"]': {
+                                    fontSize: 'var(--font-14) !important',
+                                    fontWeight: 'var(--font-weight-500) !important',
+                                    color: 'var(--color-content-secondary) !important'
+                                }
+                            }}
+                        >
+                            <Grid item lg={12}>
+                                <Input
+                                    type="text"
+                                    name="name"
+                                    label="Widget Name"
+                                    placeholder="Enter widget name"
+                                    data={state.data}
+                                    error={state.error}
+                                    info="A clear name for this monitoring widget."
+                                    mandatorySign
+                                    onChangeHandler={commonFunctions.onChangeHandler}
+                                />
+                            </Grid>
+                            <Grid item lg={12}>
+                                <Input
+                                    type="textarea"
+                                    name="description"
+                                    label="Description"
+                                    placeholder="Describe what this widget displays"
+                                    rows={3}
+                                    data={state.data}
+                                    error={state.error}
+                                    info="Explain the monitoring information represented by this widget."
+                                    mandatorySign
+                                    onChangeHandler={commonFunctions.onChangeHandler}
+                                />
+                            </Grid>
+
+                            <Grid item lg={12}>
+                                <Input
+                                    type="auto-complete-dropdown"
+                                    name="metric_source"
+                                    list={state?.metric_source_list ?? []}
+                                    getOptionLabel={(option) => option.label}
+                                    label="Metric Source"
+                                    mandatorySign
+                                    info="Where the data comes from (e.g., Prometheus, Datadog, New Relic)."
+                                    onChangeHandler={onChangeHandler}
+                                    data={state.data}
+                                    error={state.error}
+                                />
+                            </Grid>
+
+                            <Grid item lg={12}>
+                                <Input
+                                    type="auto-complete-dropdown"
+                                    name="metric_group"
+                                    list={state?.metric_group_list ?? []}
+                                    getOptionLabel={(option) => option.label}
+                                    label="Metric Group"
+                                    mandatorySign
+                                    info={" Logical grouping, such as performance, reliability, or user experience."}
+                                    onChangeHandler={!state.data?.metric_source ? null : onChangeHandler}
+                                    data={state.data}
+                                    error={state.error}
+                                />
+                            </Grid>
+
+                            <Grid item lg={12}>
+                                {state.metric_loading
+                                    ? <Loading varient="light" />
+                                    : <div className="auto-dropdown-with-checkbox-wrapper">
+                                        <Input
+                                            type="auto-complete-dropdown"
+                                            name="metric_index"
+                                            list={state?.metric_index_list ?? []}
+                                            getOptionLabel={(option) => option.label}
+                                            label="Metric"
+                                            mandatorySign
+                                            info={"The actual measurement being tracked (e.g., error rate, CPU usage, latency, memory consumption)."}
+                                            onChangeHandler={!state.data?.metric_group ? null : onChangeHandler}
+                                            data={state.data}
+                                            error={state.error}
+                                        />
+                                    </div>
+                                }
+                                {state.metric_load_error &&
+                                    <p className="error-message">
+                                        Unable to load metrics: {state.metric_load_error}
+                                    </p>
+                                }
+                            </Grid>
+
+                            <Grid item lg={12}>
+                                <Input
+                                    type={metricTypeList.length > 0 ? 'select' : 'text'}
+                                    name="metric_type"
+                                    label="Metric Type"
+                                    placeholder={metricTypeList.length > 0 ? 'Select metric type' : 'Enter metric type'}
+                                    list={metricTypeList}
+                                    data={state.data}
+                                    error={state.error}
+                                    info="The metric type expected by the widget API. When available, this is derived from the selected metrics."
+                                    mandatorySign
+                                    onChangeHandler={commonFunctions.onChangeHandler}
+                                />
+                            </Grid>
+
+                            
+                            
+                        </Grid>
+                    </div>
+
+                    <div className="footer-right-panel">
+                        <button className="btn btn-primary" onClick={validateAndSaveWidget}>
+                            ADD WIDGET
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </StyledDialog>
+    );
+};
+
+WidgetAddDialog.propTypes = {
+    open: PropTypes.bool,
+    handleClose: PropTypes.func,
+    handleAddSingleMetric: PropTypes.func,
+    single_metric_data_for_edit: PropTypes.object,
+    inherits: PropTypes.object
+};
+
+export default WidgetAddDialog;
+
+const StyledDialog = styled(Dialog)({
+    '& .MuiPaper-root': {
+        position: 'absolute',
+        right: 0,
+        width: 'var(--space-1100)',
+        maxWidth: 'var(--space-1100)',
+        fontFamily: 'Montserrat',
+
+        '& .style-1': {
+            display: 'flex',
+            alignItems: 'center'
+        }
+    },
+    '& .input-with-icon': {
+        position: 'relative',
+        '& .cent-icon': {
+            width: 'var(--space-40)',
+            height: 'var(--space-44)',
+            backgroundColor: 'var(--color-grey-000)',
+            position: 'absolute',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: 'var(--font-14)',
+            fontWeight: 'var(--font-weight-500)',
+            top: 'var(--space-22)',
+            right: 'var(--space-1)',
+            borderRadius: 'var(--radius-0) var(--radius-4) var(--radius-4) var(--radius-0)',
+            borderLeft: 'var(--space-1) solid #b7b7b7'
+        }
+    },
+    '& .left-panel-dialog': {
+        width: 'var(--space-396)',
+        transition: 'width 5s',
+
+        '& .left-panel-header': {
+            borderBottom: 'var(--space-1) solid #f1f1f1'
+        },
+        '& .checkbox-only-divi': {
+            position: 'absolute',
+            bottom: 'var(--space-10)'
+        }
+    },
+    '& .left-panel-dialog-down': {
+        width: 'var(--space-0)',
+        overflow: 'hidden',
+        transition: "'width 5s', 'overflow 1s'"
+    },
+    '& .right-panel-form': {
+        padding: 'var(--space-20) var(--space-16)',
+        maxHeight: 'calc(100% - 127px)',
+        overflowY: 'auto',
+
+        '& .slider': {
+            width: 'var(--space-600)'
+        }
+    },
+    '& .footer-right-panel': {
+        backgroundColor: 'var(--color-grey-000)',
+        padding: 'var(--space-20)',
+        position: 'absolute',
+        bottom: 'var(--space-0)',
+        width: 'var(--space-650)',
+        display: 'flex',
+        justifyContent: 'flex-end'
+    },
+    '& .back-btn': {
+        padding: 'var(--space-8) var(--space-16)',
+        textTransform: 'uppercase',
+        height: 'var(--space-40)',
+        fontFamily: 'Montserrat',
+        fontSize: 'var(--font-12)',
+        fontWeight: 'var(--font-weight-600)',
+        color: 'var(--color-primary-500)',
+        borderRadius: 'var(--radius-6)',
+        border: 'var(--space-1) solid var(--color-primary-200)',
+        backgroundColor: 'var(--color-white)',
+        transition: 'all 0.4s ease-in-out',
+
+        '&:hover': {
+            backgroundColor: 'var(--color-tertiary-500)',
+            color: 'var(--color-white)',
+            borderColor: 'var(--color-tertiary-500)'
+        }
+    }
+});
